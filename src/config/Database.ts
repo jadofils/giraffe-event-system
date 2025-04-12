@@ -1,30 +1,55 @@
 import { DataSource } from "typeorm";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DB_URL,
-  synchronize: true,
-  logging: false,
-  entities: ["src/models/**/*.ts"], 
-  migrations: ["src/models/migrations/*.ts"], 
+  synchronize: true, // Keep true until schema is fixed
+  logging: false, // Enable logging to see SQL commands
+  entities: ["src/models/**/*.ts"],
+  migrations: ["src/models/migrations/*.ts"],
   extra: {
-    connectionTimeoutMillis: 30000, 
+    connectionTimeoutMillis: 30000,
   },
-  ssl: {
-    rejectUnauthorized: true,
-  },
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: true }
+    : false, // Adjust SSL for development
   schema: 'public',
 });
 
-// Function to initialize the database
+// Modified initialization function
 export const initializeDatabase = async (): Promise<void> => {
   try {
-    await AppDataSource.initialize();
-    console.log("Database connection established successfully!");
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+      console.log("Database connection established!");
+      
+      // Seed the GUEST role after successful initialization
+      await seedDefaultRoles();
+    }
   } catch (error) {
     console.error("Error during database initialization:", error);
   }
 };
+
+// Function to seed default roles
+async function seedDefaultRoles() {
+  try {
+    const roleRepository = AppDataSource.getRepository('Role');
+    
+    // Check if GUEST role exists
+    const guestRole = await roleRepository.findOne({ where: { roleName: 'GUEST' } });
+    
+    if (!guestRole) {
+      console.log("Creating default GUEST role...");
+      const newRole = roleRepository.create({
+        roleName: 'GUEST',
+        permissions: ['read:public'],
+        description: 'Default role for new users'
+      });
+      await roleRepository.save(newRole);
+      console.log("Default GUEST role created successfully!");
+    }
+  } catch (error) {
+    console.error("Error seeding default roles:", error);
+  }
+}

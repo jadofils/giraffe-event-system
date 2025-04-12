@@ -1,5 +1,5 @@
 // src/entity/Organization.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany } from 'typeorm';
 import {
   IsUUID,
   IsNotEmpty,
@@ -7,8 +7,8 @@ import {
   Length,
   IsEmail,
   IsPhoneNumber,
-  IsBoolean,
 } from 'class-validator';
+import { User } from './User';
 
 @Entity('organizations')
 export class Organization {
@@ -56,4 +56,8 @@ export class Organization {
     message: 'organizationType must be at most $constraint2 characters long',
   })
   organizationType!: string;
+
+  
+  @ManyToMany(() => User, (user) => user.organizations)
+  users!: User[];
 }
