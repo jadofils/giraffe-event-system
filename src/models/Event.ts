@@ -3,6 +3,7 @@ import {
     Entity,
     PrimaryGeneratedColumn,
     Column,
+    OneToMany,
   } from 'typeorm';
   import {
     IsUUID,
@@ -11,6 +12,8 @@ import {
     IsOptional,
     IsEnum,
   } from 'class-validator';
+import { Payment } from './Payment';
+import { EventResource } from './EventResource';
   
   export enum EventType {
     PUBLIC = 'public',
@@ -68,5 +71,9 @@ import {
     @IsNotEmpty({ message: 'Venue ID is required' })
     @IsUUID('4', { message: 'Venue ID must be a valid UUID' })
     venueId!: string;
+    payments: any;
+
+   
+
   }
   

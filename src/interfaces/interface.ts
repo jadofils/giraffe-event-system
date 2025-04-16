@@ -1,4 +1,3 @@
-// Interface for Users
 export interface UserInterface {
   UserID: string;
   Username: string;
@@ -7,17 +6,19 @@ export interface UserInterface {
   Email: string;
   Password?: string;
   PhoneNumber?: string;
+  Role?: RoleInterface; // Many-to-One relationship (a user has one role)
+  Organizations?: OrganizationInterface[]; // One-to-Many relationship (a user belongs to many organizations)
 }
 
-// Interface for Roles
 export interface RoleInterface {
   RoleID: string;
   RoleName: string;
   Permissions: string[];
   Description?: string;
+  Users?: UserInterface[]; // One-to-Many relationship (a role can have many users)
 }
 
-// Interface for Organizations
+
 export interface OrganizationInterface {
   OrganizationID: string;
   OrganizationName: string;
@@ -27,7 +28,9 @@ export interface OrganizationInterface {
   IsExternal: boolean;
   Address: string;
   OrganizationType: string;
+  User?: UserInterface; // Many-to-One relationship (an organization belongs to one user)
 }
+
 
 // Interface for Venues
 export interface VenueInterface {
@@ -142,14 +145,4 @@ export interface BudgetInterface {
   Notes: string;
 }
 
-// Interface for UserRoles (Many-to-Many)
-export interface UserRoleInterface {
-  UserID: string;
-  RoleID: string;
-}
 
-// Interface for OrganizationUsers (Many-to-Many)
-export interface OrganizationUserInterface {
-  UserID: string;
-  OrganizationID: string;
-}

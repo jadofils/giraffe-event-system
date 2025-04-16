@@ -1,12 +1,18 @@
 import { AppDataSource } from '../config/Database';
 import { Organization } from '../models/Organization';
-import { OrganizationInterface } from '../interfaces/interface';
+import { OrganizationInterface } from '../interfaces/interface';//all dto's
+import { User } from '../models/User';
+import { In } from 'typeorm/find-options/operator/In';
 
 export class OrganizationRepository {
   // Get all organizations
   static async getAll(): Promise<{ success: boolean; data?: Organization[]; message?: string }> {
     try {
-      const organizations = await AppDataSource.getRepository(Organization).find();
+      const organizations = await AppDataSource.getRepository(Organization).find(
+        {
+          relations: ['user', 'user.role', 'user.organizations'],
+        }
+      );
       return { success: true, data: organizations };
     } catch (error) {
       return { success: false, message: 'Failed to fetch organizations' };
@@ -20,7 +26,8 @@ export class OrganizationRepository {
     }
 
     try {
-      const organization = await AppDataSource.getRepository(Organization).findOne({ where: { organizationId: id } });
+      const organization = await AppDataSource.getRepository(Organization).findOne({ where: { organizationId: id } ,
+        relations: ['user', 'user.role', 'user.organizations'],});
       if (!organization) {
         return { success: false, message: 'Organization not found' };
       }
@@ -52,15 +59,38 @@ export class OrganizationRepository {
     if (!org.organizationName || !org.contactEmail || !org.address || !org.organizationType) {
       return { success: false, message: 'Required fields are missing' };
     }
-
+    
     try {
+      // Check if the organization already exists by name or email
+      const existingOrganization = await AppDataSource.getRepository(Organization).findOne({
+        where: [
+          { organizationName: org.organizationName },
+          { contactEmail: org.contactEmail },
+        ],
+      });
+    
+      if (existingOrganization) {
+        return {
+          success: false,
+          message: 'Organization with this name or email already exists.You can Join it!!!',
+          data: existingOrganization, 
+        };
+        
+      }
+    
+      // Save the new organization
       const savedOrganization = await AppDataSource.getRepository(Organization).save(org);
-      return { success: true, data: savedOrganization };
+      return { success: true, data: savedOrganization, message: 'Organization saved successfully' };
+    
     } catch (error) {
+      console.error('Error saving organization:', error); 
       return { success: false, message: 'Failed to save organization' };
     }
-  }
-
+    
+      }
+       
+      
+    
   // Update an organization
   static async update(
     id: string,
@@ -110,4 +140,78 @@ export class OrganizationRepository {
       return { success: false, message: 'Failed to delete organization' };
     }
   }
+
+  static async assignUsersToOrganization(
+    userIds: string[],
+    organizationId: string
+  ): Promise<{ success: boolean; message: string; assignedOrganizations?: Organization[] }> {
+    const userRepository = AppDataSource.getRepository(User);
+    const organizationRepository = AppDataSource.getRepository(Organization);
+  
+    try {
+      // Fetch the organization
+      const organization = await organizationRepository.findOne({
+        where: { organizationId }
+      });
+  
+      if (!organization) {
+        return { success: false, message: 'Organization not found' };
+      }
+
+      // Get all the users by their IDs
+      const users = await userRepository.findBy({ userId: In(userIds) });
+      
+      if (users.length === 0) {
+        return { success: false, message: 'No valid users found' };
+      }
+      
+      const assignedOrganizations: Organization[] = [];
+      
+      // For each user, create a copy of the organization or update existing
+      for (const user of users) {
+        // Check if this user is already assigned to this organization
+        const existingAssignment = await organizationRepository.findOne({
+          where: { 
+            organizationId,
+            user: { userId: user.userId }
+          }
+        });
+        
+        if (existingAssignment) {
+          // Skip this user as they're already assigned
+          continue;
+        }
+        
+        // If it's a new organization, we'll clone it for each user
+        // (Note: This approach depends on your specific requirements)
+        if (userIds.length > 1) {
+          // Create a new organization entry for each user except the first one
+          const orgCopy = organizationRepository.create({
+            ...organization,
+            user: user // Assign the user object directly as a relation
+          });
+          
+          const savedOrg = await organizationRepository.save(orgCopy);
+          assignedOrganizations.push(savedOrg);
+        } else {
+          // If it's just one user, update the existing organization
+          organization.user = user;
+          organization.user = user;
+          const updatedOrg = await organizationRepository.save(organization);
+          assignedOrganizations.push(updatedOrg);
+        }
+      }
+  
+      return {
+        success: true,
+        message: `${assignedOrganizations.length} assignments created successfully`,
+        assignedOrganizations
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error assigning users to organization:', errorMessage);
+      return { success: false, message: 'Failed to assign users to organization' };
+    }
+  }
 }
+  

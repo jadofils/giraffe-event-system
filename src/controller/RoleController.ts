@@ -47,6 +47,8 @@ export class RoleController {
     }
   }
 
+
+
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const role = await RoleRepository.getRoleById(req.params.id);
@@ -65,45 +67,41 @@ export class RoleController {
     try {
       const { id } = req.params;
       const { roleName, description, permissions } = req.body;
-  
-      // Validate role ID
+
       if (!id) {
         res.status(400).json({ success: false, message: 'Role ID is required' });
         return;
       }
-  
-      // Validate input data
+
       if (roleName && (roleName.length < 3 || roleName.length > 50)) {
         res.status(400).json({ success: false, message: 'Role name must be between 3 and 50 characters' });
         return;
       }
-  
-      // Fetch the role to update
+
       const existingRole = await RoleRepository.getRoleById(id);
       if (!existingRole) {
         res.status(404).json({ success: false, message: 'Role not found' });
         return;
       }
-  
-      // Update the role
+
       const updatedRole = await RoleRepository.updateRole(id, {
         RoleName: roleName,
         Description: description,
         Permissions: permissions,
       });
-  
-      // Handle errors during update
+
       if ('error' in updatedRole) {
         res.status(400).json({ success: false, message: updatedRole.error });
         return;
       }
-  
+
       res.status(200).json({ success: true, message: 'Role updated successfully', role: updatedRole });
     } catch (error) {
       console.error('Error updating role:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
     }
   }
+
 
   static async deleteById(req: Request, res: Response): Promise<void> {
   try {
@@ -135,5 +133,7 @@ export class RoleController {
     res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 }
+
+
 
 }

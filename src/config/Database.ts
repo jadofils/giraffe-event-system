@@ -3,8 +3,8 @@ import { DataSource } from "typeorm";
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DB_URL,
-  synchronize: true, // Keep true until schema is fixed
-  logging: false, // Enable logging to see SQL commands
+  synchronize: true, 
+  logging: false, 
   entities: ["src/models/**/*.ts"],
   migrations: ["src/models/migrations/*.ts"],
   extra: {

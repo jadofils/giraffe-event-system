@@ -1,5 +1,5 @@
 // src/entity/Payment.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import {
   IsUUID,
   IsNotEmpty,
@@ -9,6 +9,9 @@ import {
   IsOptional,
   Length,
 } from 'class-validator';
+import { TicketType } from './TicketType';
+import { User } from './User';
+import { Event } from './Event';
 
 @Entity('payments')
 export class Payment {
@@ -67,4 +70,17 @@ export class Payment {
     message: 'description must be at most $constraint2 characters',
   })
   description!: string;
+
+  // Relationships
+  @ManyToOne(() => TicketType, ticketType => ticketType.payments)
+  @JoinColumn({ name: 'ticketTypeId' })
+  ticketType!: TicketType;
+  
+  @ManyToOne(() => User, user => user.payments)
+  @JoinColumn({ name: 'userId' })
+  user!: User;
+  
+  @ManyToOne(() => Event, event => event.payments)
+  @JoinColumn({ name: 'eventId' })
+  event!: Event;
 }

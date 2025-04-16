@@ -3,12 +3,22 @@ import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import {
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsPositive,
   IsUUID,
   Length,
   Min,
 } from 'class-validator';
+
+// src/entity/Venue.ts
+import {  OneToMany, ManyToOne, JoinColumn } from 'typeorm';
+import { 
+  
+  IsBoolean 
+} from 'class-validator';
+import { User } from './User';
+import { EventBooking } from './EventBooking';
 
 @Entity('venues')
 export class Venue {
@@ -17,18 +27,42 @@ export class Venue {
   venueId!: string;
 
   @Column()
-  @IsNotEmpty({ message: 'Venue name is required' })
-  @Length(3, 100, { message: 'Venue name must be between 3 and 100 characters' })
+  @IsNotEmpty({ message: 'venueName is required' })
+  @Length(3, 100, {
+    message: 'venueName must be between $constraint1 and $constraint2 characters',
+  })
   venueName!: string;
 
   @Column()
-  @IsInt({ message: 'Capacity must be an integer' })
-  @IsPositive({ message: 'Capacity must be positive' })
-  @Min(1, { message: 'Capacity must be at least 1' })
+  @IsNumber({}, { message: 'capacity must be a number' })
+  @IsPositive({ message: 'capacity must be a positive number' })
   capacity!: number;
 
-  @Column({ nullable: true })
-  @IsOptional()
-  @Length(0, 200, { message: 'Location must be less than 200 characters' })
+  @Column()
+  @IsNotEmpty({ message: 'location is required' })
+  @Length(3, 200, {
+    message: 'location must be between $constraint1 and $constraint2 characters',
+  })
   location!: string;
+  
+  // New fields
+  @Column({ nullable: true })
+  @IsUUID('4', { message: 'managerId must be a valid UUID' })
+  managerId!: string;
+  
+  @Column({ default: true })
+  @IsBoolean({ message: 'isAvailable must be a boolean' })
+  isAvailable!: boolean;
+  
+  @Column({ default: false })
+  @IsBoolean({ message: 'isBooked must be a boolean' })
+  isBooked!: boolean;
+  
+  // Relationships
+  @ManyToOne(() => User, user => user.managedVenues)
+  @JoinColumn({ name: 'managerId' })
+  manager!: User;
+  
+  @OneToMany(() => EventBooking, eventBooking => eventBooking.venueId)
+  bookings!: EventBooking[];
 }

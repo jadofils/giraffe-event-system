@@ -1,83 +1,55 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToMany,
-  JoinTable,
+  Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany
 } from 'typeorm';
-import {
-  IsUUID,
-  IsNotEmpty,
-  Length,
-  IsEmail,
-  IsString,
-  MinLength,
-  MaxLength,
-  IsOptional,
-  IsPhoneNumber,
-} from 'class-validator';
+import { IsUUID, IsNotEmpty, Length, IsEmail, IsString, IsOptional, IsPhoneNumber } from 'class-validator';
 import { Role } from './Role';
 import { Organization } from './Organization';
+import { Payment } from './Payment';
 
 @Entity('users')
 export class User {
+  [x: string]: any;
   @PrimaryGeneratedColumn('uuid')
-  @IsUUID('4', { message: 'userId must be a valid UUID' })
+  @IsUUID('4')
   userId!: string;
 
   @Column({ unique: true })
-  @IsNotEmpty({ message: 'Username is required' })
-  @Length(3, 50, {
-    message: 'Username must be between $constraint1 and $constraint2 characters',
-  })
+  @IsNotEmpty()
+  @Length(3, 50)
   username!: string;
 
   @Column()
-  @IsNotEmpty({ message: 'First name is required' })
-  @Length(1, 50, {
-    message: 'First name must be between $constraint1 and $constraint2 characters',
-  })
+  @IsNotEmpty()
+  @Length(1, 50)
   firstName!: string;
 
   @Column()
-  @IsNotEmpty({ message: 'Last name is required' })
-  @Length(1, 50, {
-    message: 'Last name must be between $constraint1 and $constraint2 characters',
-  })
+  @IsNotEmpty()
+  @Length(1, 50)
   lastName!: string;
 
   @Column({ unique: true })
-  @IsNotEmpty({ message: 'Email is required' })
-  @IsEmail({}, { message: 'Email must be a valid email address' })
+  @IsNotEmpty()
+  @IsEmail()
   email!: string;
 
   @Column({ nullable: true })
   @IsOptional()
-  @IsString({ message: 'Password must be a string' })
-  @MinLength(8, {
-    message: 'Password must be at least $constraint1 characters long',
-  })
-  @MaxLength(20, {
-    message: 'Password must not exceed $constraint1 characters',
-  })
+  @IsString()
   password?: string;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ nullable: true })
   @IsOptional()
-  @IsPhoneNumber(undefined, {
-    message: 'Phone number must be a valid phone number',
-  })
-  phoneNumber: string | null = null;
+  @IsPhoneNumber()
+  phoneNumber?: string;
 
-  @ManyToMany(() => Role, role => role.users, { cascade: true })
-  @JoinTable() // Only needed on one side (usually the owner)
-  roles!: Role[];
+  @ManyToOne(() => Role, role => role.users) // Adjusted to Many-to-One
+  role!: Role;
 
-  
-  @ManyToMany(() => Organization, (org) => org.users, {
-    cascade: true,
-  })
-  @JoinTable() // Only needed on one side (usually the owner)
-  organizations!: Organization[];
+  @OneToMany(() => Organization, organization => organization.user)
+  organizations!: Organization[]; // One user can belong to many organizations
+
+
+
 
 }

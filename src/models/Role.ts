@@ -1,39 +1,28 @@
-// src/entity/Role.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany } from 'typeorm';
-import {
-  IsArray,
-  IsNotEmpty,
-  IsOptional,
-  IsUUID,
-  Length,
-} from 'class-validator';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { IsUUID, IsNotEmpty, IsOptional, Length, IsArray } from 'class-validator';
 import { User } from './User';
 
 @Entity('roles')
 export class Role {
   @PrimaryGeneratedColumn('uuid')
-  @IsUUID('4', { message: 'roleId must be a valid UUID' })
+  @IsUUID('4')
   roleId!: string;
 
   @Column({ unique: true })
-  @IsNotEmpty({ message: 'roleName is required' })
-  @Length(3, 50, {
-    message: 'roleName must be between $constraint1 and $constraint2 characters',
-  })
+  @IsNotEmpty()
+  @Length(3, 50)
   roleName!: string;
 
-  @Column('simple-array')
-  @IsArray({ message: 'permissions must be an array of strings' })
+  @Column('simple-array', { nullable: true })
   @IsOptional()
-  permissions!: string[];
+  @IsArray()
+  permissions?: string[];
 
   @Column({ nullable: true })
   @IsOptional()
-  @Length(0, 500, {
-    message: 'description must be at most $constraint2 characters',
-  })
-  description!: string;
+  @Length(0, 500)
+  description?: string;
 
-  @ManyToMany(() => User, user => user.roles)
+  @OneToMany(() => User, user => user.role) // Adjusted for one role to many users
   users!: User[];
 }

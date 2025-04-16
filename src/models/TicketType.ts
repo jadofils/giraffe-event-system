@@ -1,14 +1,7 @@
-// src/entity/TicketType.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsPositive,
-  IsUUID,
-  Length,
-} from 'class-validator';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn } from 'typeorm';
 
+import { IsUUID, IsNotEmpty, Length, IsNumber, IsPositive, IsOptional } from 'class-validator';
+import { Payment } from './Payment';
 @Entity('ticket_types')
 export class TicketType {
   @PrimaryGeneratedColumn('uuid')
@@ -33,4 +26,10 @@ export class TicketType {
     message: 'description must be at most $constraint2 characters',
   })
   description!: string;
+
+  @OneToMany(() => Payment, payment => payment.ticketType)
+  payments!: Payment[];
+
+  @DeleteDateColumn({ name: 'deletedAt', type: 'timestamp', nullable: true })
+  deletedAt?: Date;
 }

@@ -1,5 +1,5 @@
 // src/entity/EventResource.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
 import {
   IsUUID,
   IsNotEmpty,
@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
 } from 'class-validator';
+import { Resource } from './Resources';
 
 @Entity('event_resources')
 export class EventResource {
@@ -38,4 +39,7 @@ export class EventResource {
   @IsNumber({}, { message: 'amountSpent must be a number' })
   @IsPositive({ message: 'amountSpent must be a positive number' })
   amountSpent!: number | null;
+
+
+ 
 }

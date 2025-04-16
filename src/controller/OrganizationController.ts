@@ -72,7 +72,7 @@ export class OrganizationController {
   static async update(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const { OrganizationName, Description, ContactEmail, ContactPhone, Address, OrganizationType } = req.body;
-
+console.log("id's from body:",req.body)
     if (!id) {
        res.status(400).json({ success: false, message: 'Organization ID is required' });
     }
@@ -116,4 +116,56 @@ export class OrganizationController {
       res.status(500).json({ success: false, message: 'Failed to delete organization', error: err.message });
     }
   }
+
+
+
+  static async assignUsersToOrganization(req: Request, res: Response): Promise<void> {
+    try {
+      // Get organizationId from URL parameters
+      const { organizationId } = req.params;
+  
+      // Get userIds from request body
+      const { userIds } = req.body;
+  
+      if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'userIds array is required in the request body',
+        });
+        return;
+      }
+  
+      if (!organizationId) {
+        res.status(400).json({
+          success: false,
+          message: 'organizationId is required in the URL',
+        });
+        return;
+      }
+  
+      // Call the repository method
+      const result = await OrganizationRepository.assignUsersToOrganization(userIds, organizationId);
+  
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: result.message,
+          assignedOrganizations: result.assignedOrganizations
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message,
+        });
+      }
+    } catch (error) {
+      console.error('Error in assignUsersToOrganization controller:', error);
+  
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error occurred while assigning users to organization',
+      });
+    }
+  }
+  
 }
