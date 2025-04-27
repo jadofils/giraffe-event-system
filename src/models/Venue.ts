@@ -1,14 +1,11 @@
 // src/entity/Venue.ts
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import {
-  IsInt,
   IsNotEmpty,
   IsNumber,
-  IsOptional,
   IsPositive,
   IsUUID,
   Length,
-  Min,
 } from 'class-validator';
 
 // src/entity/Venue.ts
@@ -19,6 +16,7 @@ import {
 } from 'class-validator';
 import { User } from './User';
 import { EventBooking } from './EventBooking';
+import { Event } from './Event';
 
 @Entity('venues')
 export class Venue {
@@ -65,4 +63,7 @@ export class Venue {
   
   @OneToMany(() => EventBooking, eventBooking => eventBooking.venueId)
   bookings!: EventBooking[];
+
+  @OneToMany(() => Event, event => event.venueId)
+  events!: Event[];
 }

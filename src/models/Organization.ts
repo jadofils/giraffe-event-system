@@ -1,7 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
 import { IsUUID, IsNotEmpty, IsOptional, Length, IsEmail, IsPhoneNumber } from 'class-validator';
+import { Event } from './Event';
 import { User } from './User';
-
 @Entity('organizations')
 export class Organization {
   
@@ -38,7 +38,9 @@ export class Organization {
   @IsOptional()
   @Length(0, 50)
   organizationType?: string;
+  @OneToMany(() => Event, (event) => event.organizationId)
+  events!: Event[];
 
-  @ManyToOne(() => User, user => user.organizations) // Adjusted to Many-to-One
+  @ManyToOne(() => User, user => user.organizations)
   user!: User;
 }

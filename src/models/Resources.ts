@@ -35,6 +35,7 @@ export class Resource {
   @IsPositive({ message: 'costPerUnit must be a positive value' })
   costPerUnit!: number;
 
-
+    @OneToMany(() => EventResource, (eventResource) => eventResource.resource)
+    eventResources!: EventResource[];
 
 }

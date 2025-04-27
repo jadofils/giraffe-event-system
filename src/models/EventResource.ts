@@ -39,7 +39,8 @@ export class EventResource {
   @IsNumber({}, { message: 'amountSpent must be a number' })
   @IsPositive({ message: 'amountSpent must be a positive number' })
   amountSpent!: number | null;
-
-
  
+  @ManyToOne(() => Resource, (resource) => resource.eventResources)
+  resource!: Resource;
+
 }
