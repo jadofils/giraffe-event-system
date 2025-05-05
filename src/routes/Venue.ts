@@ -1,11 +1,16 @@
 import { Router } from "express";
+import { VenueController } from "../controller/venueController";
+import { isAdmin } from "../middlewares/IsAdmin";
 
 const router = Router();
 
-router.get("/all");
-router.get("/get/:id");
-router.post("/add");
-router.put("/update/:id");
-router.delete("/remove/:id");
+router.get("/all",VenueController.getAll);
+router.get("/get/:id",VenueController.getById);
+router.get("/get",VenueController.getByManagerId);
+router.post("/add",VenueController.create);
+router.put("/update/:id",VenueController.update);
+router.put("/updateVenueManager/:id",isAdmin,VenueController.updateVenueManager);
 
-export default router;
+router.delete("/remove/:id",VenueController.delete);
+
+export const venueRoute = router;

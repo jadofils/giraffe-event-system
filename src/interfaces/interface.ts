@@ -1,3 +1,6 @@
+import { EventBooking } from "../models/EventBooking";
+import { User } from "../models/User";
+
 export interface UserInterface {
   UserID: string;
   Username: string;
@@ -38,6 +41,13 @@ export interface VenueInterface {
   VenueName: string;
   Capacity: number;
   Location: string;
+
+  ManagerId?: string;
+  IsAvailable?: boolean;
+  IsBooked?: boolean;
+
+
+
 }
 
 // Interface for Events
