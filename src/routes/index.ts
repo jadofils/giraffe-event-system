@@ -7,6 +7,7 @@ import  tickets  from './TicketTyeRoutes'; // Ensure tickets is exported from Ti
 import { verifyJWT } from '../middlewares/AuthMiddleware';
 import resourceRoutes from './ResourceRoutes'; // Ensure resourceRoutes is exported from ResourceRoutes
 import { venueRoute } from './Venue';
+import { eventRoute } from './EventRoutes';
 const router = Router();
 
 // Use versioned routes
@@ -16,5 +17,6 @@ router.use('/organizations',verifyJWT, organizationRoutes); // This makes `/api/
 router.use("/tickets",tickets); // This makes `/api/v1/tickets-type/*` available
 //resources
 router.use('/resources',verifyJWT,resourceRoutes );
-router.use('/venue',verifyJWT,venueRoute)
+router.use('/venue',verifyJWT,venueRoute);
+router.use('/event',verifyJWT,eventRoute);
 export default router;

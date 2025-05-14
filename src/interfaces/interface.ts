@@ -57,6 +57,9 @@ export interface EventInterface {
   Description: string;
   EventCategory: string;
   EventType: "public" | "private";
+  OrganizationId?:string,
+  OrganizerId?: string,
+  VenueId?:string
 }
 
 // Interface for EventBooking
