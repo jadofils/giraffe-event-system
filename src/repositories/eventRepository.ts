@@ -8,7 +8,7 @@ export class EventRepository{
 
     //create event
     static create(data:Partial<EventInterface>):{success:boolean; data?:Event; message?:string}{
-        if(!data.Description || !data.EventCategory || !data.EventTitle || !data.EventType || !data.VenueId || !data.OrganizationId || !data.OrganizerId){
+        if(!data.Description || !data.EventCategory || !data.EventTitle || !data.EventType || !data.VenueId  || !data.OrganizerId){
             return {success : false, message:"all Field are required"}
         }
         
@@ -32,7 +32,7 @@ export class EventRepository{
       event.eventType = mappedEventType;
       event.venueId = data.VenueId;
       event.organizerId = data.OrganizerId;
-      event.organizationId = data.OrganizationId;
+      
   
       return { success: true, data: event };
         
@@ -41,7 +41,7 @@ export class EventRepository{
     //save event
 
     static async save(event: Event):Promise<{success: boolean; data?: Event; message?:string}>{
-        if(!event.description || !event.eventCategory || !event.eventTitle || !event.eventType || !event.venueId || !event.organizationId || !event.organizerId){
+        if(!event.description || !event.eventCategory || !event.eventTitle || !event.eventType || !event.venueId  || !event.organizerId){
             return {success : false, message:"all Field are required"}
         }
         try{
@@ -49,7 +49,8 @@ export class EventRepository{
             const savedEvent = await AppDataSource.getRepository(Event).save(event);
             return{success: true, data:savedEvent, message:"Eventsaved successfully"};
         }catch(error){
-            return{success:false, message:"failed ta save event"}
+             console.error("Error saving event:", error); 
+            return{success:false, message:"failed to  save this event"}
         }
 
        
@@ -63,7 +64,7 @@ export class EventRepository{
         }
         try{
             const event =  await AppDataSource.getRepository(Event).findOne({where: {eventId:id},
-            relations:['organizer', 'organizer.role', 'organization', 'venue']})
+            relations:['organizer', 'organizer.role', 'venue']})
 
             if(!event){
                 return{success: false, message:"event not found"}
@@ -84,7 +85,7 @@ export class EventRepository{
         try{
             const events = await AppDataSource.getRepository(Event).find({ where:{organizer:{
                 userId: organizerId
-            },}, relations: ['organizer', 'organizer.role', 'organization', 'venue'],})
+            },}, relations: ['organizer', 'organizer.role', 'venue'],})
 
             if( events.length === 0){
                 return{success: false, message :"no event found for this organizer"}
@@ -101,7 +102,7 @@ export class EventRepository{
     static async getAll():Promise<{success: boolean; data?: Event[]; message?:string}>{
         try{
             const event = await AppDataSource.getRepository(Event).find({
-                relations:['organizer', 'organizer.role', 'organization', 'venue']
+                relations:['organizer', 'organizer.role', 'venue']
             })
 
             return {success: true, data:event}
@@ -119,7 +120,7 @@ export class EventRepository{
         }
         try{
             const repo =  AppDataSource.getRepository(Event);
-            const event = await repo. findOne({where:{venueId:id}});
+            const event = await repo. findOne({where:{eventId:id}});
             if(!event){
                 return {success: false, message: "event not found"}
             }
@@ -134,7 +135,7 @@ export class EventRepository{
                 eventTitle:data.EventTitle?? event.eventTitle,
                 eventCategory: data.EventCategory?? event.eventCategory,
                 venueId: data.VenueId?? event.venueId,
-                organizationId: data.OrganizationId?? event.organizationId,
+                
                 organizerId:data.OrganizerId??event.organizerId,
                 eventType: updatedEventType,
                 

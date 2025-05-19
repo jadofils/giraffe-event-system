@@ -5,6 +5,7 @@ import {
   Column,
   OneToMany,
   ManyToOne,
+  JoinColumn,
 } from "typeorm";
 import {
   IsUUID,
@@ -67,10 +68,10 @@ export class Event {
   @IsUUID("4", { message: "Organizer ID must be a valid UUID" })
   organizerId!: string;
 
-  @Column()
-  @IsNotEmpty({ message: "Organization ID is required" })
-  @IsUUID("4", { message: "Organization ID must be a valid UUID" })
-  organizationId!: string;
+  // @Column()
+  // @IsNotEmpty({ message: "Organization ID is required" })
+  // @IsUUID("4", { message: "Organization ID must be a valid UUID" })
+  // organizationId!: string;
 
   @Column()
   @IsNotEmpty({ message: "Venue ID is required" })
@@ -80,12 +81,14 @@ export class Event {
 
   //Relationships
 
-  @ManyToOne(() => Organization, (organization) => organization.events)
-  organization!: Organization;
+  // @ManyToOne(() => Organization, (organization) => organization.events)
+  // organization!: Organization;
 
   @ManyToOne(() => Venue, (venue) => venue.events)
+  @JoinColumn({ name: "venueId" }) 
   venue!: Venue;
 
   @ManyToOne(() => User, (user) => user.eventsOrganizer)
+  @JoinColumn({ name: "organizerId" }) 
   organizer!: User;
 }

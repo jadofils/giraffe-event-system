@@ -1,18 +1,18 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { EventRepository } from "../repositories/eventRepository";
-import { AppDataSource } from "../config/Database";
-import { VenueRepository } from "../repositories/venueRepository";
+
 
 
 export class EventController{
 
     //create event
     static async create(req:AuthenticatedRequest, res:Response):Promise<void>{
-        const{Description ,EventCategory,EventTitle ,EventType ,VenueId ,OrganizationId} = req.body
+        const{Description ,EventCategory,EventTitle ,EventType ,VenueId } = req.body
         const OrganizerId= req.user?.userId;
+        console.log("organizer Id",OrganizerId);
 
-        if(!Description || !EventCategory || !EventTitle || !EventType || !VenueId || !OrganizationId){
+        if(!Description || !EventCategory || !EventTitle || !EventType || !VenueId ){
             res.status(400).json({success: false, message:"all field are required"})
         }
 
@@ -23,7 +23,7 @@ export class EventController{
             EventCategory,
             Description,
             VenueId,
-            OrganizationId,
+          
             OrganizerId
 
         })
@@ -110,7 +110,7 @@ export class EventController{
     static async update(req:AuthenticatedRequest, res:Response):Promise<void>{
         const {id} = req.params;
         const OrganizerId= req.user?.userId;
-        const{Description ,EventCategory,EventTitle ,EventType ,VenueId ,OrganizationId} = req.body
+        const{Description ,EventCategory,EventTitle ,EventType ,VenueId } = req.body
 
         if(!id){
             res.status(400).json({success: false, message:"Event Id is required"})
@@ -118,7 +118,7 @@ export class EventController{
 
         try{
             const updateEvent = await EventRepository.update(id,{
-                Description ,EventCategory,EventTitle ,EventType ,VenueId ,OrganizationId,OrganizerId
+                Description ,EventCategory,EventTitle ,EventType ,VenueId ,OrganizerId
 
             })
 
