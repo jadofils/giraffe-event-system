@@ -38,8 +38,9 @@ export class Organization {
   @IsOptional()
   @Length(0, 50)
   organizationType?: string;
-  @OneToMany(() => Event, (event) => event.organizationId)
-  events!: Event[];
+
+  // @OneToMany(() => Event, (event) => event.organizationId)
+  // events!: Event[];
 
   @ManyToOne(() => User, user => user.organizations)
   user!: User;

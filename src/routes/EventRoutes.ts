@@ -1,11 +1,13 @@
 import { Router } from "express";
+import { EventController } from "../controller/eventController";
 
 const router = Router();
 
-router.get("/all");
-router.get("/get/:id");
-router.post("/create");
-router.put("/update/:id");
-router.delete("/delete/:id");
+router.get("/all",EventController.getAll);
+router.get("/get/:id",EventController.getById);
+router.get("/getByOrgizerId",EventController.getByOrganizerId);
+router.post("/create",EventController.create);
+router.put("/update/:id",EventController.update);
+router.delete("/delete/:id",EventController.delete);
 
-export default router;
+export const eventRoute= router;
