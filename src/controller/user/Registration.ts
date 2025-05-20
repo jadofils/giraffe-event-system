@@ -5,11 +5,12 @@ import { User } from "../../models/User";
 import PasswordService from "../../services/EmailService";
 import { Organization } from "../../models/Organization";
 import { Role } from "../../models/Role";
+import bcrypt from "bcryptjs";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
     try {
-      const { username, firstName, lastName, email, phoneNumber } = req.body;
+      const { username, firstName, lastName, email, phoneNumber,password,confirmPassword } = req.body;
       console.log("Registering user with data in controller:", req.body);
 
       // === Validation Checks ===
@@ -62,7 +63,44 @@ export class UserController {
           });
         return;
       }
+      // === Password Validation but be optional ===
+      if (password && password.length < 6) {
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: "Password must be at least 6 characters long",
+          });
+        return;
+      }
+      if (password && password !== confirmPassword) {
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: "Passwords do not match",
+          });
+        return;
+      }
+      //password should be hashed before saving to the database,and regex validation
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$/;
+      if (password && !passwordRegex.test(password)) {
+        res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              "Password must be at least 6 characters long and contain at least one uppercase letter, one lowercase letter, and one number",
+          });
+        return;
+      }
+      //hashing password it with salt by bcryptjs
+       const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
 
+
+
+      // === Check for Existing User ===
+   
       const existingUser = await UserRepository.findExistingUser(
         email,
         username
@@ -96,6 +134,9 @@ export class UserController {
         LastName: lastName,
         Email: email,
         PhoneNumber: phoneNumber,
+        //password is optional, if not provided
+        Password: hashedPassword, // Use the hashed password
+        // Set a default password or generate one dynamically
         Role: {
           RoleID: guestRole.roleId,
           RoleName: guestRole.roleName,

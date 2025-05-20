@@ -1,5 +1,7 @@
-import { EventBooking } from "../models/EventBooking";
+import { ApprovalStatus, EventBooking } from "../models/EventBooking";
+import { Organization } from "../models/Organization";
 import { User } from "../models/User";
+import { Venue } from "../models/Venue";
 
 export interface UserInterface {
   UserID: string;
@@ -63,17 +65,32 @@ export interface EventInterface {
 }
 
 // Interface for EventBooking
+// Interface for EventBooking input data
 export interface EventBookingInterface {
-  BookingID: string;
-  EventID: string;
-  VenueID: string;
-  OrganizerID: string;
-  OrganizationID: string;
-  StartDate: Date;
-  EndDate: Date;
-  StartTime: string;
-  EndTime: string;
-  ApprovalStatus: string;
+  bookingId: string;
+  eventId: string;
+  venueId: string;
+  organizerId: string;
+  organizationId: string;
+  startDate: Date;
+  endDate: Date;
+  startTime: string;
+  endTime: string;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+}
+
+// Interface for the actual entity (for type safety)
+export interface EventBookingEntity {
+  bookingId: string;
+  event: Event;
+  venue: Venue;
+  user: User;
+  organization: Organization;
+  startDate: Date;
+  endDate: Date;
+  startTime: string;
+  endTime: string;
+  approvalStatus: ApprovalStatus;
 }
 
 // Interface for EventResources

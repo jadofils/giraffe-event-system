@@ -23,7 +23,6 @@ export class EventController{
             EventCategory,
             Description,
             VenueId,
-          
             OrganizerId
 
         })

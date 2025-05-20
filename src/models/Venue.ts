@@ -61,7 +61,7 @@ export class Venue {
   @JoinColumn({ name: 'managerId' })
   manager!: User;
   
-  @OneToMany(() => EventBooking, eventBooking => eventBooking.venueId)
+  @OneToMany(() => EventBooking, eventBooking => eventBooking.venue)
   bookings!: EventBooking[];
 
   @OneToMany(() => Event, event => event.venueId)

@@ -8,6 +8,8 @@ import { verifyJWT } from '../middlewares/AuthMiddleware';
 import resourceRoutes from './ResourceRoutes'; // Ensure resourceRoutes is exported from ResourceRoutes
 import { venueRoute } from './Venue';
 import { eventRoute } from './EventRoutes';
+import eventBookingRoutes from './EventBookingRoutes';
+
 const router = Router();
 
 // Use versioned routes
@@ -19,4 +21,8 @@ router.use("/tickets",tickets); // This makes `/api/v1/tickets-type/*` available
 router.use('/resources',verifyJWT,resourceRoutes );
 router.use('/venue',verifyJWT,venueRoute);
 router.use('/event',verifyJWT,eventRoute);
+// Event Booking routes
+router.use('/event-bookings',verifyJWT, eventBookingRoutes); // This makes `/api/v1/event-bookings/*` available
+
+
 export default router;

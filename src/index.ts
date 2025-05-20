@@ -8,7 +8,7 @@ async function bootstrap() {
   try {
     // Initialize database connection
     await initializeDatabase();
-    
+  
     // Start the server
     app.listen(AppConfig.PORT, () => {
       console.log(`Server running on port ${AppConfig.PORT}`);

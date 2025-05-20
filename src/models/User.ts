@@ -5,6 +5,7 @@ import { IsUUID, IsNotEmpty, Length, IsEmail, IsString, IsOptional, IsPhoneNumbe
 import { Role } from './Role';
 import { Organization } from './Organization';
 import { Payment } from './Payment';
+import { EventBooking } from './EventBooking';
 
 @Entity('users')
 export class User {
@@ -48,7 +49,9 @@ export class User {
 
   @OneToMany(() => Organization, organization => organization.user)
   organizations!: Organization[]; // One user can belong to many organizations
-
+  
+ @OneToMany(() => EventBooking, (booking) => booking.user)
+  bookings!: EventBooking[];
 
 
 

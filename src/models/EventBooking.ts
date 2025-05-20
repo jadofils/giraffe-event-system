@@ -1,12 +1,15 @@
-// src/entity/EventBooking.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
-import {
-  IsUUID,
-  IsNotEmpty,
-  IsDateString,
-  Length,
-  IsString,
-} from 'class-validator';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, JoinColumn } from 'typeorm';
+import { IsUUID, IsNotEmpty, IsDateString, Length, IsString } from 'class-validator';
+import { Event } from './Event';
+import { Venue } from './Venue';
+import { Organization } from './Organization';
+import { User } from './User';
+
+export enum ApprovalStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
 
 @Entity('event_bookings')
 export class EventBooking {
@@ -14,57 +17,38 @@ export class EventBooking {
   @IsUUID('4', { message: 'bookingId must be a valid UUID' })
   bookingId!: string;
 
-  @Column()
-  @IsNotEmpty({ message: 'eventId is required' })
-  @IsUUID('4', { message: 'eventId must be a valid UUID' })
-  eventId!: string;
+   @ManyToOne(() => User, (user) => user.bookings, { nullable: false })
+  user!: User; // One user can book many events
 
-  @Column()
-  @IsNotEmpty({ message: 'venueId is required' })
-  @IsUUID('4', { message: 'venueId must be a valid UUID' })
-  venueId!: string;
+  @ManyToOne(() => Event, (event) => event.bookings, { nullable: false })
+  event!: Event;
 
-  @Column()
-  @IsNotEmpty({ message: 'organizerId is required' })
-  @IsUUID('4', { message: 'organizerId must be a valid UUID' })
-  organizerId!: string;
+  @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
+  @JoinColumn({ name: "venueVenueId" }) // Ensure correct mapping
+  venue!: Venue;
 
-  @Column()
-  @IsNotEmpty({ message: 'organizationId is required' })
-  @IsUUID('4', { message: 'organizationId must be a valid UUID' })
-  organizationId!: string;
-
-  @Column({ type: 'date' })
+  @ManyToOne(() => Organization, (organization) => organization.bookings, { nullable: false })
+  organization!: Organization;
+  @Column({ type: 'timestamp' })
   @IsNotEmpty({ message: 'startDate is required' })
-  @IsDateString({}, { message: 'startDate must be a valid ISO 8601 date string' })
-  startDate!: string;
+  @IsDateString({}, { message: 'startDate must be a valid ISO 8601 timestamp' })
+  startDate!: Date;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'timestamp' })
   @IsNotEmpty({ message: 'endDate is required' })
-  @IsDateString({}, { message: 'endDate must be a valid ISO 8601 date string' })
-  endDate!: string;
+  @IsDateString({}, { message: 'endDate must be a valid ISO 8601 timestamp' })
+  endDate!: Date;
 
   @Column({ type: 'time' })
   @IsNotEmpty({ message: 'startTime is required' })
-  @Length(5, 8, {
-    message:
-      'startTime must be between $constraint1 and $constraint2 characters long (e.g., "HH:MM" or "HH:MM:SS")',
-  })
+  @Length(5, 8, { message: 'startTime must be in format HH:MM or HH:MM:SS' })
   startTime!: string;
 
   @Column({ type: 'time' })
   @IsNotEmpty({ message: 'endTime is required' })
-  @Length(5, 8, {
-    message:
-      'endTime must be between $constraint1 and $constraint2 characters long (e.g., "HH:MM" or "HH:MM:SS")',
-  })
+  @Length(5, 8, { message: 'endTime must be in format HH:MM or HH:MM:SS' })
   endTime!: string;
 
-  @Column({ default: 'pending' })
-  @IsNotEmpty({ message: 'approvalStatus is required' })
-  @IsString({ message: 'approvalStatus must be a string' })
-  @Length(3, 20, {
-    message: 'approvalStatus must be between $constraint1 and $constraint2 characters long',
-  })
-  approvalStatus!: string;
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.PENDING })
+  approvalStatus!: ApprovalStatus;
 }

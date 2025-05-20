@@ -1,10 +1,16 @@
 import { AppDataSource } from "../config/Database";
-import { EventInterface } from "../interfaces/interface";
+import { EventBookingInterface, EventInterface } from "../interfaces/interface";
 import { Event, EventType } from "../models/Event";
 
 
 
 export class EventRepository{
+    static createBooking(arg0: EventBookingInterface) {
+        throw new Error('Method not implemented.');
+    }
+    static createEvent(eventData: any) {
+        throw new Error("Method not implemented.");
+    }
 
     //create event
     static create(data:Partial<EventInterface>):{success:boolean; data?:Event; message?:string}{

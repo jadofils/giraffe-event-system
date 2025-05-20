@@ -4,12 +4,15 @@ import jwt from "jsonwebtoken";
 const SECRET_KEY = process.env.JWT_SECRET || "your_jwt_secret"; // Use env variable in production
 
 export interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    username: string;
-    needsPasswordReset?: boolean;
-  };
+    user?: {
+        userId: string;  // lowercase userId to match JWT token
+        email: string;
+        username: string;
+        organizations: string[];  // lowercase organizations to match JWT token
+        organizationId: string;
+        roles?: string[];
+    };
+
 }
 
 export const verifyJWT = (

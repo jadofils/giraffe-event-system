@@ -19,6 +19,7 @@ import { EventResource } from "./EventResource";
 import { Organization } from "./Organization";
 import { Venue } from "./Venue";
 import { User } from "./User";
+import { EventBooking } from "./EventBooking";
 
 export enum EventType {
   PUBLIC = "public",
@@ -91,4 +92,7 @@ export class Event {
   @ManyToOne(() => User, (user) => user.eventsOrganizer)
   @JoinColumn({ name: "organizerId" }) 
   organizer!: User;
+
+  @OneToMany(() => EventBooking, (booking) => booking.event)
+  bookings!: EventBooking[];
 }
