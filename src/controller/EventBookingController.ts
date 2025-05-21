@@ -779,6 +779,14 @@ static async getBookingsByDateRange(req: Request, res: Response): Promise<void> 
       message: 'Forbidden: You do not have permission to perform this action.' 
     });
   }
+
+/**
+   * Check for duplicate bookings in a specific time range
+   * @route GET /api/bookings/check-duplicates
+   * @access Private (Authenticated Users)
+   */
+
+  
 }
 
 export { EventBookingController };

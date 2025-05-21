@@ -1,4 +1,4 @@
-import { EventBooking } from "../models/EventBooking";
+import { ApprovalStatus, EventBooking } from "../models/EventBooking";
 import { EventBookingInterface } from "../interfaces/interface";
 import { AppDataSource } from "../config/Database";
 import { Repository } from "typeorm";
@@ -7,6 +7,9 @@ import { Organization } from "../models/Organization";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 
 class EventBookingRepository {
+    static checkDuplicateBookings(arg0: string, parsedStartDate: Date, parsedEndDate: Date, arg3: string, arg4: string, arg5: string) {
+        throw new Error('Method not implemented.');
+    }
   static eventBookingRepository: Repository<EventBooking>;
    static eventRepository: Repository<Event>;
    static organizationRepository: Repository<Organization>;
@@ -494,7 +497,16 @@ static async getBookingsByDateRange(
     }
 }
     
+ 
+  /**
+   * Helper method to convert time string (HH:MM or HH:MM:SS) to minutes
+   */
+  private static timeToMinutes(timeStr: string): number {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
 
 }
+
 
 export { EventBookingRepository };

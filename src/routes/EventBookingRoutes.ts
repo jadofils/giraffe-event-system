@@ -46,6 +46,8 @@ router.patch('/:id/status', EventBookingController.updateEventBookingStatus);
 // Delete an event booking
 router.delete('/:id', EventBookingController.deleteEventBooking);
 
+
+
 /**
  * Error Handlers
  */
