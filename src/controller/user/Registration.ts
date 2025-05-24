@@ -2,10 +2,11 @@ import { Request, Response } from "express";
 import { UserRepository } from "../../repositories/UserRepository";
 import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
-import PasswordService from "../../services/EmailService";
+import PasswordService from "../../services/emails/EmailService";
 import { Organization } from "../../models/Organization";
 import { Role } from "../../models/Role";
 import bcrypt from "bcryptjs";
+import { Venue } from "../../models/Venue";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -129,18 +130,18 @@ export class UserController {
       }
 
       const user = UserRepository.createUser({
-        Username: username,
-        FirstName: firstName,
-        LastName: lastName,
-        Email: email,
-        PhoneNumber: phoneNumber,
+        username: username,
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phoneNumber: phoneNumber,
         //password is optional, if not provided
-        Password: hashedPassword, // Use the hashed password
+        password: hashedPassword, // Use the hashed password
         // Set a default password or generate one dynamically
-        Role: {
-          RoleID: guestRole.roleId,
-          RoleName: guestRole.roleName,
-          Permissions: guestRole.permissions || [],
+        role: {
+          roleId: guestRole.roleId,
+          roleName: guestRole.roleName,
+          permissions: guestRole.permissions || [],
         }, // Map Role to RoleInterface
       });
 
@@ -293,8 +294,69 @@ export class UserController {
             Address: organization.address || "",
             OrganizationType: organization.organizationType || "",
           })) || [],
-      };
+          //get registration data from user which looks like this
+          /*
+          */
+          registrations: user.registrations?.map((registration) => ({
+            registrationIds:{
+              registrationId: registration.registrationId,
+              registrationDate: registration.registrationDate,
+              paymentStatus: registration.paymentStatus,
+              attended: registration.attended,
+            },
+     
+            eventId:{
+              eventId: registration.event.eventId,
+              eventTitle: registration.event.eventTitle,
+              description: registration.event.description,
+              eventCategory: registration.event.eventCategory,
+              eventType: registration.event.eventType,
+            },
+            
+            // Handle both array and single object cases for ticketType
+            ticketType: Array.isArray(registration.ticketType)
+              ? (registration.ticketType as any[]).map((ticket) => ({
+                  ticketTypeId: ticket.ticketTypeId,
+                  ticketTypeName: ticket.ticketName,
+                  price: ticket.price,
+                  description: ticket.description,
+                }))
+              : registration.ticketType && typeof registration.ticketType === 'object'
+                ? [{
+                    ticketTypeId: (registration.ticketType as any).ticketTypeId,
+                    ticketTypeName: (registration.ticketType as any).ticketName,
+                    price: (registration.ticketType as any).price,
+                    description: (registration.ticketType as any).description,
+                  }]
+                : [],
 
+          
+            eventName: {
+              eventId: registration.event.eventId,
+              eventTitle: registration.event.eventTitle,
+              description: registration.event.description,
+              eventCategory: registration.event.eventCategory,
+              eventType: registration.event.eventType,
+            },
+            
+            venueName: {
+              venueId: registration.venue.venueId,
+              venueName: registration.venue.venueName,
+              capacity: registration.venue.capacity,
+              location: registration.venue.location,
+              managerId: registration.venue.managerId,
+              isAvailable: registration.venue.isAvailable,
+              isBooked: registration.venue.isBooked,
+            },
+            noOfTickets: registration.noOfTickets,
+            qrcode: registration.qrCode,
+            registrationDate: registration.registrationDate,
+            paymentStatus: registration.paymentStatus,
+            attended: registration.attended,
+          
+          })) || [],
+          
+      };
       res.status(200).json({ success: true, user: formattedUser });
     } catch (error) {
       console.error("Error in getUserById:", error);

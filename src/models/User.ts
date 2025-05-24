@@ -5,7 +5,8 @@ import { IsUUID, IsNotEmpty, Length, IsEmail, IsString, IsOptional, IsPhoneNumbe
 import { Role } from './Role';
 import { Organization } from './Organization';
 import { Payment } from './Payment';
-import { EventBooking } from './EventBooking';
+import { EventBooking } from './VenueBooking';
+import { Registration } from './Registration';
 
 @Entity('users')
 export class User {
@@ -52,6 +53,9 @@ export class User {
   
  @OneToMany(() => EventBooking, (booking) => booking.user)
   bookings!: EventBooking[];
+  //to registrations
+   @OneToMany(() => Registration, (registration) => registration.user)
+  registrations!: Registration[];
 
 
 

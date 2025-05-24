@@ -2,6 +2,8 @@
 import app from './app';
 import { AppConfig } from './config/AppConfig';
 import { initializeDatabase } from './config/Database';
+import express from 'express';
+import path from 'path';
 
 // Bootstrap function to start the application
 async function bootstrap() {
@@ -18,6 +20,7 @@ async function bootstrap() {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
+
 }
 
 // Start the application

@@ -1,16 +1,15 @@
-import { ApprovalStatus, EventBooking } from "../models/EventBooking";
-import { EventBookingInterface } from "../interfaces/interface";
+import { ApprovalStatus, EventBooking } from "../models/VenueBooking";
 import { AppDataSource } from "../config/Database";
 import { Repository } from "typeorm";
 import { Event } from "../models/Event";
 import { Organization } from "../models/Organization";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
+import { VenueBookingInterface } from "../interfaces/interface";
 
-class EventBookingRepository {
+class VenueBookingRepository {
     static checkDuplicateBookings(arg0: string, parsedStartDate: Date, parsedEndDate: Date, arg3: string, arg4: string, arg5: string) {
         throw new Error('Method not implemented.');
     }
-  static eventBookingRepository: Repository<EventBooking>;
+  static VenueBookingRepository: Repository<EventBooking>;
    static eventRepository: Repository<Event>;
    static organizationRepository: Repository<Organization>;
     /**
@@ -19,7 +18,7 @@ class EventBookingRepository {
   /**
  * Create a new event booking
  */
-static async createBooking(bookingData: EventBookingInterface): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+static async createBooking(bookingData: VenueBookingInterface): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
     try {
         // Validate required fields
         if (!bookingData.eventId || !bookingData.venueId || !bookingData.organizerId || 
@@ -29,10 +28,10 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
         }
 
         // Initialize repositories
-        const eventRepo = EventBookingRepository.getEventRepository();
-        const venueRepo = EventBookingRepository.getVenueRepository();
-        const userRepo = EventBookingRepository.getUserRepository();
-        const orgRepo = EventBookingRepository.getOrganizationRepository();
+        const eventRepo = VenueBookingRepository.getEventRepository();
+        const venueRepo = VenueBookingRepository.getVenueRepository();
+        const userRepo = VenueBookingRepository.getUserRepository();
+        const orgRepo = VenueBookingRepository.getOrganizationRepository();
 
         // Fetch the related entities to properly associate them
         const event = await eventRepo.findOne({ where: { eventId: bookingData.eventId } });
@@ -51,7 +50,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
         bookingData.approvalStatus = bookingData.approvalStatus || "pending";
 
         // Create the booking entity with proper relation objects
-        const bookingRepo = EventBookingRepository.getEventBookingRepository();
+        const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
         const newBooking = bookingRepo.create({
             event: event,               // Use the full event entity
             venue: venue,               // Use the full venue entity
@@ -78,49 +77,49 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
 
    static getOrganizationRepository(): Repository<Organization> {
 
-    if (!EventBookingRepository.organizationRepository) {
+    if (!VenueBookingRepository.organizationRepository) {
 
-      EventBookingRepository.organizationRepository = AppDataSource.getRepository(Organization);
+      VenueBookingRepository.organizationRepository = AppDataSource.getRepository(Organization);
     }
-    return EventBookingRepository.organizationRepository;
+    return VenueBookingRepository.organizationRepository;
   }
 
     
 
-   static getEventBookingRepository(): Repository<EventBooking> {
-    if (!EventBookingRepository.eventBookingRepository) {
+   static getVenueBookingRepository(): Repository<EventBooking> {
+    if (!VenueBookingRepository.VenueBookingRepository) {
       if (!AppDataSource.isInitialized) {
         throw new Error('Database not initialized.');
       }
-      EventBookingRepository.eventBookingRepository = AppDataSource.getRepository(EventBooking);
+      VenueBookingRepository.VenueBookingRepository = AppDataSource.getRepository(EventBooking);
     }
-    return EventBookingRepository.eventBookingRepository;
+    return VenueBookingRepository.VenueBookingRepository;
   }
 
 
      static getEventRepository(): Repository<Event> {
-        if (!EventBookingRepository.eventRepository) {
-            EventBookingRepository.eventRepository = AppDataSource.getRepository(Event);
+        if (!VenueBookingRepository.eventRepository) {
+            VenueBookingRepository.eventRepository = AppDataSource.getRepository(Event);
         }
-        return EventBookingRepository.eventRepository;
+        return VenueBookingRepository.eventRepository;
     }
 
 
      static userRepository: Repository<any>;
 
     static getUserRepository(): Repository<any> {
-        if (!EventBookingRepository.userRepository) {
-            EventBookingRepository.userRepository = AppDataSource.getRepository("User");
+        if (!VenueBookingRepository.userRepository) {
+            VenueBookingRepository.userRepository = AppDataSource.getRepository("User");
         }
-        return EventBookingRepository.userRepository;
+        return VenueBookingRepository.userRepository;
     }
      static venueRepository: Repository<any>;
 
     static getVenueRepository(): Repository<any> {
-        if (!EventBookingRepository.venueRepository) {
-            EventBookingRepository.venueRepository = AppDataSource.getRepository("Venue");
+        if (!VenueBookingRepository.venueRepository) {
+            VenueBookingRepository.venueRepository = AppDataSource.getRepository("Venue");
         }
-        return EventBookingRepository.venueRepository;
+        return VenueBookingRepository.venueRepository;
     }
 
 
@@ -129,7 +128,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
      */
     static async getAllBookings(): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
         try {
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const bookings = await bookingRepo.find({
                 relations: ["event", "venue", "user", "organization"]
             });
@@ -154,7 +153,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Booking ID is required" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const booking = await bookingRepo.findOne({
                 where: { bookingId: id },
                 relations: ["event", "venue", "user", "organization"]
@@ -174,13 +173,13 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
     /**
      * Update booking
      */
-    static async updateBooking(id: string, bookingData: Partial<EventBookingInterface>): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+    static async updateBooking(id: string, bookingData: Partial<VenueBookingInterface>): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
         try {
             if (!id) {
                 return { success: false, message: "Booking ID is required" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const existingBooking = await bookingRepo.findOne({
                 where: { bookingId: id },
                 relations: ["event", "venue", "user", "organization"]
@@ -262,7 +261,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Invalid approval status" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const existingBooking = await bookingRepo.findOne({
                 where: { bookingId: id },
                 relations: ["event", "venue", "user", "organization"]
@@ -291,7 +290,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Booking ID is required" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const result = await bookingRepo.delete(id);
             
             if (result.affected === 0) {
@@ -315,7 +314,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
             }
 
             // Check if event exists
-            const eventRepo = EventBookingRepository.getEventRepository();
+            const eventRepo = VenueBookingRepository.getEventRepository();
             const eventExists = await eventRepo.findOne({
                 where: { eventId }
             });
@@ -324,7 +323,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Event does not exist" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const bookings = await bookingRepo.find({
                 where: { event: { eventId } },
                 relations: ["event", "venue", "user", "organization"]
@@ -350,7 +349,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Venue ID is required" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const bookings = await bookingRepo.find({
                 where: { venue: { venueId } },
                 relations: ["event", "venue", "user", "organization"]
@@ -375,7 +374,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
       return { success: false, message: "Organizer ID is required" };
     }
 
-    const bookingRepo = EventBookingRepository.getEventBookingRepository();
+    const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
     const bookings = await bookingRepo.find({
       where: { user: { userId: organizerId } }, // Use the correct relation for organizer
       relations: ["event", "venue", "user", "organization"]
@@ -401,7 +400,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Organization ID is required" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
         const bookings = await bookingRepo.find({
             where: { organization: { organizationId } },
             relations: ["event", "venue", "user", "organization"]
@@ -429,7 +428,7 @@ static async createBooking(bookingData: EventBookingInterface): Promise<{ succes
                 return { success: false, message: "Invalid approval status" };
             }
 
-            const bookingRepo = EventBookingRepository.getEventBookingRepository();
+            const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const bookings = await bookingRepo.find({
                 where: { approvalStatus: approvalStatus as any },
                 relations: ["event", "venue", "user", "organization"]
@@ -464,7 +463,7 @@ static async getBookingsByDateRange(
             return { success: false, message: "Start date cannot be after end date" };
         }
 
-        const bookingRepo = EventBookingRepository.getEventBookingRepository();
+        const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
         let query = bookingRepo.createQueryBuilder("booking")
             .leftJoinAndSelect("booking.event", "event")
             .leftJoinAndSelect("booking.venue", "venue")
@@ -509,4 +508,4 @@ static async getBookingsByDateRange(
 }
 
 
-export { EventBookingRepository };
+export { VenueBookingRepository };

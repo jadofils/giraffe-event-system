@@ -14,12 +14,11 @@ import {
   IsOptional,
   IsEnum,
 } from "class-validator";
-import { Payment } from "./Payment";
-import { EventResource } from "./EventResource";
-import { Organization } from "./Organization";
+
 import { Venue } from "./Venue";
 import { User } from "./User";
-import { EventBooking } from "./EventBooking";
+import { EventBooking } from "./VenueBooking";
+import { Registration } from "./Registration";
 
 export enum EventType {
   PUBLIC = "public",
@@ -69,21 +68,13 @@ export class Event {
   @IsUUID("4", { message: "Organizer ID must be a valid UUID" })
   organizerId!: string;
 
-  // @Column()
-  // @IsNotEmpty({ message: "Organization ID is required" })
-  // @IsUUID("4", { message: "Organization ID must be a valid UUID" })
-  // organizationId!: string;
+
 
   @Column()
   @IsNotEmpty({ message: "Venue ID is required" })
   @IsUUID("4", { message: "Venue ID must be a valid UUID" })
   venueId!: string;
   payments: any;
-
-  //Relationships
-
-  // @ManyToOne(() => Organization, (organization) => organization.events)
-  // organization!: Organization;
 
   @ManyToOne(() => Venue, (venue) => venue.events)
   @JoinColumn({ name: "venueId" }) 
@@ -95,4 +86,8 @@ export class Event {
 
   @OneToMany(() => EventBooking, (booking) => booking.event)
   bookings!: EventBooking[];
+  //to registrations
+  @OneToMany(() => Registration, registration => registration.event, { cascade: true })
+  registrations!: Registration[];
+
 }

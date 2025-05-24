@@ -1,5 +1,6 @@
 // src/routes/apiRoutes.ts
-import { Router } from 'express';
+import express, { Router } from 'express';
+import path from 'path';
 import { userRoutes } from './UserRoutes';
 import roleRoutes from './RoleRoutes';
 import organizationRoutes from './OrganizationRoutes';
@@ -10,7 +11,9 @@ import { venueRoute } from './Venue';
 import { eventRoute } from './EventRoutes';
 import eventBookingRoutes from './EventBookingRoutes';
 import checkAbsenceRoutes from './CheckAbsenceRoutes'; // Ensure checkAbsenceRoutes is exported from CheckAbsenceRoutes
+import RegistrationRoutes from './RegistrationRoutes'; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 const router = Router();
+  router.use('/static', express.static(path.join(__dirname, '..', '..', 'uploads'))); // Adjust path as needed
 
 // Use versioned routes
 router.use('/users', userRoutes);
@@ -23,6 +26,7 @@ router.use('/venue',verifyJWT,venueRoute,checkAbsenceRoutes); // This makes `/ap
 router.use('/event',verifyJWT,eventRoute);
 // Event Booking routes
 router.use('/event-bookings',verifyJWT, eventBookingRoutes); // This makes `/api/v1/event-bookings/*` available
-//absence bookings in venue
+//routes for registration
+router.use('/registrations',verifyJWT, RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 
 export default router;

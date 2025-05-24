@@ -1,9 +1,8 @@
-import { EventBookingInterface } from "../interfaces/interface";
-import { EventBookingRepository } from "../repositories/EventBookingRepository";
-import { AppDataSource } from "../config/Database";
-import { EventBooking } from "../models/EventBooking";
+import { VenueBookingInterface } from "../../interfaces/interface";
+import { AppDataSource } from "../../config/Database";
+import { EventBooking } from "../../models/VenueBooking";
 import { Between } from "typeorm";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
+import { AuthenticatedRequest } from "../../middlewares/AuthMiddleware";
 import { checkConflict } from "./BookingService";
 
 /**
@@ -99,7 +98,7 @@ export class CheckAbsenceService {
  */
 export async function validateBooking(
   req: AuthenticatedRequest,
-  bookingData: EventBookingInterface
+  bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {
     // Step 1: Check if the requested time is available
@@ -126,7 +125,7 @@ export async function validateBooking(
  */
 async function checkAvailability(
   req: AuthenticatedRequest,
-  bookingData: EventBookingInterface
+  bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {
     const startDate = new Date(bookingData.startDate);

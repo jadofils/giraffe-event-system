@@ -1,5 +1,5 @@
 import express from 'express';
-import { EventBookingController } from '../controller/EventBookingController';
+import { VenueBookingController } from '../controller/VenueBookingController';
 import { verifyJWT } from '../middlewares/AuthMiddleware';
 
 const router = express.Router();
@@ -8,43 +8,43 @@ const router = express.Router();
  * Basic CRUD Operations
  */
 // Create a new event booking
-router.post('/create',EventBookingController.createEventBooking);
+router.post('/create',VenueBookingController.createEventBooking);
 
 // Get all event bookings
-router.get('/all', EventBookingController.getAllEventBookings);
+router.get('/all', VenueBookingController.getAllEventBookings);
 
 /**
  * Filtering Operations
  */
 // Get bookings by date range (must come before other GET routes with parameters)
-router.get('/date-range', EventBookingController.getBookingsByDateRange);
+router.get('/date-range', VenueBookingController.getBookingsByDateRange);
 
 // Get bookings by event ID
-router.get('/event/:eventId', EventBookingController.getBookingsByEventId);
+router.get('/event/:eventId', VenueBookingController.getBookingsByEventId);
 
 // Get bookings by venue ID
-router.get('/venue/:venueId', EventBookingController.getBookingsByVenueId);
+router.get('/venue/:venueId', VenueBookingController.getBookingsByVenueId);
 
 // Get bookings by organizer ID
 // routes/eventBookingRoutes.ts
-router.get('/organizer', verifyJWT, EventBookingController.getBookingsByOrganizerId);
+router.get('/organizer', verifyJWT, VenueBookingController.getBookingsByOrganizerId);
 // Get bookings by organization ID
-router.get('/organization/:organizationId', EventBookingController.getBookingsByOrganizationId);
+router.get('/organization/:organizationId', VenueBookingController.getBookingsByOrganizationId);
 
 // Get bookings by approval status
-router.get('/status/:status', EventBookingController.getBookingsByStatus);
+router.get('/status/:status', VenueBookingController.getBookingsByStatus);
 
 // Get a specific event booking by ID (must come after other specific GET routes)
-router.get('/:id', EventBookingController.getEventBookingById);
+router.get('/:id', VenueBookingController.getEventBookingById);
 
 // Update an event booking
-router.put('/:id', EventBookingController.updateEventBooking);
+router.put('/:id', VenueBookingController.updateEventBooking);
 
 // Update only the status of an event booking
-router.patch('/:id/status', EventBookingController.updateEventBookingStatus);
+router.patch('/:id/status', VenueBookingController.updateEventBookingStatus);
 
 // Delete an event booking
-router.delete('/:id', EventBookingController.deleteEventBooking);
+router.delete('/:id', VenueBookingController.deleteEventBooking);
 
 
 

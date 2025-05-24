@@ -6,7 +6,8 @@ import { User } from '../models/User';
 export const isAdmin = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
+  isAdmin: boolean = false
 ): Promise<void> => {
   try {
     const userId = req.user?.userId;
@@ -27,8 +28,10 @@ export const isAdmin = async (
       res.status(403).json({ message: 'Forbidden: Admins only' });
       return;
     }
-
-    next(); // proceed if admin
+         // proceed if admin
+    if (isAdmin) {
+      return next();
+    }
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: (error as Error).message });
   }

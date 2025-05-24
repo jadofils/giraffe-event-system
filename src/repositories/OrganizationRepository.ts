@@ -39,17 +39,17 @@ export class OrganizationRepository {
 
   // Create a new organization
   static create(data: Partial<OrganizationInterface>): { success: boolean; data?: Organization; message?: string } {
-    if (!data.OrganizationName || !data.ContactEmail || !data.Address || !data.OrganizationType) {
+    if (!data.organizationName || !data.contactEmail || !data.address || !data.organizationType) {
       return { success: false, message: 'Required fields are missing' };
     }
 
     const organization = new Organization();
-    organization.organizationName = data.OrganizationName;
-    organization.description = data.Description ?? '';
-    organization.contactEmail = data.ContactEmail;
-    organization.contactPhone = data.ContactPhone ?? '';
-    organization.address = data.Address;
-    organization.organizationType = data.OrganizationType;
+    organization.organizationName = data.organizationName;
+    organization.description = data.description ?? '';
+    organization.contactEmail = data.contactEmail;
+    organization.contactPhone = data.contactPhone ?? '';
+    organization.address = data.address;
+    organization.organizationType = data.organizationType;
 
     return { success: true, data: organization };
   }
@@ -109,12 +109,12 @@ export class OrganizationRepository {
       }
 
       repo.merge(organization, {
-        organizationName: data.OrganizationName ?? organization.organizationName,
-        description: data.Description ?? organization.description,
-        contactEmail: data.ContactEmail ?? organization.contactEmail,
-        contactPhone: data.ContactPhone ?? organization.contactPhone,
-        address: data.Address ?? organization.address,
-        organizationType: data.OrganizationType ?? organization.organizationType,
+        organizationName: data.organizationName ?? organization.organizationName,
+        description: data.description ?? organization.description,
+        contactEmail: data.contactEmail ?? organization.contactEmail,
+        contactPhone: data.contactPhone ?? organization.contactPhone,
+        address: data.address ?? organization.address,
+        organizationType: data.organizationType ?? organization.organizationType,
       });
 
       const updatedOrganization = await repo.save(organization);

@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'ty
 import { IsUUID, IsNotEmpty, IsOptional, Length, IsEmail, IsPhoneNumber } from 'class-validator';
 import { Event } from './Event';
 import { User } from './User';
-import { EventBooking } from './EventBooking';
+import { EventBooking } from './VenueBooking';
 @Entity('organizations')
 export class Organization {
   

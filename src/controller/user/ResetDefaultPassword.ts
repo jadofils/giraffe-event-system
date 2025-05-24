@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
 import { UserController } from "./Registration";
-import PasswordService from '../../services/EmailService';
+import PasswordService from '../../services/emails/EmailService';
 
 
 

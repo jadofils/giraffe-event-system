@@ -1,86 +1,54 @@
-// src/entity/Payment.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import {
-  IsUUID,
-  IsNotEmpty,
-  IsDateString,
-  IsNumber,
-  IsPositive,
-  IsOptional,
-  Length,
-} from 'class-validator';
-import { TicketType } from './TicketType';
-import { User } from './User';
-import { Event } from './Event';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToOne } from 'typeorm';
+import { IsUUID, IsNotEmpty, IsDateString, IsNumber, IsPositive, Length, IsOptional } from 'class-validator';
+import { Invoice } from './Invoice';
+import { Registration } from './Registration'; // Import Registration
 
 @Entity('payments')
 export class Payment {
-  @PrimaryGeneratedColumn('uuid')
-  @IsUUID('4', { message: 'paymentId must be a valid UUID' })
-  paymentId!: string;
+    @PrimaryGeneratedColumn('uuid')
+    @IsUUID('4', { message: 'paymentId must be a valid UUID' })
+    paymentId!: string;
 
-  @Column()
-  @IsUUID('4', { message: 'eventId must be a valid UUID' })
-  @IsNotEmpty({ message: 'eventId is required' })
-  eventId!: string;
+    @Column()
+    @IsUUID('4', { message: 'invoiceId must be a valid UUID' })
+    @IsNotEmpty({ message: 'invoiceId is required' })
+    invoiceId!: string;
 
-  @Column()
-  @IsUUID('4', { message: 'userId must be a valid UUID' })
-  @IsNotEmpty({ message: 'userId is required' })
-  userId!: string;
+    @Column({ type: 'date' })
+    @IsDateString({}, { message: 'paymentDate must be a valid ISO date string' })
+    @IsNotEmpty({ message: 'paymentDate is required' })
+    paymentDate!: string;
 
-  @Column()
-  @IsUUID('4', { message: 'ticketTypeId must be a valid UUID' })
-  @IsNotEmpty({ message: 'ticketTypeId is required' })
-  ticketTypeId!: string;
+    @Column({ type: 'float' })
+    @IsNumber({}, { message: 'paidAmount must be a number' })
+    @IsPositive({ message: 'paidAmount must be a positive number' })
+    paidAmount!: number;
 
-  @Column({ type: 'date' })
-  @IsDateString({}, { message: 'paymentDate must be a valid ISO date string' })
-  @IsNotEmpty({ message: 'paymentDate is required' })
-  paymentDate!: string;
+    @Column()
+    @IsNotEmpty({ message: 'paymentMethod is required' })
+    @Length(3, 50, { message: 'paymentMethod must be between $constraint1 and $constraint2 characters' })
+    paymentMethod!: string;
 
-  @Column({ type: 'float' })
-  @IsNumber({}, { message: 'paidAmount must be a number' })
-  @IsPositive({ message: 'paidAmount must be a positive number' })
-  paidAmount!: number;
+    @Column({ default: 'pending' })
+    @IsNotEmpty({ message: 'paymentStatus is required' })
+    @Length(3, 20, { message: 'paymentStatus must be between $constraint1 and $constraint2 characters' })
+    paymentStatus!: string;
 
-  @Column({ type: 'float', default: 0 })
-  @IsNumber({}, { message: 'remainingAmount must be a number' })
-  remainingAmount!: number;
+    @Column({ nullable: true })
+    @IsOptional()
+    @Length(0, 500, { message: 'description must be at most $constraint2 characters' })
+    description!: string;
 
-  @Column()
-  @IsNotEmpty({ message: 'paymentMethod is required' })
-  @Length(3, 50, {
-    message:
-      'paymentMethod must be between $constraint1 and $constraint2 characters',
-  })
-  paymentMethod!: string;
+    // Relationships
+    @ManyToOne(() => Invoice, invoice => invoice.payments)
+    @JoinColumn({ name: 'invoiceId' })
+    invoice!: Invoice;
 
-  @Column({ default: 'pending' })
-  @IsNotEmpty({ message: 'paymentStatus is required' })
-  @Length(3, 20, {
-    message:
-      'paymentStatus must be between $constraint1 and $constraint2 characters',
-  })
-  paymentStatus!: string;
+    // Relationship to Registration (One-to-One)
+    @OneToOne(() => Registration, registration => registration.payment)
+    @JoinColumn({ name: 'registrationId' })
+    registration?: Registration;
 
-  @Column({ nullable: true })
-  @IsOptional()
-  @Length(0, 500, {
-    message: 'description must be at most $constraint2 characters',
-  })
-  description!: string;
-
-  // Relationships
-  @ManyToOne(() => TicketType, ticketType => ticketType.payments)
-  @JoinColumn({ name: 'ticketTypeId' })
-  ticketType!: TicketType;
-  
-  @ManyToOne(() => User, user => user.payments)
-  @JoinColumn({ name: 'userId' })
-  user!: User;
-  
-  @ManyToOne(() => Event, event => event.payments)
-  @JoinColumn({ name: 'eventId' })
-  event!: Event;
+    @Column({ type: 'uuid', nullable: true, unique: true }) // Add this for the foreign key
+    registrationId?: string;
 }

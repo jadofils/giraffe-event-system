@@ -45,12 +45,12 @@ export class OrganizationController {
 
     try {
       const createResult = OrganizationRepository.create({
-        OrganizationName,
-        Description,
-        ContactEmail,
-        ContactPhone,
-        Address,
-        OrganizationType,
+        organizationName: OrganizationName,
+        description: Description,
+        contactEmail: ContactEmail,
+        contactPhone: ContactPhone,
+        address: Address,
+        organizationType: OrganizationType,
       });
 
       if (!createResult.success) {
@@ -79,12 +79,12 @@ console.log("id's from body:",req.body)
 
     try {
       const updateResult = await OrganizationRepository.update(id, {
-        OrganizationName,
-        Description,
-        ContactEmail,
-        ContactPhone,
-        Address,
-        OrganizationType,
+        organizationName: OrganizationName,
+        description: Description,
+        contactEmail: ContactEmail,
+        contactPhone: ContactPhone,
+        address: Address,
+        organizationType: OrganizationType,
       });
 
       if (updateResult.success) {

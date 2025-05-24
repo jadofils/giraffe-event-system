@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
-import { EventBookingInterface } from '../interfaces/interface';
-import { EventBookingRepository } from '../repositories/EventBookingRepository';
+import { VenueBookingRepository } from '../repositories/VenueBookingRepository';
 import { AuthenticatedRequest } from '../middlewares/AuthMiddleware';
 import { Between } from 'typeorm';
-import { checkConflict } from '../services/BookingService';
+import { checkConflict } from '../services/bookings/BookingService';
+import { VenueBookingInterface } from '../interfaces/interface';
 
-class EventBookingController {
+class VenueBookingController {
   /**
    * Create a new event booking
    * @route POST /api/bookings
@@ -13,7 +13,7 @@ class EventBookingController {
    */
 static async createEventBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-        const bookingData: EventBookingInterface = req.body;
+        const bookingData: VenueBookingInterface = req.body;
         console.log("Booking data from request body:", bookingData); // Debugging
 //accept the booking service
 
@@ -60,7 +60,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
 
         // Check if the organizationId exists in the database
         try {
-            const organizationExists = await EventBookingRepository.getOrganizationRepository().findOne({
+            const organizationExists = await VenueBookingRepository.getOrganizationRepository().findOne({
                 where: { organizationId },
             });
             
@@ -113,7 +113,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
 
         // Validate organizer exists and belongs to the organization
         try {
-            const organizerExists = await EventBookingRepository.getUserRepository().findOne({
+            const organizerExists = await VenueBookingRepository.getUserRepository().findOne({
                 where: { userId: organizerId },
                 relations: ["organizations"],
             });
@@ -145,7 +145,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
 
         // Create booking with organizationId and organizerId from token
         try {
-            const result = await EventBookingRepository.createBooking({ 
+            const result = await VenueBookingRepository.createBooking({ 
                 ...bookingData, 
                 organizationId, 
                 organizerId
@@ -176,7 +176,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    */
   static async getAllEventBookings(req: Request, res: Response): Promise<void> {
     try {
-      const result = await EventBookingRepository.getAllBookings();
+      const result = await VenueBookingRepository.getAllBookings();
 
       if (result.success && result.data) {
         if (result.data.length === 0) {
@@ -223,7 +223,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.getBookingById(id);
+      const result = await VenueBookingRepository.getBookingById(id);
 
       if (result.success && result.data) {
         res.status(200).json({ 
@@ -259,7 +259,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
   static async updateEventBooking(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const updates: Partial<EventBookingInterface> = req.body;
+      const updates: Partial<VenueBookingInterface> = req.body;
 
       if (!id) {
         res.status(400).json({ 
@@ -310,7 +310,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.updateBooking(id, updates);
+      const result = await VenueBookingRepository.updateBooking(id, updates);
 
       if (result.success && result.data) {
         res.status(200).json({ 
@@ -365,7 +365,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.updateBookingStatus(id, approvalStatus as 'pending' | 'approved' | 'rejected');
+      const result = await VenueBookingRepository.updateBookingStatus(id, approvalStatus as 'pending' | 'approved' | 'rejected');
 
       if (result.success && result.data) {
         res.status(200).json({ 
@@ -410,7 +410,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.deleteBooking(id);
+      const result = await VenueBookingRepository.deleteBooking(id);
 
       if (result.success) {
         res.status(204).send(); // 204 No Content (successful deletion, no body to return)
@@ -451,7 +451,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.getBookingsByEventId(eventId);
+      const result = await VenueBookingRepository.getBookingsByEventId(eventId);
 
       if (result.success && result.data) {
         if (result.data.length === 0) {
@@ -498,7 +498,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         return;
       }
 
-      const result = await EventBookingRepository.getBookingsByVenueId(venueId);
+      const result = await VenueBookingRepository.getBookingsByVenueId(venueId);
 
       if (result.success && result.data) {
         if (result.data.length === 0) {
@@ -543,7 +543,7 @@ static async getBookingsByOrganizerId(req: AuthenticatedRequest, res: Response):
     console.log("Organizer ID from token:", organizerId); // Debug the value
 
     // Call repository method with the organizerId
-    const result = await EventBookingRepository.getBookingsByOrganizerId(organizerId);
+    const result = await VenueBookingRepository.getBookingsByOrganizerId(organizerId);
     
     if (result.success && result.data) {
       if (result.data.length === 0) {
@@ -591,7 +591,7 @@ static async getBookingsByOrganizerId(req: AuthenticatedRequest, res: Response):
         return;
       }
 
-      const result = await EventBookingRepository.getBookingsByOrganizationId(organizationId);
+      const result = await VenueBookingRepository.getBookingsByOrganizationId(organizationId);
 
       if (result.success && result.data) {
         if (result.data.length === 0) {
@@ -647,7 +647,7 @@ static async getBookingsByOrganizerId(req: AuthenticatedRequest, res: Response):
         return;
       }
 
-      const result = await EventBookingRepository.getBookingsByStatus(status as 'pending' | 'approved' | 'rejected');
+      const result = await VenueBookingRepository.getBookingsByStatus(status as 'pending' | 'approved' | 'rejected');
 
       if (result.success && result.data) {
         if (result.data.length === 0) {
@@ -705,7 +705,7 @@ static async getBookingsByDateRange(req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const bookingRepo = EventBookingRepository.getEventBookingRepository();
+        const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
         let query = bookingRepo.createQueryBuilder("booking")
             .leftJoinAndSelect("booking.event", "event")
             .leftJoinAndSelect("booking.venue", "venue")
@@ -789,4 +789,4 @@ static async getBookingsByDateRange(req: Request, res: Response): Promise<void> 
   
 }
 
-export { EventBookingController };
+export { VenueBookingController };

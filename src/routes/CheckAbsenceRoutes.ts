@@ -1,5 +1,5 @@
 import { Router, Request, Response, RequestHandler } from "express";
-import { CheckAbsenceService } from "../services/CheckAbsenceService";
+import { CheckAbsenceService } from "../services/bookings/CheckAbsenceService";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 
 const router = Router();

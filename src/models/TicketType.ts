@@ -1,35 +1,34 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn } from 'typeorm';
+import { IsUUID, IsNotEmpty, Length, IsNumber, IsPositive, IsOptional, Min, IsDecimal } from 'class-validator';
+import { Registration } from './Registration';
 
-import { IsUUID, IsNotEmpty, Length, IsNumber, IsPositive, IsOptional } from 'class-validator';
-import { Payment } from './Payment';
 @Entity('ticket_types')
 export class TicketType {
-  @PrimaryGeneratedColumn('uuid')
-  @IsUUID('4', { message: 'ticketTypeId must be a valid UUID' })
-  ticketTypeId!: string;
+    @PrimaryGeneratedColumn('uuid')
+    @IsUUID('4', { message: 'ticketTypeId must be a valid UUID' })
+    ticketTypeId!: string;
 
-  @Column()
-  @IsNotEmpty({ message: 'ticketName is required' })
-  @Length(3, 50, {
-    message: 'ticketName must be between $constraint1 and $constraint2 characters',
-  })
-  ticketName!: string;
+    @Column({ nullable: true })
+    @IsNotEmpty({ message: 'ticketName is required' })
+    @Length(3, 50, { message: 'ticketName must be between 3 and 50 characters' })
+    ticketName!: string;
 
-  @Column({ type: 'float' })
-  @IsNumber({}, { message: 'price must be a valid number' })
-  @IsPositive({ message: 'price must be a positive number' })
-  price!: number;
+    @Column({ type: 'numeric', precision: 10, scale: 2, nullable: false }) // <-- Make it nullable temporarily
+    @IsNumber({}, { message: 'Price must be a number' })
+    @IsPositive({ message: 'Price must be a positive number' })
+    @IsDecimal({}, { message: 'Price must be a valid decimal number' })
+    price!: number;
 
-  @Column({ nullable: true })
-  @IsOptional()
-  @Length(0, 500, {
-    message: 'description must be at most $constraint2 characters',
-  })
-  description!: string;
+    @Column({ nullable: true, type: 'text' })
+    @IsOptional()
+    @Length(0, 1000, { message: 'description must be at most 1000 characters' })
+    description?: string;
 
-  @OneToMany(() => Payment, payment => payment.ticketType)
-  payments!: Payment[];
+    @DeleteDateColumn({ name: 'deletedAt', type: 'timestamp', nullable: true })
+    deletedAt?: Date;
 
-  @DeleteDateColumn({ name: 'deletedAt', type: 'timestamp', nullable: true })
-  deletedAt?: Date;
+    @OneToMany(() => Registration, (registration: Registration) => registration.ticketType, {
+        cascade: false // Prevent cascading deletes to avoid accidental data loss
+    })
+    registrations!: Registration[];
 }

@@ -15,8 +15,9 @@ import {
   IsBoolean 
 } from 'class-validator';
 import { User } from './User';
-import { EventBooking } from './EventBooking';
+import { EventBooking } from './VenueBooking';
 import { Event } from './Event';
+import { Registration } from './Registration';
 
 @Entity('venues')
 export class Venue {
@@ -66,4 +67,6 @@ export class Venue {
 
   @OneToMany(() => Event, event => event.venueId)
   events!: Event[];
+   @OneToMany(() => Registration, registration => registration.venue)
+  registrations!: Registration[];
 }

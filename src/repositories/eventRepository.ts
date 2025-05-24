@@ -1,11 +1,11 @@
 import { AppDataSource } from "../config/Database";
-import { EventBookingInterface, EventInterface } from "../interfaces/interface";
+import { EventInterface, VenueBookingEntity } from "../interfaces/interface";
 import { Event, EventType } from "../models/Event";
 
 
 
 export class EventRepository{
-    static createBooking(arg0: EventBookingInterface) {
+    static createBooking(arg0: VenueBookingEntity) {
         throw new Error('Method not implemented.');
     }
     static createEvent(eventData: any) {
@@ -14,7 +14,7 @@ export class EventRepository{
 
     //create event
     static create(data:Partial<EventInterface>):{success:boolean; data?:Event; message?:string}{
-        if(!data.Description || !data.EventCategory || !data.EventTitle || !data.EventType || !data.VenueId  || !data.OrganizerId){
+        if(!data.description || !data.eventCategory || !data.eventTitle || !data.eventType || !data.venueId  || !data.organizerId){
             return {success : false, message:"all Field are required"}
         }
         
@@ -25,19 +25,19 @@ export class EventRepository{
         private: EventType.PRIVATE,
       };
   
-      const mappedEventType = eventTypeMap[data.EventType];
+      const mappedEventType = eventTypeMap[data.eventType];
       if (!mappedEventType) {
         return { success: false, message: "Invalid event type" };
       }
   
       // Create and populate the event
       const event = new Event();
-      event.description = data.Description;
-      event.eventCategory = data.EventCategory;
-      event.eventTitle = data.EventTitle;
+      event.description = data.description;
+      event.eventCategory = data.eventCategory;
+      event.eventTitle = data.eventTitle;
       event.eventType = mappedEventType;
-      event.venueId = data.VenueId;
-      event.organizerId = data.OrganizerId;
+      event.venueId = data.venueId;
+      event.organizerId = data.organizerId;
       
   
       return { success: true, data: event };
@@ -132,17 +132,17 @@ export class EventRepository{
             }
 
             let updatedEventType = event.eventType;
-            if (data.EventType && (data.EventType === "public" || data.EventType === "private")) {
-              updatedEventType = data.EventType as EventType;
+            if (data.eventType && (data.eventType === "public" || data.eventType === "private")) {
+              updatedEventType = data.eventType as EventType;
             }
 
             repo.merge(event,{
-                description:data.Description??event.description,
-                eventTitle:data.EventTitle?? event.eventTitle,
-                eventCategory: data.EventCategory?? event.eventCategory,
-                venueId: data.VenueId?? event.venueId,
+                description:data.description??event.description,
+                eventTitle:data.eventTitle?? event.eventTitle,
+                eventCategory: data.eventCategory?? event.eventCategory,
+                venueId: data.venueId?? event.venueId,
                 
-                organizerId:data.OrganizerId??event.organizerId,
+                organizerId:data.organizerId??event.organizerId,
                 eventType: updatedEventType,
                 
 

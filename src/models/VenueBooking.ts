@@ -11,7 +11,7 @@ export enum ApprovalStatus {
   REJECTED = 'rejected',
 }
 
-@Entity('event_bookings')
+@Entity('venue_bookings')
 export class EventBooking {
   @PrimaryGeneratedColumn('uuid')
   @IsUUID('4', { message: 'bookingId must be a valid UUID' })

@@ -2,8 +2,10 @@ import { AppDataSource } from "../config/Database";
 import { User } from "../models/User";
 import { Role } from "../models/Role";
 import { UserInterface } from "../interfaces/interface";
+import { In } from "typeorm";
 
 export class UserRepository {
+ 
  
   /**
    * Find existing user by email or username
@@ -29,11 +31,11 @@ export class UserRepository {
    */
   static createUser(data: Partial<UserInterface>): User {
     const user = new User();
-    user.username = data.Username ?? '';
-    user.firstName = data.FirstName ?? '';
-    user.lastName = data.LastName ?? '';
-    user.email = data.Email ?? '';
-    user.phoneNumber = data.PhoneNumber ?? undefined;
+    user.username = data.username ?? '';
+    user.firstName = data.firstName ?? '';
+    user.lastName = data.lastName ?? '';
+    user.email = data.email ?? '';
+    user.phoneNumber = data.phoneNumber ?? undefined;
 
     return user;
   }
@@ -86,16 +88,58 @@ export class UserRepository {
     });
   }
 
-  static async getUserById(id: UserInterface["UserID"]): Promise<Partial<User> | null> {
-    const userRepository = AppDataSource.getRepository(User);
-    return await userRepository.findOne({
-      where: { userId: id },
-      select: ["userId", "username", "firstName", "lastName", "email", "phoneNumber"],
-      relations: ["role", "organizations"], // Correct the relation names
-    });
-  }
+static async getUserById(id: UserInterface["userId"]): Promise<Partial<User> | null> {
+        const userRepository = AppDataSource.getRepository(User);
 
-  static async deleteUser(id: UserInterface["UserID"]): Promise<{ success: boolean; message: string }> {
+        // Fetch the user with registrations and their primary relations
+        const user = await userRepository.findOne({
+            where: { userId: id },
+            select: ["userId", "username", "firstName", "lastName", "email", "phoneNumber"],
+            relations: [
+                "role", 
+                "organizations", 
+                "registrations", 
+                "registrations.event", // Ensure these are loaded if you want their details
+                "registrations.user",  // The attendee user for THIS registration
+                "registrations.ticketType", 
+                "registrations.venue"
+            ],
+        });
+
+        if (!user) {
+            return null;
+        }
+
+        // Now, collect all unique boughtForIds from all registrations
+        const allBoughtForUserIds: string[] = [];
+        if (user.registrations) {
+            user.registrations.forEach(reg => {
+                if (reg.boughtForIds) {
+                    reg.boughtForIds.forEach(boughtForId => {
+                        if (!allBoughtForUserIds.includes(boughtForId)) {
+                            allBoughtForUserIds.push(boughtForId);
+                        }
+                    });
+                }
+            });
+        }
+
+        let boughtForUsersMap: Map<string, Partial<User>> = new Map();
+        if (allBoughtForUserIds.length > 0) {
+            const boughtUsers = await userRepository.find({
+                where: { userId: In(allBoughtForUserIds) },
+                select: ["userId", "username", "firstName", "lastName", "email", "phoneNumber"], // Select relevant user details
+            });
+            boughtUsers.forEach(bUser => boughtForUsersMap.set(bUser.userId, bUser));
+        }
+
+        // Attach the fetched boughtForUsersMap to the user object (temporarily)
+        // This is a common pattern to pass extra data to the controller without altering the entity.
+        (user as any)._fetchedBoughtForUsersMap = boughtForUsersMap;
+
+        return user;
+    }
+  static async deleteUser(id: UserInterface["userId"]): Promise<{ success: boolean; message: string }> {
     const userRepository = AppDataSource.getRepository(User);
   
     try {
@@ -209,6 +253,7 @@ static async updateUserRole(userId: string, newRoleId: string): Promise<{
   }
 }
 
+//get user by id
 
 
 }

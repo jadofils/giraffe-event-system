@@ -1,11 +1,11 @@
-import { EventBookingInterface } from "../interfaces/interface";
-import { EventBookingRepository } from "../repositories/EventBookingRepository";
+import {VenueBookingInterface  } from "../../interfaces/interface";
+import { VenueBookingRepository } from "../../repositories/VenueBookingRepository";
 
 export async function checkConflict(
-  bookingData: EventBookingInterface
+  bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    const bookingRepo = EventBookingRepository.getEventBookingRepository();
+    const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
     const startDate = new Date(bookingData.startDate);
     const endDate = new Date(bookingData.endDate);
     const startTimeParts = bookingData.startTime.split(":");

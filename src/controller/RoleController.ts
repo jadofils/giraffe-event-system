@@ -19,9 +19,9 @@ export class RoleController {
       }
 
       const role = RoleRepository.createRole({
-        RoleName: roleName,
-        Description: description,
-        Permissions: permissions,
+        roleName: roleName,
+        description: description,
+        permissions: permissions,
       });
 
       const result = await RoleRepository.saveRole(role);
@@ -85,9 +85,9 @@ export class RoleController {
       }
 
       const updatedRole = await RoleRepository.updateRole(id, {
-        RoleName: roleName,
-        Description: description,
-        Permissions: permissions,
+        roleName: roleName,
+        description: description,
+        permissions: permissions,
       });
 
       if ('error' in updatedRole) {
