@@ -8,10 +8,10 @@ const router = express.Router();
  * Basic CRUD Operations
  */
 // Create a new event booking
-router.post('/create',VenueBookingController.createEventBooking);
+router.post('/create',VenueBookingController.createVenueBooking);
 
 // Get all event bookings
-router.get('/all', VenueBookingController.getAllEventBookings);
+router.get('/all', VenueBookingController.getAllVenueBookings);
 
 /**
  * Filtering Operations
@@ -26,7 +26,7 @@ router.get('/event/:eventId', VenueBookingController.getBookingsByEventId);
 router.get('/venue/:venueId', VenueBookingController.getBookingsByVenueId);
 
 // Get bookings by organizer ID
-// routes/eventBookingRoutes.ts
+// routes/VenueBookingRoutes.ts
 router.get('/organizer', verifyJWT, VenueBookingController.getBookingsByOrganizerId);
 // Get bookings by organization ID
 router.get('/organization/:organizationId', VenueBookingController.getBookingsByOrganizationId);
@@ -35,16 +35,16 @@ router.get('/organization/:organizationId', VenueBookingController.getBookingsBy
 router.get('/status/:status', VenueBookingController.getBookingsByStatus);
 
 // Get a specific event booking by ID (must come after other specific GET routes)
-router.get('/:id', VenueBookingController.getEventBookingById);
+router.get('/:id', VenueBookingController.getVenueBookingById);
 
 // Update an event booking
-router.put('/:id', VenueBookingController.updateEventBooking);
+router.put('/:id', VenueBookingController.updateVenueBooking);
 
 // Update only the status of an event booking
-router.patch('/:id/status', VenueBookingController.updateEventBookingStatus);
+router.patch('/:id/status', VenueBookingController.updateVenueBookingStatus);
 
 // Delete an event booking
-router.delete('/:id', VenueBookingController.deleteEventBooking);
+router.delete('/:id', VenueBookingController.deleteVenueBooking);
 
 
 

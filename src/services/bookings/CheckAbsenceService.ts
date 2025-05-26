@@ -1,6 +1,6 @@
 import { VenueBookingInterface } from "../../interfaces/interface";
 import { AppDataSource } from "../../config/Database";
-import { EventBooking } from "../../models/VenueBooking";
+import { VenueBooking } from "../../models/VenueBooking";
 import { Between } from "typeorm";
 import { AuthenticatedRequest } from "../../middlewares/AuthMiddleware";
 import { checkConflict } from "./BookingService";
@@ -32,7 +32,7 @@ export class CheckAbsenceService {
       
       console.log(`Checking availability for User: ${user.userId}, Organization: ${user.organizationId}`);
       
-      const bookingRepo = AppDataSource.getRepository(EventBooking);
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
       
       // Fetch booked slots for the venue within the date range
       const bookedSlots = await bookingRepo.find({

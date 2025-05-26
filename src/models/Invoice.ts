@@ -45,4 +45,7 @@ export class Invoice {
     // Relationship to Registration (One-to-One)
     @OneToOne(() => Registration, registration => registration.invoice)
     registration?: Registration;
+  createdAt: any;
+  updatedAt: any;
+  deletedAt: any;
 }

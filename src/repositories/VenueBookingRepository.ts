@@ -1,15 +1,15 @@
-import { ApprovalStatus, EventBooking } from "../models/VenueBooking";
 import { AppDataSource } from "../config/Database";
 import { Repository } from "typeorm";
 import { Event } from "../models/Event";
 import { Organization } from "../models/Organization";
 import { VenueBookingInterface } from "../interfaces/interface";
+import { VenueBooking } from "../models/VenueBooking";
 
 class VenueBookingRepository {
     static checkDuplicateBookings(arg0: string, parsedStartDate: Date, parsedEndDate: Date, arg3: string, arg4: string, arg5: string) {
         throw new Error('Method not implemented.');
     }
-  static VenueBookingRepository: Repository<EventBooking>;
+  static VenueBookingRepository: Repository<VenueBooking>;
    static eventRepository: Repository<Event>;
    static organizationRepository: Repository<Organization>;
     /**
@@ -18,7 +18,7 @@ class VenueBookingRepository {
   /**
  * Create a new event booking
  */
-static async createBooking(bookingData: VenueBookingInterface): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+static async createBooking(bookingData: VenueBookingInterface): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
     try {
         // Validate required fields
         if (!bookingData.eventId || !bookingData.venueId || !bookingData.organizerId || 
@@ -86,12 +86,12 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
 
     
 
-   static getVenueBookingRepository(): Repository<EventBooking> {
+   static getVenueBookingRepository(): Repository<VenueBooking> {
     if (!VenueBookingRepository.VenueBookingRepository) {
       if (!AppDataSource.isInitialized) {
         throw new Error('Database not initialized.');
       }
-      VenueBookingRepository.VenueBookingRepository = AppDataSource.getRepository(EventBooking);
+      VenueBookingRepository.VenueBookingRepository = AppDataSource.getRepository(VenueBooking);
     }
     return VenueBookingRepository.VenueBookingRepository;
   }
@@ -126,7 +126,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get all bookings
      */
-    static async getAllBookings(): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+    static async getAllBookings(): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
         try {
             const bookingRepo = VenueBookingRepository.getVenueBookingRepository();
             const bookings = await bookingRepo.find({
@@ -147,7 +147,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get booking by ID
      */
-    static async getBookingById(id: string): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+    static async getBookingById(id: string): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
         try {
             if (!id) {
                 return { success: false, message: "Booking ID is required" };
@@ -173,7 +173,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Update booking
      */
-    static async updateBooking(id: string, bookingData: Partial<VenueBookingInterface>): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+    static async updateBooking(id: string, bookingData: Partial<VenueBookingInterface>): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
         try {
             if (!id) {
                 return { success: false, message: "Booking ID is required" };
@@ -250,7 +250,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Update booking status
      */
-    static async updateBookingStatus(id: string, status: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; message?: string; data?: EventBooking }> {
+    static async updateBookingStatus(id: string, status: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
         try {
             if (!id) {
                 return { success: false, message: "Booking ID is required" };
@@ -307,7 +307,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get bookings by event ID
      */
-    static async getBookingsByEventId(eventId: string): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+    static async getBookingsByEventId(eventId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
         try {
             if (!eventId) {
                 return { success: false, message: "Event ID is required" };
@@ -343,7 +343,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get bookings by venue ID
      */
-    static async getBookingsByVenueId(venueId: string): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+    static async getBookingsByVenueId(venueId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
         try {
             if (!venueId) {
                 return { success: false, message: "Venue ID is required" };
@@ -368,7 +368,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
 
     // Add this import at the top of your file:
     // import { Response } from "express";
- static async getBookingsByOrganizerId(organizerId: string): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+ static async getBookingsByOrganizerId(organizerId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
   try {
     if (!organizerId) {
       return { success: false, message: "Organizer ID is required" };
@@ -394,7 +394,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get bookings by organization ID
      */
-    static async getBookingsByOrganizationId(organizationId: string): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+    static async getBookingsByOrganizationId(organizationId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
         try {
             if (!organizationId) {
                 return { success: false, message: "Organization ID is required" };
@@ -421,7 +421,7 @@ static async createBooking(bookingData: VenueBookingInterface): Promise<{ succes
     /**
      * Get bookings by approval status
      */
-    static async getBookingsByStatus(approvalStatus: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+    static async getBookingsByStatus(approvalStatus: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
         try {
             // Validate status
             if (!['pending', 'approved', 'rejected'].includes(approvalStatus)) {
@@ -452,7 +452,7 @@ static async getBookingsByDateRange(
     startDate: Date, 
     endDate: Date, 
     filterOptions: ("min" | "hours" | "days" | "all")[]
-): Promise<{ success: boolean; message?: string; data?: EventBooking[] }> {
+): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     try {
         // Validate dates
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {

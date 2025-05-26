@@ -12,7 +12,7 @@ export enum ApprovalStatus {
 }
 
 @Entity('venue_bookings')
-export class EventBooking {
+export class VenueBooking {
   @PrimaryGeneratedColumn('uuid')
   @IsUUID('4', { message: 'bookingId must be a valid UUID' })
   bookingId!: string;

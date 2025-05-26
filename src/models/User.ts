@@ -4,9 +4,8 @@ import {
 import { IsUUID, IsNotEmpty, Length, IsEmail, IsString, IsOptional, IsPhoneNumber } from 'class-validator';
 import { Role } from './Role';
 import { Organization } from './Organization';
-import { Payment } from './Payment';
-import { EventBooking } from './VenueBooking';
 import { Registration } from './Registration';
+import { VenueBooking } from './VenueBooking';
 
 @Entity('users')
 export class User {
@@ -51,8 +50,8 @@ export class User {
   @OneToMany(() => Organization, organization => organization.user)
   organizations!: Organization[]; // One user can belong to many organizations
   
- @OneToMany(() => EventBooking, (booking) => booking.user)
-  bookings!: EventBooking[];
+ @OneToMany(() => VenueBooking, (booking) => booking.user)
+  bookings!: VenueBooking[];
   //to registrations
    @OneToMany(() => Registration, (registration) => registration.user)
   registrations!: Registration[];

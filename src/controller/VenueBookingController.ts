@@ -11,7 +11,7 @@ class VenueBookingController {
    * @route POST /api/bookings
    * @access Private (Authenticated Users)
    */
-static async createEventBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
+static async createVenueBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
         const bookingData: VenueBookingInterface = req.body;
         console.log("Booking data from request body:", bookingData); // Debugging
@@ -164,7 +164,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
             });
         }
     } catch (error) {
-        console.error("Error in createEventBooking:", error);
+        console.error("Error in createVenueBooking:", error);
         res.status(500).json({ success: false, message: "Internal Server Error." });
     }
 }
@@ -174,7 +174,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    * @route GET /api/bookings
    * @access Private (Admins)
    */
-  static async getAllEventBookings(req: Request, res: Response): Promise<void> {
+  static async getAllVenueBookings(req: Request, res: Response): Promise<void> {
     try {
       const result = await VenueBookingRepository.getAllBookings();
 
@@ -198,7 +198,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         });
       }
     } catch (error) {
-      console.error('Error in getAllEventBookings:', error);
+      console.error('Error in getAllVenueBookings:', error);
       res.status(500).json({ 
         success: false, 
         message: 'Internal Server Error: An unexpected error occurred.' 
@@ -211,7 +211,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    * @route GET /api/bookings/:id
    * @access Private (Booking Owner, Event Organizer, Admins)
    */
-  static async getEventBookingById(req: Request, res: Response): Promise<void> {
+  static async getVenueBookingById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
 
@@ -243,7 +243,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         });
       }
     } catch (error) {
-      console.error('Error in getEventBookingById:', error);
+      console.error('Error in getVenueBookingById:', error);
       res.status(500).json({ 
         success: false, 
         message: 'Internal Server Error: An unexpected error occurred.' 
@@ -256,7 +256,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    * @route PUT /api/bookings/:id
    * @access Private (Booking Owner, Event Organizer, Admins)
    */
-  static async updateEventBooking(req: Request, res: Response): Promise<void> {
+  static async updateVenueBooking(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const updates: Partial<VenueBookingInterface> = req.body;
@@ -330,7 +330,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         });
       }
     } catch (error) {
-      console.error('Error in updateEventBooking:', error);
+      console.error('Error in updateVenueBooking:', error);
       res.status(500).json({ 
         success: false, 
         message: 'Internal Server Error: An unexpected error occurred.' 
@@ -343,7 +343,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    * @route PATCH /api/bookings/:id/status
    * @access Private (Event Organizer, Admins)
    */
-  static async updateEventBookingStatus(req: Request, res: Response): Promise<void> {
+  static async updateVenueBookingStatus(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const { approvalStatus } = req.body;
@@ -385,7 +385,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         });
       }
     } catch (error) {
-      console.error('Error in updateEventBookingStatus:', error);
+      console.error('Error in updateVenueBookingStatus:', error);
       res.status(500).json({ 
         success: false, 
         message: 'Internal Server Error: An unexpected error occurred.' 
@@ -398,7 +398,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
    * @route DELETE /api/bookings/:id
    * @access Private (Booking Owner, Event Organizer, Admins)
    */
-  static async deleteEventBooking(req: Request, res: Response): Promise<void> {
+  static async deleteVenueBooking(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
 
@@ -426,7 +426,7 @@ static async createEventBooking(req: AuthenticatedRequest, res: Response): Promi
         });
       }
     } catch (error) {
-      console.error('Error in deleteEventBooking:', error);
+      console.error('Error in deleteVenueBooking:', error);
       res.status(500).json({ 
         success: false, 
         message: 'Internal Server Error: An unexpected error occurred.' 

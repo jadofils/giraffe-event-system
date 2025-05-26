@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToOne
 import { IsUUID, IsNotEmpty, IsDateString, IsNumber, IsPositive, Length, IsOptional } from 'class-validator';
 import { Invoice } from './Invoice';
 import { Registration } from './Registration'; // Import Registration
+import { Event } from './Event';
 
 @Entity('payments')
 export class Payment {
@@ -43,6 +44,9 @@ export class Payment {
     @ManyToOne(() => Invoice, invoice => invoice.payments)
     @JoinColumn({ name: 'invoiceId' })
     invoice!: Invoice;
+    @ManyToOne(() => Event, event => event.payments)
+    @JoinColumn({ name: "eventId" })
+    event!: Event;
 
     // Relationship to Registration (One-to-One)
     @OneToOne(() => Registration, registration => registration.payment)
@@ -51,4 +55,7 @@ export class Payment {
 
     @Column({ type: 'uuid', nullable: true, unique: true }) // Add this for the foreign key
     registrationId?: string;
+  createdAt: any;
+  updatedAt: any;
+  deletedAt: any;
 }

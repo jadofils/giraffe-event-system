@@ -6,14 +6,14 @@ import { Event } from '../models/Event';
 import { User } from '../models/User';
 import { TicketType } from '../models/TicketType';
 import { Venue } from '../models/Venue';
-import { RegistrationRequestInterface } from '../interfaces/interface'; // Use the request interface for data incoming
+import { PaymentStatus, RegistrationRequestInterface } from '../interfaces/interface'; // Use the request interface for data incoming
 import { QrCodeService } from '../services/registrations/QrCodeService';
 import { AuthenticatedRequest } from '../middlewares/AuthMiddleware';
 import { RequestHandler, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { ValidationService } from '../services/registrations/ValidationRegistrationService';
+import { RegistrationService } from '../services/registrations/ValidationRegistrationService';
 
 export class RegistrationRepository {
     static findByQRCode(rawQrCodeDataString: string) {
@@ -50,7 +50,9 @@ export class RegistrationRepository {
             // This is crucial for TypeORM to correctly establish relationships
             const event = await AppDataSource.getRepository(Event).findOne({ where: { eventId: registrationData.eventId } });
             const user = await AppDataSource.getRepository(User).findOne({ where: { userId: registrationData.userId } });
-            const buyer = await AppDataSource.getRepository(User).findOne({ where: { userId: registrationData.buyerId } });
+            const buyer = registrationData.buyerId
+                ? await AppDataSource.getRepository(User).findOne({ where: { userId: registrationData.buyerId } })
+                : null;
             const ticketType = await AppDataSource.getRepository(TicketType).findOne({ where: { ticketTypeId: registrationData.ticketTypeId } });
             const venue = await AppDataSource.getRepository(Venue).findOne({ where: { venueId: registrationData.venueId } });
 
@@ -142,10 +144,10 @@ export class RegistrationRepository {
             // Update primitive fields
             if (updateData.boughtForIds !== undefined) registration.boughtForIds = updateData.boughtForIds;
             if (updateData.noOfTickets !== undefined) registration.noOfTickets = updateData.noOfTickets;
-            if (updateData.registrationDate) registration.registrationDate = updateData.registrationDate;
+            if (updateData.registrationDate) registration.registrationDate = new Date(updateData.registrationDate);
             if (updateData.paymentStatus) registration.paymentStatus = updateData.paymentStatus;
             if (updateData.qrCode) registration.qrCode = updateData.qrCode;
-            if (updateData.checkDate !== undefined) registration.checkDate = updateData.checkDate;
+            if (updateData.checkDate !== undefined) registration.checkDate = new Date(updateData.checkDate);
             if (updateData.attended !== undefined) registration.attended = updateData.attended;
 
             // Save updated registration
@@ -207,15 +209,16 @@ export class RegistrationRepository {
                 registrationId: registrationId,
                 buyerId: buyerId,
                 registrationDate: registrationData.registrationDate || new Date().toISOString(),
-                paymentStatus: registrationData.paymentStatus || 'pending',
+                paymentStatus: registrationData.paymentStatus || ('pending' as PaymentStatus),
                 attended: registrationData.attended || false,
                 boughtForIds: registrationData.boughtForIds || []
             };
 
             // Validate duplicate registration (e.g., prevent same user(s) registering for same event twice)
-            const validationResult = await ValidationService.validateDuplicateRegistration(
+            const validationResult = await RegistrationService.validateDuplicateRegistration(
                 dataForValidation.eventId,
                 dataForValidation.userId,
+                buyerId,
                 dataForValidation.boughtForIds
             );
             if (!validationResult.valid) {

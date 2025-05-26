@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, JoinColumn, ManyToOne, OneToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, JoinColumn, ManyToOne, OneToOne, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
 import { IsUUID, IsNotEmpty, IsDateString, IsNumber, IsPositive, Length, IsBoolean, IsOptional, ArrayMinSize, IsArray, ValidateIf } from 'class-validator';
 import { TicketType } from './TicketType';
 import { Event } from './Event';
@@ -14,32 +14,55 @@ export class Registration {
     registrationId!: string;
 
     @ManyToOne(() => Event, event => event.registrations, { nullable: false, eager: true })
-    @JoinColumn({ name: 'eventId' })
+    @JoinColumn({ name: 'eventId' }) // Use JoinColumn with name for explicit foreign key column
     event!: Event;
+
+    // Direct foreign key column for eventId
+    @Column({ type: 'uuid' })
+    eventId!: string;
 
     @ManyToOne(() => User, user => user.registrationsAsAttendee, { nullable: false, eager: true })
     @JoinColumn({ name: 'userId' })
     user!: User;
 
+    // Direct foreign key column for userId
+    @Column({ type: 'uuid' })
+    userId!: string;
+
     @ManyToOne(() => User, user => user.registrationsAsBuyer, { nullable: false, eager: true })
     @JoinColumn({ name: 'buyerId' })
     buyer!: User;
 
-    @Column('simple-array', { nullable: true, default: () => 'ARRAY[]::text[]' })
+    // Direct foreign key column for buyerId
+    @Column({ type: 'uuid' })
+    buyerId!: string;
+
+    // --- CRUCIAL CHANGE HERE ---
+    // Define the column to use PostgreSQL's native UUID array type
+    @Column('uuid', { array: true, nullable: true, default: () => "'{}'" }) // 'uuid' for element type, array: true for array
     @IsOptional()
     @IsArray({ message: 'boughtForIds must be an array' })
-    @ValidateIf(o => o.boughtForIds && o.boughtForIds.length > 0)
     @IsUUID('4', { each: true, message: 'Each boughtForId must be a valid UUID' })
+    @ValidateIf(o => o.boughtForIds !== undefined && o.boughtForIds !== null && o.boughtForIds.length > 0) // Better validation condition
     boughtForIds?: string[];
+    // --- END CRUCIAL CHANGE ---
 
     @ManyToOne(() => TicketType, ticketType => ticketType.registrations, { nullable: false, eager: true })
     @JoinColumn({ name: 'ticketTypeId' })
     @IsNotEmpty({ message: 'A ticket type is required' })
     ticketType!: TicketType;
 
+    // Direct foreign key column for ticketTypeId
+    @Column({ type: 'uuid' })
+    ticketTypeId!: string;
+
     @ManyToOne(() => Venue, venue => venue.registrations, { nullable: false, eager: true })
     @JoinColumn({ name: 'venueId' })
     venue!: Venue;
+
+    // Direct foreign key column for venueId
+    @Column({ type: 'uuid' })
+    venueId!: string;
 
     @Column({ type: 'int' })
     @IsNumber({}, { message: 'noOfTickets must be a number' })
@@ -47,15 +70,14 @@ export class Registration {
     @IsNotEmpty({ message: 'noOfTickets is required' })
     noOfTickets!: number;
 
-    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00 }) // Recommended: Track total cost here
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00 })
     totalCost!: number;
-
 
     @Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
     @IsDateString({}, { message: 'registrationDate must be a valid ISO date string' })
-    registrationDate!: string;
+    registrationDate!: Date; // Change to Date type to match TypeORM's handling of timestamptz
 
-    @Column({ default: 'pending' }) // Default paymentStatus
+    @Column({ default: 'pending' })
     @IsNotEmpty({ message: 'paymentStatus is required' })
     @Length(3, 50, { message: 'paymentStatus must be between 3 and 50 characters' })
     paymentStatus!: string;
@@ -66,31 +88,35 @@ export class Registration {
     @Column({ type: 'timestamptz', nullable: true })
     @IsOptional()
     @IsDateString({}, { message: 'checkDate must be a valid ISO date string if provided' })
-    checkDate?: string;
+    checkDate?: Date; // Change to Date type
 
     @Column({ type: 'boolean', default: false })
     @IsBoolean({ message: 'attended must be a boolean value' })
     attended!: boolean;
 
-    // Optional: A general status for the registration (e.g., 'active', 'cancelled', 'partially_cancelled')
     @Column({ type: 'varchar', length: 50, default: 'active' })
     registrationStatus!: string;
 
-    // Relationship to Payment
-    @OneToOne(() => Payment, payment => payment.registration, { cascade: true, onDelete: 'SET NULL' }) // cascade: true means if Registration is deleted, Payment is too.  Adjust as needed.
+    @OneToOne(() => Payment, payment => payment.registration, { cascade: true, onDelete: 'SET NULL', nullable: true })
     @JoinColumn({ name: 'paymentId' })
     payment?: Payment;
 
-    // Relationship to Invoice (One-to-One)
-    @OneToOne(() => Invoice, invoice => invoice.registration, { cascade: true, onDelete: 'SET NULL' })
+    @Column({ type: 'uuid', nullable: true }) // Explicit foreign key column
+    paymentId?: string; // Add paymentId here, matched by @JoinColumn
+
+    @OneToOne(() => Invoice, invoice => invoice.registration, { cascade: true, onDelete: 'SET NULL', nullable: true })
     @JoinColumn({ name: 'invoiceId' })
     invoice?: Invoice;
 
     @Column({ type: 'uuid', nullable: true }) // Explicit foreign key column
-    invoiceId?: string;
+    invoiceId?: string; // Correctly place invoiceId here
 
-    @Column({ type: 'uuid', nullable: true }) // Explicit foreign key column
-    paymentId?: string;
-    ticketTypes: any;
+    @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt!: Date;
 
+    @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+    updatedAt!: Date;
+
+    @DeleteDateColumn({ type: 'timestamptz', nullable: true })
+    deletedAt?: Date; // Make sure this property matches the decorator
 }

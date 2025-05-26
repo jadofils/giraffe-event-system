@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'ty
 import { IsUUID, IsNotEmpty, IsOptional, Length, IsEmail, IsPhoneNumber } from 'class-validator';
 import { Event } from './Event';
 import { User } from './User';
-import { EventBooking } from './VenueBooking';
+import {  VenueBooking,  } from './VenueBooking';
 @Entity('organizations')
 export class Organization {
   
@@ -45,6 +45,6 @@ export class Organization {
 
   @ManyToOne(() => User, user => user.organizations)
   user!: User;
-  @OneToMany(() => EventBooking, (booking) => booking.organization)
-  bookings!: EventBooking[];
+  @OneToMany(() => VenueBooking, (booking) => booking.organization)
+  bookings!: VenueBooking[];
 }

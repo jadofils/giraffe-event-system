@@ -4,6 +4,15 @@ import { User } from "../models/User";
 import { Venue } from "../models/Venue";
 import { Event } from "../models/Event"; // Make sure to import Event
 
+// --- PaymentStatus Enum ---
+export enum PaymentStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+  REFUNDED = 'refunded'
+}
+
 // --- Core Entities Interfaces ---
 
 export interface UserInterface {
@@ -43,52 +52,60 @@ export interface VenueInterface {
   venueName: string;
   capacity: number;
   location: string;
-  managerId?: string; // If manager is a direct ID, otherwise link to UserInterface
+  latitude?: number;  // New field for latitude
+  longitude?: number; // New field for longitude
+  googleMapsLink?: string; // Optional: direct link to Google Maps
+  managerId?: string;
   isAvailable?: boolean;
   isBooked?: boolean;
 }
 
+export enum EventType {
+    PUBLIC = "public",
+    PRIVATE = "private",
+}
+
+export enum EventStatus {
+    DRAFT = "draft",
+    PUBLISHED = "published",
+    CANCELLED = "cancelled",
+    COMPLETED = "completed",
+    ARCHIVED = "archived",
+}
+
 export interface EventInterface {
-  eventId: string;
-  eventTitle: string;
-  description: string;
-  eventCategory: string;
-  eventType: "public" | "private";
-  organizerId?: string; // If organizer is a direct ID, otherwise link to UserInterface
-  venueId?: string; // If venue is a direct ID, otherwise link to VenueInterface
-  // Consider adding actual Event relationships if you have them, e.g.,
-  // organizer?: UserInterface;
-  // venue?: VenueInterface;
+    eventId: string;
+    eventTitle: string;
+    description?: string; // Optional
+    eventCategory?: string; // Optional
+    eventType: EventType; // Using the enum
+   
+    maxAttendees?: number; // Optional
+    status: EventStatus; // Using the enum
+    isFeatured: boolean;
+    qrCode?: string; // Optional
+    imageURL?: string; // Optional
+
+    // Foreign Keys
+    organizerId: string;
+    venueId: string;
+
+    // Relationships (optional for interface if not always loaded)
+    organizer?: UserInterface;
+    venue?: VenueInterface;
+    bookings?: VenueBookingInterface[];
+    registrations?: RegistrationInterface[];
+    payments?: PaymentInterface[]; // If events have direct payments
+
+    // Timestamps
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt?: Date; // Optional for soft delete
 }
 
-// Interface for TicketTypes (now singular to match ManyToOne in Registration)
-export interface TicketTypeInterface {
-  ticketTypeId: string;
-  ticketName: string;
-  price: number;
-  description?: string; // Made optional
-  deletedAt?: Date; // Added soft delete field
-}
 
-export interface TicketTypeRequestInterface {
-  ticketName: string;
-  price: number;
-  description?: string;
-}
-// --- Junction/Booking/Request Interfaces ---
 
-export interface VenueBookingInterface {
-  bookingId: string;
-  eventId: string; // Foreign key for Event
-  venueId: string; // Foreign key for Venue
-  organizerId: string; // Foreign key for User (organizer)
-  organizationId: string; // Foreign key for Organization
-  startDate: Date;
-  endDate: Date;
-  startTime: string;
-  endTime: string;
-  approvalStatus: 'pending' | 'approved' | 'rejected'; // Using string literals directly or importing ApprovalStatus
-}
+
 
 // Interface for the actual entity (for type safety, if used for TypeORM entity structure)
 export interface VenueBookingEntity {
@@ -119,6 +136,109 @@ export interface ResourceInterface {
   costPerUnit: number;
 }
 
+// Interface for TicketTypes (now singular to match ManyToOne in Registration)
+export interface TicketTypeInterface {
+  ticketTypeId: string;
+  ticketName: string;
+  price: number;
+  ticketCategory: TicketCategory; // Using the enhanced TicketCategory enum
+  description?: string; // Made optional
+  promoName?: string; // Optional promotional name
+  promoDescription?: string; // Optional promotional description
+  capacity?: number; // Maximum tickets available
+  availableFrom?: Date; // When ticket sales start
+  availableUntil?: Date; // When ticket sales end
+  isActive?: boolean; // Whether ticket is currently sellable
+  minQuantity?: number; // Minimum purchase quantity (for GROUP tickets)
+  maxQuantity?: number; // Maximum purchase quantity per customer
+  requiresVerification?: boolean; // For STUDENT, SENIOR, PRESS tickets
+  perks?: string[]; // List of included perks/benefits
+  createdAt?: Date; // Timestamp for creation
+  updatedAt?: Date; // Timestamp for last update
+  deletedAt?: Date; // Added soft delete field
+}
+// --- Enhanced TicketCategory Enum ---
+export enum TicketCategory {
+    // Basic Tiers
+    REGULAR = 'Regular',
+    MEDIUM = 'Medium', 
+    VIP = 'VIP',
+    VVIP = 'VVIP',
+    
+    // Discount Categories
+    PROMOTIONAL = 'Promotional',
+    STUDENT = 'Student',
+    SENIOR = 'Senior',
+    GROUP = 'Group',
+    
+    // Special Categories
+    CORPORATE = 'Corporate',
+    PRESS = 'Press',
+    SPONSOR = 'Sponsor',
+    SEASON_PASS = 'Season Pass',
+    
+    // Access-Based
+    BACKSTAGE = 'Backstage',
+    GENERAL_ADMISSION = 'General Admission',
+    RESERVED_SEATING = 'Reserved Seating'
+}
+
+// --- TicketType Interfaces (ENHANCED) ---
+export interface TicketTypeRequest {
+    ticketTypeId?: string;
+    ticketName: string;
+    price: number;
+    description?: string;
+    ticketCategory: TicketCategory;
+    promoName?: string;
+    promoDescription?: string;
+    // Additional fields for enhanced functionality
+    capacity?: number;              // Maximum tickets available
+    availableFrom?: Date;           // When ticket sales start
+    availableUntil?: Date;          // When ticket sales end
+    isActive?: boolean;             // Whether ticket is currently sellable
+    minQuantity?: number;           // Minimum purchase quantity (for GROUP tickets)
+    maxQuantity?: number;           // Maximum purchase quantity per customer
+    requiresVerification?: boolean; // For STUDENT, SENIOR, PRESS tickets
+    perks?: string[];              // List of included perks/benefits
+}
+
+export interface TicketTypeResponse {
+    ticketTypeId: string;
+    ticketName: string;
+    price: number;
+    description?: string;
+    ticketCategory: TicketCategory;
+    promoName?: string;
+    promoDescription?: string;
+    deletedAt?: string;
+    // Enhanced response fields
+    capacity?: number;
+    availableFrom?: string;         // ISO string format
+    availableUntil?: string;        // ISO string format
+    isActive?: boolean;
+    minQuantity?: number;
+    maxQuantity?: number;
+    requiresVerification?: boolean;
+    perks?: string[];
+    createdAt?: string;             // ISO string format
+    updatedAt?: string;             // ISO string format
+}
+// --- Junction/Booking/Request Interfaces ---
+
+export interface VenueBookingInterface {
+  bookingId: string;
+  eventId: string; // Foreign key for Event
+  venueId: string; // Foreign key for Venue
+  organizerId: string; // Foreign key for User (organizer)
+  organizationId: string; // Foreign key for Organization
+  startDate: Date;
+  endDate: Date;
+  startTime: string;
+  endTime: string;
+  approvalStatus: 'pending' | 'approved' | 'rejected'; // Using string literals directly or importing ApprovalStatus
+}
+
 // Interface for the complete Registration entity (with populated relationships)
 export interface RegistrationInterface {
     registrationId: string;
@@ -145,30 +265,50 @@ export interface RegistrationInterface {
     invoiceId?: string; // If you expose the FK directly
 }
 
-// Interface for Registration creation/update requests (with IDs only)
 export interface RegistrationRequestInterface {
-    registrationId?: string; // Optional for creation, used for updates
+    registrationId?: string;
     eventId: string;
     userId: string;
-    buyerId: string;
+    buyerId?: string | null;
     boughtForIds?: string[];
     ticketTypeId: string;
     venueId: string;
     noOfTickets: number;
-    paymentStatus: string;
+    paymentStatus?: PaymentStatus;
     registrationDate?: string;
     qrCode?: string;
     checkDate?: string;
     attended?: boolean;
-    // --- New Fields for Request (if allowed to be set on creation/update) ---
-    totalCost?: number; // Optional on request, often calculated by backend based on ticket price
-    registrationStatus?: string; // Optional on request, usually defaults to 'active'
-    // --- Foreign Key IDs directly (if you create registrations by IDs) ---
-    paymentId?: string; // If you manually link payment/invoice during creation
-    invoiceId?: string; // If you manually link payment/invoice during creation
+    totalCost?: number;
+    registrationStatus?: string;
+    paymentId?: string;
+    invoiceId?: string;
 }
 
-
+export interface RegistrationResponseInterface {
+    registrationId: string;
+    event: EventInterface;
+    user: UserInterface;
+    buyer: UserInterface;
+    boughtForIds?: string[];
+    ticketType: TicketTypeInterface;
+    venue: VenueInterface;
+    noOfTickets: number;
+    registrationDate: string;
+    paymentStatus: PaymentStatus;
+    qrCode?: string;
+    checkDate?: string;
+    attended: boolean;
+    totalCost: number;
+    registrationStatus: string;
+    payment?: PaymentInterface;
+    invoice?: InvoiceInterface;
+    paymentId?: string;
+    invoiceId?: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+}
 
 
 // Interface for the complete Invoice entity (with populated relationships)

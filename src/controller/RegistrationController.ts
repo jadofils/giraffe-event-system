@@ -1,99 +1,177 @@
 // src/controller/RegistrationController.ts
-import { RequestHandler, Response } from "express";
+import { NextFunction, RequestHandler, Response } from "express";
 import { RegistrationRepository } from "../repositories/RegistrationRepository";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { v4 as uuidv4 } from 'uuid';
-import { ValidationService } from "../services/registrations/ValidationRegistrationService";
+import { RegistrationService } from "../services/registrations/ValidationRegistrationService";
 // You DON'T need to import AppDataSource, User, Event, TicketType, Venue here anymore
 // because RegistrationRepository and ValidationService will handle getting repositories.
-import { RegistrationRequestInterface } from "../interfaces/interface"; // Assuming this is your DTO interface
+import { PaymentStatus, RegistrationRequestInterface, RegistrationResponseInterface } from "../interfaces/interface"; // Assuming this is your DTO interface
 import { QrCodeService } from "../services/registrations/QrCodeService";
 import path from "path";
 import fs from "fs";
 import { AppDataSource } from "../config/Database";
-import { Registration } from "../models/Registration";
-import { Invoice } from "../models/Invoice";
 import { User } from "../models/User";
-import { isAdmin } from "../middlewares/IsAdmin";
+
 
 export class RegistrationController {
+   
 
     // Create Registration
-    static async createRegistration(req: AuthenticatedRequest, res: Response): Promise<void> {
+    // Static method for creating a registration
+ 
+    // Create Registration
+    // Static method for creating a registration
+static async createRegistration(req: Request, res: Response): Promise<void> {
         try {
-            // Cast req.body to the expected interface for type safety
-            // IMPORTANT: req.body already contains the flat IDs like eventId, userId, ticketTypeId, venueId
-            const registrationData: RegistrationRequestInterface = req.body;
+        // Accept the body as any, but validate/transform before using as RegistrationRequestInterface
+        const registrationData = req.body as Partial<RegistrationRequestInterface>;
 
-            // Get buyer from authenticated user token
-            const buyerId = req.user?.userId;
-            if (!buyerId) {
-                res.status(401).json({
-                    success: false,
-                    message: "Authentication required. Buyer information not found."
-                });
-                return;
-            }
+        // Extract userId directly from request body (no authentication)
+        const userId = registrationData.userId;
+        if (!userId) {
+            res.status(400).json({ success: false, message: "User ID is required." });
+            return;
+        }
 
-            // Generate registration ID
-            const registrationId = uuidv4();
+        let finalBuyerId: string | null = null;
+        const buyerIdFromRequest = registrationData.buyerId;
 
-            // Prepare data for validation. It already has the flat IDs.
-            // We just add the generated registrationId and the buyerId from the token.
-            const dataForValidation: RegistrationRequestInterface = {
-                ...registrationData,
-                registrationId: registrationId, // Add generated ID for validation/creation
-                buyerId: buyerId, // Override/ensure buyerId from token
-                // Ensure default values are handled if not provided in the request body
-                registrationDate: registrationData.registrationDate || new Date().toISOString(),
-                paymentStatus: registrationData.paymentStatus || 'pending',
-                attended: registrationData.attended || false,
-                boughtForIds: registrationData.boughtForIds || [] // Ensure array even if empty
-            };
+        // Set buyerId based on request or default to userId
+        if (buyerIdFromRequest === null || buyerIdFromRequest === undefined) {
+            finalBuyerId = userId;
+        } else {
+            finalBuyerId = buyerIdFromRequest;
+        }
 
-            // Validate that all referenced IDs exist and other business rules
-            const validationResult = await ValidationService.validateRegistrationIds(dataForValidation);
-            if (!validationResult.valid) {
+        const registrationId = uuidv4(); // Generate a UUID for the new registration
+
+        // Ensure noOfTickets is always a number (not undefined)
+        if (registrationData.noOfTickets === undefined || registrationData.noOfTickets === null) {
+            res.status(400).json({ success: false, message: "Number of tickets (noOfTickets) is required." });
+            return;
+        }
+
+        const dataForService: RegistrationRequestInterface = {
+            ...registrationData,
+            registrationId: registrationId, // Assign the generated UUID
+            userId: userId,
+            buyerId: finalBuyerId,
+            paymentStatus: registrationData.paymentStatus || PaymentStatus.PENDING,
+            attended: registrationData.attended || false,
+            boughtForIds: registrationData.boughtForIds || [],
+            eventId: registrationData.eventId ?? "", // Ensure string, not undefined
+            ticketTypeId: registrationData.ticketTypeId ?? "", // Ensure string, not undefined
+            venueId: registrationData.venueId ?? "", // Ensure string, not undefined
+            noOfTickets: Number(registrationData.noOfTickets), // Ensure number, not undefined
+            // Add other required string fields similarly if needed
+        };
+
+        // ---
+        // Step 1: Validate the incoming request data
+        // ---
+        const validationResult = await RegistrationService.validateRegistrationIds(dataForService);
+
+        if (!validationResult.valid) {
+            res.status(400).json({
+                success: false,
+                message: validationResult.message,
+                errors: validationResult.errors
+            });
+            return;
+        }
+
+        // ---
+        // Step 2: Validate event capacity and ticket cost
+        // ---
+        const capacityValidation = await RegistrationService.validateEventCapacity(
+            dataForService.eventId,
+            dataForService.venueId,
+            dataForService.noOfTickets
+        );
+
+        if (!capacityValidation.valid) {
+            res.status(400).json({
+                success: false,
+                message: capacityValidation.message
+            });
+            return;
+        }
+
+        const ticketCostValidation = await RegistrationService.validateAndCalculateTicketCost(
+            dataForService.ticketTypeId,
+            dataForService.noOfTickets
+        );
+
+        if (!ticketCostValidation.valid || ticketCostValidation.totalCost === undefined) {
+            res.status(400).json({
+                success: false,
+                message: ticketCostValidation.message || "Could not validate ticket type or calculate cost."
+            });
+            return;
+        }
+
+        // Update the totalCost in dataForService as it's now calculated and validated
+        dataForService.totalCost = ticketCostValidation.totalCost;
+
+        // ---
+        // Step 3: Check for duplicate registrations
+        // ---
+        const duplicateValidation = await RegistrationService.validateDuplicateRegistration(
+            dataForService.eventId,
+            dataForService.userId,
+            dataForService.buyerId ?? "",
+            dataForService.boughtForIds
+        );
+
+        if (!duplicateValidation.valid) {
+            res.status(400).json({
+                success: false,
+                message: duplicateValidation.message
+            });
+            return;
+        }
+
+        // ---
+        // Step 4: Create the registration (after all validations pass)
+        // ---
+        const newRegistrationResponse: RegistrationResponseInterface = await RegistrationService.createRegistration(dataForService);
+
+        res.status(201).json({
+            success: true,
+            message: "Registration created successfully",
+            data: newRegistrationResponse
+        });
+
+    } catch (error: any) {
+        console.error('Error creating registration:', error);
+
+        if (error instanceof Error) {
+            if (error.message.includes("not found") || error.message.includes("Validation failed:") || error.message.includes("Not enough capacity") || error.message.includes("already registered")) {
                 res.status(400).json({
                     success: false,
-                    message: validationResult.message,
-                    errors: validationResult.errors
-                });
-                return;
-            }
-
-            // At this point, `dataForValidation` contains all necessary flat IDs and values.
-            // Pass this validated data to the RegistrationRepository to create the entity.
-            const result = await RegistrationRepository.create(dataForValidation);
-
-            res.status(201).json({
-                success: true,
-                message: "Registration created successfully",
-                data: result
-            });
-
-        } catch (error) {
-            console.error('Error creating registration:', error);
-            // Distinguish between validation errors (400) and other server errors (500)
-            if (error instanceof Error && error.message.startsWith("Validation failed")) {
-                 res.status(400).json({
-                    success: false,
                     message: error.message,
-                    errors: error.message.split(". ") // Simple split for display, consider more robust parsing if needed
-                 });
+                    errors: error.message.includes("Validation failed:") ? error.message.split("; ") : undefined
+                });
             } else {
                 res.status(500).json({
                     success: false,
-                    message: "Failed to create registration due to an unexpected error."
+                    message: "Failed to create registration due to an unexpected server error.",
+                    error: error.message
                 });
             }
+        } else {
+            res.status(500).json({
+                success: false,
+                message: "An unknown error occurred.",
+                error: String(error)
+            });
         }
     }
+}
 
-    // --- Add other controller methods here, ensuring they use the flat data structure
-    //     and call the appropriate RegistrationRepository methods. ---
-
-    // Example for getAllRegistrations (add to RegistrationController class)
+  
+  
     static async getAllRegistrations(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
             const registrations = await RegistrationRepository.findAll();
@@ -108,90 +186,188 @@ export class RegistrationController {
      * @param req The authenticated request object, containing userId in params.
      * @param res The Express response object.
      */
-    static async getUserTicketCostSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
-        try {
-            const targetUserId = req.params.id; // The ID of the user whose summary is requested
-            const loggedInUserId = req.user?.userId; // The ID of the user making the request
+ /**
+ * Get ticket cost summary for a specific user
+ * Authorized users: Admin, Manager, Buyer (who purchased tickets), or the target user themselves
+ */
+static async getUserTicketCostSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const loggedInUserId = req.user?.userId;
+    const loggedInUserRoles = req.user?.roles || []; // Array of role names
+    const { userId: targetUserId } = req.params;
 
-            const userRepository = AppDataSource.getRepository(User);
-            const registrationRepository = AppDataSource.getRepository(Registration);
+    console.log(`[RegistrationController:getUserTicketCostSummary] Logged-in User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}, Target User ID: ${targetUserId}`);
 
-            // 1️⃣ Fetch the target user's details, including roles
-            const user = await userRepository.findOne({
-                where: { userId: targetUserId },
-                relations: ["role"] // Assuming 'role' is a direct relation on User
+    try {
+        // Basic validation
+        if (!loggedInUserId) {
+            res.status(401).json({ 
+                success: false, 
+                message: 'Unauthorized: User information is missing from the token.' 
             });
-
-            if (!user) {
-                res.status(404).json({ success: false, message: "User not found." });
-                return;
-            }
-
-            // 2️⃣ Authorization Check (Ensuring User Can View Data)
-            // Ensure req.user.roles is correctly populated by your authentication middleware
-            const isAdmin = req.user?.roles?.some(role => role === "admin"); // Adjust based on how your role object is structured (e.g., role.name or just role string)
-            if (targetUserId !== loggedInUserId && !isAdmin) {
-                res.status(403).json({ success: false, message: "Forbidden: You can only view your own registrations or require admin privileges." });
-                return;
-            }
-
-            // 3️⃣ Retrieve all registrations linked to the user (buyer or attendee)
-            // Ensure you load 'ticketType' and 'event' as relations
-            const registrations = await registrationRepository.find({
-                where: [
-                    { buyer: { userId: targetUserId } },
-                    { user: { userId: targetUserId } }
-                ],
-                relations: ["ticketType", "event"] // Crucial for accessing price and eventTitle
-            });
-
-            // 4️⃣ Calculate Total Ticket Cost
-            let totalTicketsCost = 0;
-            const registrationDetails = [];
-
-            for (const registration of registrations) {
-                // Ensure ticketType and its price exist before calculating
-                const ticketPrice = registration.ticketType?.price ?? 0; // Use nullish coalescing to default to 0 if price is null/undefined
-                const costForThisRegistration = ticketPrice * registration.noOfTickets;
-
-                totalTicketsCost += costForThisRegistration;
-
-                // Add details for the response's 'registrations' array
-                registrationDetails.push({
-                    registrationId: registration.registrationId,
-                    noOfTickets: registration.noOfTickets,
-                    // Use the calculated cost for this specific registration
-                    totalCost: parseFloat(costForThisRegistration.toFixed(2)),
-                    eventTitle: registration.event?.eventTitle // Ensure event exists before accessing title
-                });
-            }
-
-            // 5️⃣ Format Total Cost to Two Decimal Places
-            const formattedTotalTicketsCost = parseFloat(totalTicketsCost.toFixed(2));
-
-            // 6️⃣ Build Response JSON
-            res.status(200).json({
-                success: true,
-                data: {
-                    user: {
-                        userId: user.userId,
-                        username: user.username,
-                        firstName: user.firstName,
-                        lastName: user.lastName,
-                        email: user.email,
-                        phoneNumber: user.phoneNumber
-                        // Include other user details as needed
-                    },
-                    totalCostOfAllTickets: formattedTotalTicketsCost,
-                    registrations: registrationDetails // The prepared array of registration details
-                }
-            });
-
-        } catch (error) {
-            console.error(`Error fetching ticket cost summary for user ${req.params.id}:`, error);
-            res.status(500).json({ success: false, message: "Failed to retrieve user ticket summary due to a server error." });
+            return;
         }
+
+        if (!targetUserId) {
+            res.status(400).json({ 
+                success: false, 
+                message: 'Target user ID is required.' 
+            });
+            return;
+        }
+
+        // Check if target user exists
+        const targetUser = await AppDataSource.getRepository(User).findOne({
+            where: { userId: targetUserId }
+        });
+
+        if (!targetUser) {
+            res.status(404).json({ 
+                success: false, 
+                message: 'Target user not found.' 
+            });
+            return;
+        }
+
+        // Authorization check with case-insensitive role comparison
+        const normalizedRoles = loggedInUserRoles.map((role: { roleName: string }) => role.roleName.toLowerCase());
+        const hasAdminAccess = normalizedRoles.includes('admin');
+        const hasManagerAccess = normalizedRoles.includes('manager');
+        const isSelfAccess = loggedInUserId === targetUserId;
+
+        // For Buyer role, we need to check if they actually bought tickets for the target user
+        let hasBuyerAccess = false;
+        if (normalizedRoles.includes('buyer')) {
+            const buyerRegistrations = await RegistrationRepository.getRepository().find({
+                where: [
+                    { buyer: { userId: loggedInUserId }, user: { userId: targetUserId } },
+                    { buyer: { userId: loggedInUserId } }
+                ],
+                relations: ['buyer', 'user']
+            });
+
+            hasBuyerAccess = buyerRegistrations.some(reg => 
+                reg.buyer.userId === loggedInUserId && 
+                (reg.user.userId === targetUserId || 
+                 (reg.boughtForIds && reg.boughtForIds.includes(targetUserId)))
+            );
+        }
+
+        // Check if user has any of the required permissions
+        const isAuthorized = hasAdminAccess || hasManagerAccess || isSelfAccess || hasBuyerAccess;
+
+        if (!isAuthorized) {
+            res.status(403).json({ 
+                success: false, 
+                message: 'Forbidden: You do not have permission to view this user\'s ticket cost summary.' 
+            });
+            return;
+        }
+
+        // Fetch all registrations for the target user
+        const registrations = await RegistrationRepository.getRepository().find({
+            where: [
+                { user: { userId: targetUserId } },
+                { buyer: { userId: targetUserId } }
+            ],
+            relations: ['event', 'user', 'buyer', 'ticketType', 'venue', 'payment'],
+            order: { registrationDate: 'DESC' }
+        });
+
+        // Also find registrations where target user is in boughtForIds
+     // Corrected code for additionalRegistrations query
+const additionalRegistrations = await RegistrationRepository.getRepository()
+    .createQueryBuilder('registration')
+    .leftJoinAndSelect('registration.event', 'event')
+    .leftJoinAndSelect('registration.user', 'user')
+    .leftJoinAndSelect('registration.buyer', 'buyer')
+    .leftJoinAndSelect('registration.ticketType', 'ticketType')
+    .leftJoinAndSelect('registration.venue', 'venue')
+    .leftJoinAndSelect('registration.payment', 'payment')
+    // Corrected WHERE clause: Check if the array 'boughtForIds' contains the 'targetUserId'
+    .where('registration.boughtForIds @> ARRAY[:userId]::uuid[]', { userId: targetUserId })
+    .getMany();
+
+        // Combine and deduplicate registrations
+        const allRegistrations = [...registrations, ...additionalRegistrations]
+            .filter((reg, index, arr) => 
+                arr.findIndex(r => r.registrationId === reg.registrationId) === index
+            );
+
+        // Calculate summary statistics
+        let totalTickets = 0;
+        let totalCost = 0;
+        let totalPaid = 0;
+        let totalPending = 0;
+        let totalRefunded = 0;
+
+        const registrationSummaries = allRegistrations.map(registration => {
+            const ticketPrice = registration.ticketType ? parseFloat(registration.ticketType.price.toString()) : 0;
+            const regTotalCost = ticketPrice * registration.noOfTickets;
+            
+            totalTickets += registration.noOfTickets;
+            totalCost += regTotalCost;
+
+            // Calculate payment totals based on status
+            switch (registration.paymentStatus?.toLowerCase()) {
+                case 'completed':
+                case 'paid':
+                    totalPaid += regTotalCost;
+                    break;
+                case 'pending':
+                    totalPending += regTotalCost;
+                    break;
+                case 'refunded':
+                    totalRefunded += regTotalCost;
+                    break;
+            }
+
+            return {
+                registrationId: registration.registrationId,
+                eventName: registration.event.eventTitle,
+                eventDate: registration.event.createdAt,
+                ticketType: registration.ticketType.ticketName,
+                noOfTickets: registration.noOfTickets,
+                ticketPrice: ticketPrice,
+                totalCost: regTotalCost,
+                paymentStatus: registration.paymentStatus,
+                registrationStatus: registration.registrationStatus,
+                registrationDate: registration.registrationDate,
+                isPrimaryAttendee: registration.user.userId === targetUserId,
+                isBuyer: registration.buyer.userId === targetUserId,
+                isInBoughtForIds: registration.boughtForIds ? registration.boughtForIds.includes(targetUserId) : false
+            };
+        });
+
+        const summary = {
+            targetUser: {
+                userId: targetUser.userId,
+                fullName: targetUser.fullName,
+                email: targetUser.email
+            },
+            totalRegistrations: allRegistrations.length,
+            totalTickets,
+            totalCost: parseFloat(totalCost.toFixed(2)),
+            totalPaid: parseFloat(totalPaid.toFixed(2)),
+            totalPending: parseFloat(totalPending.toFixed(2)),
+            totalRefunded: parseFloat(totalRefunded.toFixed(2)),
+            registrations: registrationSummaries
+        };
+
+        res.status(200).json({
+            success: true,
+            message: 'User ticket cost summary retrieved successfully.',
+            data: summary
+        });
+
+    } catch (error) {
+        console.error(`Error getting ticket cost summary for user ${targetUserId} by user ${loggedInUserId}:`, error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to retrieve ticket cost summary due to a server error.' 
+        });
     }
+}
+
 
 
     //update registration
@@ -201,7 +377,7 @@ export class RegistrationController {
             const updateData: RegistrationRequestInterface = req.body;
 
             // Validate the update data if necessary
-            const validationResult = await ValidationService.validateRegistrationIds(updateData);
+            const validationResult = await RegistrationService.validateRegistrationIds(updateData);
             if (!validationResult.valid) {
                 res.status(400).json({
                     success: false,
@@ -223,11 +399,34 @@ export class RegistrationController {
         }
     
     }
+//delete registrations 
+/**
+     * Deletes a registration by ID.
+     * @param req - Authenticated request object containing the registration ID.
+     * @param res - Express response object.
+     */
+    static async deleteRegistration(req: import("express").Request, res: Response): Promise<void> {
+        try {
+            const { registrationId } = req.params;
 
+            if (!registrationId) {
+                res.status(400).json({ message: 'Registration ID is required.' });
+                return;
+            }
 
-// ... continue for other methods like getRegistrationById, updateRegistration, deleteRegistration, etc.
+            const success = await RegistrationRepository.delete(registrationId);
 
-    // --- New/Implemented QR Code Controller Methods ---
+            if (success) {
+                res.status(200).json({ message: 'Registration deleted successfully.' });
+            } else {
+                res.status(404).json({ message: 'Registration not found or could not be deleted.' });
+            }
+        } catch (error) {
+            console.error(`Error deleting registration ${req.params.registrationId}:`, error);
+            res.status(500).json({ message: 'An error occurred while deleting the registration.' });
+        }
+    }
+
 
     /**
      * Regenerates the QR code for a specific registration.

@@ -134,6 +134,27 @@ export class RoleController {
   }
 }
 
+ static async getRolesByName(req: Request, res: Response): Promise<void> {
+        const { roleName } = req.body; // Get roleName from the request body
 
+        if (!roleName || typeof roleName !== 'string' || roleName.trim() === '') {
+            res.status(400).json({ success: false, message: 'Role name is required in the request body.' });
+            return;
+        }
+
+        try {
+            const roles = await RoleRepository.findRolesByNameIgnoreCase(roleName);
+
+            if (roles.length === 0) {
+                res.status(404).json({ success: false, message: `No roles found matching '${roleName}'.` });
+                return;
+            }
+
+            res.status(200).json({ success: true, data: roles });
+        } catch (error) {
+            console.error('Error fetching roles by name (case-insensitive):', error);
+            res.status(500).json({ success: false, message: 'Failed to retrieve roles due to a server error.' });
+        }
+    }
 
 }
