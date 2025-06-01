@@ -5,41 +5,52 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
+
+// --- CORRECTED IMPORTS AND USAGE FOR REDIS SESSION STORE ---
+
+// For connect-redis v6+, you typically import the RedisStore class directly
+import * as ConnectRedis from 'connect-redis';
+
+// Import your configured Redis client from './config/redis'
+import redisClient from './config/redis';
+// ------------------------------------------
+
 import { AppConfig } from './config/AppConfig';
 import routes from './routes';
 
 // Initialize express app
 const app = express();
 
-// Apply middlewares
-app.use(helmet()); // Security headers
+// Apply standard Express middlewares
+app.use(helmet());
 app.use(cors({
   origin: AppConfig.CORS_ORIGIN,
-  credentials: true // Enable sending cookies
+  credentials: true
 }));
-app.use(express.json()); // Parse JSON request body
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request body
-app.use(cookieParser()); // Parse cookies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-// Configure session middleware
+// --- CONFIGURE REDIS AS THE SESSION STORE ---
+// The RedisStore class is now directly imported.
+// Instantiate it, passing your redisClient directly to its constructor.
+// express-session will automatically handle passing its 'session' object internally.
 app.use(session({
-  /** 
-   * Session secret used for signing the session ID cookie.
-   * Uses the configured session secret from AppConfig, with a fallback default secret.
-   * Note: In production, always use a strong, randomly generated secret from a secure configuration.
-   */
-  secret: "rhkfjdlsafhdakfhksdjghhkdfgkdhkdfjoshdffkshfdlhgfkashaglhksh", // Use a strong, randomly generated secret from your config
+  secret: AppConfig.SESSION_SECRET || "a-super-secret-key-that-should-be-in-env-variables",
+  name: 'my.sid',
+  store: new ConnectRedis.RedisStore({ client: redisClient }), // <--- CORRECTED USAGE HERE
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   cookie: {
-    secure: AppConfig.isProduction(), // Set to true if using HTTPS
+    secure: AppConfig.isProduction(),
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // Example: 24 hours (adjust as needed)
-    sameSite: 'lax' // or 'strict' depending on your needs
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
   }
 }));
+// ------------------------------------------
 
-// Logging
+// Logging middleware
 if (!AppConfig.isTest()) {
   app.use(morgan(AppConfig.LOG_FORMAT));
 }

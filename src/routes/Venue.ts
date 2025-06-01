@@ -2,6 +2,7 @@ import { Router } from "express";
 import { VenueController } from "../controller/venueController";
 import { isAdmin } from "../middlewares/IsAdmin"; // Assuming this checks for 'admin' role
 import { verifyJWT } from "../middlewares/AuthMiddleware"; // Assuming this checks if a user is logged in
+import checkAbsenceRoutes from './CheckAbsenceRoutes'; // <--- ADD THIS IMPORT
 
 const router = Router();
 
@@ -106,6 +107,7 @@ router.put("/update-manager/:id", isAdmin, VenueController.updateVenueManager);
  * @access Admin only
  */
 router.put("/remove-manager/:id", isAdmin, VenueController.removeVenueManager);
+router.use('/', checkAbsenceRoutes); // <--- ADD THIS LINE
 
 
 export const venueRoute = router;

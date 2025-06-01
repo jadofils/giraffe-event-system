@@ -3,12 +3,12 @@ import {
     Entity,
     PrimaryGeneratedColumn,
     Column,
-    OneToMany,
+    OneToMany, // <--- Make sure OneToMany is imported
     ManyToOne,
     JoinColumn,
-    CreateDateColumn, // For timestamps
-    UpdateDateColumn, // For timestamps
-    DeleteDateColumn, // For soft deletes
+    CreateDateColumn,
+    UpdateDateColumn,
+    DeleteDateColumn,
 } from "typeorm";
 import {
     IsUUID,
@@ -19,16 +19,14 @@ import {
     IsInt,
     Min,
     IsBoolean,
-    // IsDate and related date validators/decorators are removed
 } from "class-validator";
-// The custom IsAfter validator is no longer needed since startDate/endDate are removed
-// import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
 
 import { Venue } from "./Venue";
 import { User } from "./User";
-import { VenueBooking } from "./VenueBooking"; // Corrected import name if the class is VenueBooking
+import { VenueBooking } from "./VenueBooking";
 import { Registration } from "./Registration";
-import { Payment } from "./Payment"; // Assuming you have a Payment entity
+import { Payment } from "./Payment";
+import { Invoice } from "./Invoice"; // <--- Import the Invoice entity
 
 // --- Enums for Event ---
 export enum EventType {
@@ -44,8 +42,6 @@ export enum EventStatus {
     ARCHIVED = "archived",
 }
 
-
-
 // --- Event Entity Definition ---
 @Entity("events")
 export class Event {
@@ -60,19 +56,19 @@ export class Event {
     })
     eventTitle!: string;
 
-    @Column({ type: "text", nullable: true }) // Use text for potentially longer descriptions
+    @Column({ type: "text", nullable: true })
     @IsOptional()
-    @Length(0, 5000, { // Increased length for description
+    @Length(0, 5000, {
         message: "Description must be at most $constraint2 characters long",
     })
-    description?: string; // Made optional with '?'
+    description?: string;
 
     @Column({ nullable: true })
     @IsOptional()
     @Length(0, 50, {
         message: "Event category must be at most $constraint2 characters long",
     })
-    eventCategory?: string; // Made optional with '?'
+    eventCategory?: string;
 
     @Column({
         type: "enum",
@@ -84,12 +80,11 @@ export class Event {
     })
     eventType!: EventType;
 
-
     @Column({ type: "int", nullable: true })
     @IsOptional()
     @IsInt({ message: "Max attendees must be an integer" })
     @Min(1, { message: "Max attendees must be at least 1" })
-    maxAttendees?: number; // Made optional with '?'
+    maxAttendees?: number;
 
     @Column({ type: "enum", enum: EventStatus, default: EventStatus.DRAFT })
     @IsEnum(EventStatus, { message: "Invalid event status" })
@@ -102,12 +97,12 @@ export class Event {
     @Column({ nullable: true })
     @IsOptional()
     @Length(0, 255, { message: "QR Code must be at most $constraint2 characters long" })
-    qrCode?: string; // Storing the QR code string or a URL to it
+    qrCode?: string;
 
     @Column({ nullable: true })
     @IsOptional()
     @Length(0, 255, { message: "Image URL must be at most $constraint2 characters long" })
-    imageURL?: string; // Optional: URL to an event image
+    imageURL?: string;
 
     // --- Foreign Key Columns (Directly Stored) ---
     @Column({ type: "uuid" })
@@ -122,21 +117,25 @@ export class Event {
 
     // --- Relationships ---
     @ManyToOne(() => Venue, (venue) => venue.events)
-    @JoinColumn({ name: "venueId" }) // Maps to the venueId column
-    venue!: Venue; // This relationship is required as per your design
+    @JoinColumn({ name: "venueId" })
+    venue!: Venue;
 
-    @ManyToOne(() => User, (user) => user.eventsOrganizer, { eager: true }) // eager load if you always need organizer info
-    @JoinColumn({ name: "organizerId" }) // Maps to the organizerId column
-    organizer!: User; // This relationship is required
+    @ManyToOne(() => User, (user) => user.eventsOrganizer, { eager: true })
+    @JoinColumn({ name: "organizerId" })
+    organizer!: User;
 
     @OneToMany(() => VenueBooking, (booking) => booking.event)
-    bookings!: VenueBooking[]; // Corrected to VenueBooking if that's the class name
+    bookings!: VenueBooking[];
 
     @OneToMany(() => Registration, registration => registration.event, { cascade: true })
     registrations!: Registration[];
 
     @OneToMany(() => Payment, payment => payment.event)
-    payments!: Payment[]; // Assuming Payment entity has a ManyToOne to Event
+    payments!: Payment[];
+
+    // --- NEW: Link to Invoice ---
+    @OneToMany(() => Invoice, invoice => invoice.event) // An event can have many invoices
+    invoices?: Invoice[]; // Use '?' as it might be an empty array if no invoices yet
 
     // --- Timestamps (Managed by TypeORM) ---
     @CreateDateColumn({ type: "timestamp with time zone" })
@@ -146,5 +145,5 @@ export class Event {
     updatedAt!: Date;
 
     @DeleteDateColumn({ type: "timestamp with time zone", nullable: true })
-    deletedAt?: Date; // For soft deletes
+    deletedAt?: Date;
 }

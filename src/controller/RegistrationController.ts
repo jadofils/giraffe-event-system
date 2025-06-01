@@ -323,6 +323,7 @@ const additionalRegistrations = await RegistrationRepository.getRepository()
 
             return {
                 registrationId: registration.registrationId,
+                eventId:registration.eventId,
                 eventName: registration.event.eventTitle,
                 eventDate: registration.event.createdAt,
                 ticketType: registration.ticketType.ticketName,

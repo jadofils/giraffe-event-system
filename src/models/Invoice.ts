@@ -1,51 +1,87 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne, JoinColumn } from 'typeorm';
-import { IsUUID, IsNotEmpty, IsDateString, IsNumber, IsPositive, Length } from 'class-validator';
+// src/models/Invoice.ts
+import { Entity, PrimaryColumn, Column, ManyToOne, OneToMany, OneToOne, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
+import { IsUUID, IsDateString, IsNumber, IsEnum, IsString, IsNotEmpty, Min, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+
+// --- Enums for better type safety ---
+export enum InvoiceStatus {
+    PENDING = 'pending',
+    PAID = 'paid',
+    OVERDUE = 'overdue',
+    CANCELLED = 'cancelled',
+    REFUNDED = 'refunded'
+}
+
+// Assuming these exist and are properly defined
+import { User } from './User';
+import { Event } from './Event';
 import { Payment } from './Payment';
 import { Registration } from './Registration';
 
 @Entity('invoices')
 export class Invoice {
-    @PrimaryGeneratedColumn('uuid')
-    @IsUUID('4', { message: 'invoiceId must be a valid UUID' })
+    @PrimaryGeneratedColumn('uuid') // <--- CHANGE THIS LINE
+    @IsUUID()
     invoiceId!: string;
 
-    @Column()
-    @IsUUID('4', { message: 'eventId must be a valid UUID' })
-    @IsNotEmpty({ message: 'eventId is required' })
+    @Column({ type: 'uuid' })
+    @IsUUID()
+    @IsNotEmpty()
     eventId!: string;
 
-    @Column()
-    @IsUUID('4', { message: 'userId must be a valid UUID' })
-    @IsNotEmpty({ message: 'userId is required' })
-    userId!: string;
+    @Column({ type: 'uuid' })
+    @IsUUID()
+    @IsNotEmpty()
+    userId!: string; // User who is responsible for or is the recipient of the invoice
 
-    @Column({ type: 'date' })
-    @IsDateString({}, { message: 'invoiceDate must be a valid ISO date string' })
-    @IsNotEmpty({ message: 'invoiceDate is required' })
-    invoiceDate!: string;
+    @Column({ type: 'timestamp' })
+    @IsDateString() // Validates if it's a valid date string (e.g., ISO 8601)
+    @IsNotEmpty()
+    invoiceDate!: Date; // Use Date object internally
 
-    @Column({ type: 'date' })
-    @IsDateString({}, { message: 'dueDate must be a valid ISO date string' })
-    @IsNotEmpty({ message: 'dueDate is required' })
-    dueDate!: string;
+    @Column({ type: 'timestamp' })
+    @IsDateString() // Validates if it's a valid date string (e.g., ISO 8601)
+    @IsNotEmpty()
+    dueDate!: Date; // Use Date object internally
 
-    @Column({ type: 'float' })
-    @IsNumber({}, { message: 'totalAmount must be a number' })
-    @IsPositive({ message: 'totalAmount must be a positive number' })
+    @Column({ type: 'decimal', precision: 10, scale: 2 })
+    @IsNumber()
+    @Min(0)
+    @IsNotEmpty()
     totalAmount!: number;
 
-    @Column()
-    @IsNotEmpty({ message: 'status is required' })
-    @Length(3, 20, { message: 'status must be between $constraint1 and $constraint2 characters' })
-    status!: string;
+    @Column({ type: 'enum', enum: InvoiceStatus, default: InvoiceStatus.PENDING })
+    @IsEnum(InvoiceStatus)
+    @IsNotEmpty()
+    status!: InvoiceStatus; // Use enum for status
+
+    @Column({ type: 'uuid', nullable: true })
+    @IsOptional()
+    @IsUUID()
+    registrationId?: string; // Foreign key to Registration
+
+    // Relationships
+    @ManyToOne(() => Event, event => event.invoices) // Assuming 'invoices' property exists on Event entity
+    @JoinColumn({ name: 'eventId' })
+    event?: Event;
+
+    @ManyToOne(() => User, user => user.invoices) // Assuming 'invoices' property exists on User entity
+    @JoinColumn({ name: 'userId' })
+    user?: User;
 
     @OneToMany(() => Payment, payment => payment.invoice)
-    payments!: Payment[];
+    payments?: Payment[];
 
-    // Relationship to Registration (One-to-One)
-    @OneToOne(() => Registration, registration => registration.invoice)
+    @OneToOne(() => Registration, registration => registration.invoice, { nullable: true })
+    @JoinColumn({ name: 'registrationId' })
     registration?: Registration;
-  createdAt: any;
-  updatedAt: any;
-  deletedAt: any;
+
+    @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt!: Date;
+
+    @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+    updatedAt!: Date;
+
+    @Column({ type: 'timestamp', nullable: true })
+    deletedAt?: Date;
 }
