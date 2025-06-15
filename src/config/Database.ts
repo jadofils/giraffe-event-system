@@ -22,8 +22,7 @@ export const initializeDatabase = async (): Promise<void> => {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
       console.log("Database connection established!");
-      
-      // Seed the GUEST role after successful initialization
+   //   await updateEnumColumnsToUppercase(); // Update enums to uppercase after DB init
       await seedDefaultRoles();
     }
   } catch (error) {
@@ -31,14 +30,39 @@ export const initializeDatabase = async (): Promise<void> => {
   }
 };
 
+
+// Function to update all enum columns to uppercase
+// async function updateEnumColumnsToUppercase() {
+//   const queryRunner = AppDataSource.createQueryRunner();
+//   try {
+//     await queryRunner.connect();
+
+//     // List of [table, column] pairs that use enums
+//     const enumColumns: [string, string][] = [
+//       ['ticket_types', 'ticketCategory'],
+//       // Add more as needed: ['table_name', 'enum_column_name']
+//     ];
+
+//     for (const [table, column] of enumColumns) {
+//       await queryRunner.query(
+//         `UPDATE "${table}" SET "${column}" = UPPER("${column}") WHERE "${column}" IS NOT NULL;`
+//       );
+//     }
+
+//     console.log('All enum columns updated to uppercase.');
+//   } catch (error) {
+//     console.error('Error updating enum columns to uppercase:', error);
+//   } finally {
+//     await queryRunner.release();
+//   }
+// }
+
 // Function to seed default roles
 async function seedDefaultRoles() {
   try {
     const roleRepository = AppDataSource.getRepository('Role');
-    
     // Check if GUEST role exists
     const guestRole = await roleRepository.findOne({ where: { roleName: 'GUEST' } });
-    
     if (!guestRole) {
       console.log("Creating default GUEST role...");
       const newRole = roleRepository.create({

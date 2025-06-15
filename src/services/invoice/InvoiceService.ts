@@ -1,9 +1,10 @@
 // src/services/InvoiceService.ts
 
 import { InvoiceRepository } from '../../repositories/InvoiceRepository'; // Import the static InvoiceRepository class
-import { Invoice, InvoiceStatus } from '../../models/Invoice'; // Import Invoice and InvoiceStatus enum
+import { Invoice } from '../../models/Invoice'; // Import Invoice and InvoiceStatus enum
 import { AppDataSource } from '../../config/Database'; // Assuming your TypeORM data source is here
 import { Repository, DeepPartial } from 'typeorm'; // Import Repository and DeepPartial from TypeORM
+import { InvoiceStatus } from '../../interfaces/Enums/InvoiceStatus';
 
 export class InvoiceService {
 

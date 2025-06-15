@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware"; // Assuming this middleware provides req.user
 import { VenueRepository } from "../repositories/venueRepository";
-import { VenueInterface } from "../interfaces/interface"; // Ensure this interface is up-to-date with all fields
+import { VenueInterface } from "../interfaces/VenueInterface";
 
 export class VenueController {
     /**

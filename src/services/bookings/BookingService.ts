@@ -1,4 +1,4 @@
-import {VenueBookingInterface  } from "../../interfaces/interface";
+import {VenueBookingInterface  } from "../../interfaces/VenueBookingInterface";
 import { VenueBookingRepository } from "../../repositories/VenueBookingRepository";
 
 export async function checkConflict(

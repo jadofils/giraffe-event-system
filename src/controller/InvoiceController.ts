@@ -2,7 +2,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { InvoiceService } from '../services/invoice/InvoiceService'; // Assuming InvoiceService also has static methods
-import { InvoiceStatus } from '../models/Invoice'; // Import InvoiceStatus enum
+import { InvoiceStatus } from '../interfaces/Enums/InvoiceStatus';
 
 export class InvoiceController {
 
@@ -71,21 +71,29 @@ export class InvoiceController {
      * @param req Express Request object.
      * @param res Express Response object.
      * @param next Express NextFunction for error propagation.
-     */
-    static async updateInvoice(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const invoiceId: string = req.params.id; // ID is a UUID string
-            const updatedInvoice = await InvoiceService.updateInvoice(invoiceId, req.body); // Call static service method
+     */static async updateInvoice(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const invoiceId: string = req.params.id;
+        const existingInvoice = await InvoiceService.getInvoiceById(invoiceId);
 
-            if (!updatedInvoice) {
-                res.status(404).json({ message: 'Invoice not found or no changes made' });
-                return;
-            }
-            res.status(200).json(updatedInvoice);
-        } catch (error: any) {
-            next(error);
+        if (!existingInvoice) {
+             res.status(404).json({ success: false, message: 'Invoice not found' });
         }
+
+        // Prevent changing unique fields causing conflicts
+        if (req.body.invoiceId && req.body.invoiceId !== existingInvoice?.invoiceId ) {
+             res.status(400).json({ success: false, message: 'Cannot modify invoiceId due to unique constraint.' });
+        }
+
+        const updatedInvoice = await InvoiceService.updateInvoice(invoiceId, req.body);
+        res.status(200).json({ success: true, invoice: updatedInvoice });
+
+    } catch (error: any) {
+        console.error('Error in updateInvoice:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
+}
+
 
     /**
      * Handles DELETE request to delete an invoice by ID.

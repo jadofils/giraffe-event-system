@@ -1,7 +1,7 @@
 // src/validation/InvoiceValidator.ts
 
 import { body, param, ValidationChain } from 'express-validator';
-import { InvoiceStatus } from '../../models/Invoice';
+import { InvoiceStatus } from '../../interfaces/Enums/InvoiceStatus';
 
 /**
  * Custom validator for UUIDs

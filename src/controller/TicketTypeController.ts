@@ -1,7 +1,8 @@
 // src/controllers/TicketTypeController.ts
 import { Request, Response } from 'express';
-import { TicketCategory, TicketTypeRequest } from '../interfaces/interface';
 import { TicketTypeService } from '../services/tickets/TicketTypeService';
+import { TicketTypeRequestInterface } from '../interfaces/TicketTypeInterface';
+import { TicketCategory } from '../interfaces/Index';
 
 export class TicketTypeController {
     // No need for service instance since all methods are static
@@ -12,7 +13,7 @@ export class TicketTypeController {
      */
     static async createTicketType(req: Request, res: Response): Promise<Response> {
         try {
-            const ticketTypeData: TicketTypeRequest = req.body;
+            const ticketTypeData: TicketTypeRequestInterface = req.body;
 
             // --- Basic input validation before hitting the service ---
             if (!ticketTypeData.ticketName || !ticketTypeData.price || !ticketTypeData.ticketCategory) {
@@ -90,7 +91,7 @@ export class TicketTypeController {
     static async updateTicketType(req: Request, res: Response): Promise<Response> {
         try {
             const { ticketTypeId } = req.params;
-            const updateData: Partial<TicketTypeRequest> = req.body;
+            const updateData: Partial<TicketTypeRequestInterface> = req.body;
 
             // --- Basic input validation for updates ---
             if (updateData.ticketCategory && !Object.values(TicketCategory).includes(updateData.ticketCategory)) {

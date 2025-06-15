@@ -12,6 +12,8 @@ import { eventRoute } from './EventRoutes';
 import RegistrationRoutes from './RegistrationRoutes'; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 import VenueBookingRoutes from './VenueBookingRoutes'
 import InvoiceRoutes from './InvoiceRoutes';
+import PaymentRoutes from './PaymentRoutes';
+import InstallmentPlanRoutes from './InstallmentPlanRoutes';
 const router = Router();
   router.use('/static', express.static(path.join(__dirname, '..', '..', 'uploads'))); // Adjust path as needed
 
@@ -29,4 +31,10 @@ router.use('/event-bookings',verifyJWT, VenueBookingRoutes); // This makes `/api
 //routes for registration
 router.use('/registrations', RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use('/invoices',InvoiceRoutes)
+
+//endpoints of the payments
+router.use('/payments',PaymentRoutes);
+
+//installements planning
+router.use('/installments',InstallmentPlanRoutes)
 export default router;

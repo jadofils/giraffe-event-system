@@ -1,6 +1,7 @@
 import { AppDataSource } from "../config/Database";
-import { EventInterface, } from "../interfaces/interface"; // Assuming VenueBookingEntity is also defined here
-import { Event, EventType, EventStatus } from "../models/Event"; // Assuming EventStatus enum is defined in Event model
+import { EventInterface } from "../interfaces/EventInterface";
+import { EventStatus, EventType } from "../interfaces/Index";
+import { Event } from "../models/Event"; // Assuming EventStatus enum is defined in Event model
 
 export class EventRepository {
 

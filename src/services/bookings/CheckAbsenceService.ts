@@ -1,4 +1,4 @@
-import { VenueBookingInterface } from "../../interfaces/interface";
+import { VenueBookingInterface } from "../../interfaces/VenueBookingInterface";
 import { AppDataSource } from "../../config/Database";
 import { VenueBooking } from "../../models/VenueBooking";
 import { Between } from "typeorm";

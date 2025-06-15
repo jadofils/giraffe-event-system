@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { EventRepository } from "../repositories/eventRepository";
-import { EventInterface } from "../interfaces/interface";
 import { VenueRepository } from "../repositories/venueRepository";
+import { EventInterface } from "../interfaces/EventInterface";
 
 export class EventController {
     // Create Event

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { IsUUID, IsNotEmpty, IsOptional, Length, IsArray } from 'class-validator';
 import { User } from './User';
 
@@ -25,4 +25,9 @@ export class Role {
 
   @OneToMany(() => User, user => user.role) // Adjusted for one role to many users
   users!: User[];
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
 }

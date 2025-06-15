@@ -1,8 +1,9 @@
 // src/services/tickets/TicketTypeService.ts
 import { Repository, IsNull } from 'typeorm';
 import { TicketType } from '../../models/TicketType';
-import { TicketCategory, TicketTypeRequest, TicketTypeResponse } from '../../interfaces/interface';
 import { AppDataSource } from '../../config/Database';
+import { TicketTypeRequestInterface, TicketTypeResponseInterface } from '../../interfaces/TicketTypeInterface';
+import { TicketCategory } from '../../interfaces/Index';
 
 /**
  * Service class for managing TicketType entities.
@@ -22,7 +23,7 @@ export class TicketTypeService {
      * @param ticketType - The TicketType entity to convert.
      * @returns The TicketTypeResponse representation of the entity.
      */
-private static convertToResponse(ticketType: TicketType): TicketTypeResponse {
+private static convertToResponse(ticketType: TicketType): TicketTypeResponseInterface {
     return {
         ticketTypeId: ticketType.ticketTypeId,
         ticketName: ticketType.ticketName,
@@ -50,7 +51,7 @@ private static convertToResponse(ticketType: TicketType): TicketTypeResponse {
      * @param ticketTypeData - The data for the new ticket type, conforming to TicketTypeRequest.
      * @returns A promise that resolves to the created TicketType entity.
      */
-    static async createTicketType(ticketTypeData: TicketTypeRequest): Promise<TicketType> {
+    static async createTicketType(ticketTypeData: TicketTypeRequestInterface): Promise<TicketType> {
         const newTicketType = this.ticketTypeRepository.create(ticketTypeData);
         await this.ticketTypeRepository.save(newTicketType);
         return newTicketType;
@@ -95,7 +96,7 @@ private static convertToResponse(ticketType: TicketType): TicketTypeResponse {
      */
     static async updateTicketType(
         ticketTypeId: string,
-        updateData: Partial<TicketTypeRequest>
+        updateData: Partial<TicketTypeRequestInterface>
     ): Promise<TicketType | null> {
         const ticketType = await this.ticketTypeRepository.findOne({ where: { ticketTypeId } });
 
@@ -130,7 +131,7 @@ private static convertToResponse(ticketType: TicketType): TicketTypeResponse {
      * @param ticketTypeId - The UUID of the ticket type to retrieve.
      * @returns A promise that resolves to the TicketTypeResponse if found, otherwise null.
      */
-    static async getTicketTypeResponseById(ticketTypeId: string): Promise<TicketTypeResponse | null> {
+    static async getTicketTypeResponseById(ticketTypeId: string): Promise<TicketTypeResponseInterface | null> {
         const ticketType = await this.getTicketTypeById(ticketTypeId);
         return ticketType ? this.convertToResponse(ticketType) : null;
     }
@@ -139,7 +140,7 @@ private static convertToResponse(ticketType: TicketType): TicketTypeResponse {
      * Retrieves all active TicketTypes and returns them as an array of response objects.
      * @returns A promise that resolves to an array of TicketTypeResponse.
      */
-    static async getAllTicketTypeResponses(): Promise<TicketTypeResponse[]> {
+    static async getAllTicketTypeResponses(): Promise<TicketTypeResponseInterface[]> {
         const ticketTypes = await this.getAllTicketTypes();
         return ticketTypes.map(this.convertToResponse);
     }

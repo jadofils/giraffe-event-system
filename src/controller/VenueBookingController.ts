@@ -3,7 +3,7 @@ import { VenueBookingRepository } from '../repositories/VenueBookingRepository';
 import { AuthenticatedRequest } from '../middlewares/AuthMiddleware';
 import { Between } from 'typeorm';
 import { checkConflict } from '../services/bookings/BookingService';
-import { VenueBookingInterface } from '../interfaces/interface';
+import { VenueBookingInterface } from '../interfaces/VenueBookingInterface';
 
 class VenueBookingController {
   /**

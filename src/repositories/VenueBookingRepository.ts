@@ -2,7 +2,7 @@ import { AppDataSource } from "../config/Database";
 import { Repository } from "typeorm";
 import { Event } from "../models/Event";
 import { Organization } from "../models/Organization";
-import { VenueBookingInterface } from "../interfaces/interface";
+import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
 import { VenueBooking } from "../models/VenueBooking";
 
 class VenueBookingRepository {

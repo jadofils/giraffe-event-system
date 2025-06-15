@@ -1,7 +1,7 @@
 import { AppDataSource } from "../config/Database";
 import { User } from "../models/User";
 import { Role } from "../models/Role";
-import { UserInterface } from "../interfaces/interface";
+import { UserInterface } from "../interfaces/UserInterface";
 import { In } from "typeorm";
 
 export class UserRepository {

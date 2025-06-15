@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { IsUUID, IsNotEmpty, Length, IsNumber, IsPositive, IsOptional, Min, Max, IsBoolean, IsArray, ArrayMinSize, ArrayMaxSize, IsDate, IsDateString } from 'class-validator';
 import { Registration } from './Registration';
-import { TicketCategory } from '../interfaces/interface'; // Ensure this path is correct
+import { TicketCategory } from '../interfaces/Enums/TicketCategoryEnum'; // Ensure this path is correct
 
 @Entity('ticket_types')
 export class TicketType {

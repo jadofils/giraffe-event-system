@@ -1,61 +1,94 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToOne } from 'typeorm';
-import { IsUUID, IsNotEmpty, IsDateString, IsNumber, IsPositive, Length, IsOptional } from 'class-validator';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
+} from 'typeorm';
 import { Invoice } from './Invoice';
-import { Registration } from './Registration'; // Import Registration
+import { Registration } from './Registration';
+import { InstallmentPlan } from './InstallmentPlan';
 import { Event } from './Event';
+import { PaymentStatus } from '../interfaces/Enums/PaymentStatusEnum';
 
-@Entity('payments')
+@Entity()
 export class Payment {
-    @PrimaryGeneratedColumn('uuid')
-    @IsUUID('4', { message: 'paymentId must be a valid UUID' })
-    paymentId!: string;
+  @PrimaryGeneratedColumn('uuid')
+  paymentId!: string;
 
-    @Column()
-    @IsUUID('4', { message: 'invoiceId must be a valid UUID' })
-    @IsNotEmpty({ message: 'invoiceId is required' })
-    invoiceId!: string;
+  @Column()
+  invoiceId!: string;
 
-    @Column({ type: 'date' })
-    @IsDateString({}, { message: 'paymentDate must be a valid ISO date string' })
-    @IsNotEmpty({ message: 'paymentDate is required' })
-    paymentDate!: string;
+  @ManyToOne(() => Invoice, { eager: true })
+  @JoinColumn({ name: 'invoiceId' })
+  invoice?: Invoice;
 
-    @Column({ type: 'float' })
-    @IsNumber({}, { message: 'paidAmount must be a number' })
-    @IsPositive({ message: 'paidAmount must be a positive number' })
-    paidAmount!: number;
+  @Column({ nullable: true })
+  registrationId?: string;
 
-    @Column()
-    @IsNotEmpty({ message: 'paymentMethod is required' })
-    @Length(3, 50, { message: 'paymentMethod must be between $constraint1 and $constraint2 characters' })
-    paymentMethod!: string;
+  @ManyToOne(() => Registration, { eager: true })
+  @JoinColumn({ name: 'registrationId' })
+  registration?: Registration;
 
-    @Column({ default: 'pending' })
-    @IsNotEmpty({ message: 'paymentStatus is required' })
-    @Length(3, 20, { message: 'paymentStatus must be between $constraint1 and $constraint2 characters' })
-    paymentStatus!: string;
+  @Column({ nullable: true })
+  eventId?: string;
 
-    @Column({ nullable: true })
-    @IsOptional()
-    @Length(0, 500, { message: 'description must be at most $constraint2 characters' })
-    description!: string;
+  @ManyToOne(() => Event, (event) => event.payments, { eager: true })
+  @JoinColumn({ name: 'eventId' })
+  event?: Event;
 
-    // Relationships
-    @ManyToOne(() => Invoice, invoice => invoice.payments)
-    @JoinColumn({ name: 'invoiceId' })
-    invoice!: Invoice;
-    @ManyToOne(() => Event, event => event.payments)
-    @JoinColumn({ name: "eventId" })
-    event!: Event;
+  @Column()
+  paymentDate!: Date;
 
-    // Relationship to Registration (One-to-One)
-    @OneToOne(() => Registration, registration => registration.payment)
-    @JoinColumn({ name: 'registrationId' })
-    registration?: Registration;
+  @Column('decimal')
+  paidAmount!: number;
 
-    @Column({ type: 'uuid', nullable: true, unique: true }) // Add this for the foreign key
-    registrationId?: string;
-  createdAt: any;
-  updatedAt: any;
-  deletedAt: any;
+  @Column()
+  paymentMethod!: string;
+
+  @Column({ type: 'enum', enum: PaymentStatus })
+  paymentStatus!: PaymentStatus;
+
+  @Column({ nullable: true })
+  description?: string;
+
+  @Column({ nullable: true })
+  txRef?: string;
+
+  @Column({ nullable: true })
+  flwRef?: string;
+
+  @Column()
+  isSuccessful!: boolean;
+
+  @Column({ type: 'jsonb', nullable: true })
+  paymentResponse?: any;
+
+  @Column()
+  isInstallment!: boolean;
+
+  @Column({ nullable: true })
+  installmentNumber?: number;
+
+  @Column({ nullable: true })
+  installmentPlanId?: string;
+
+ @ManyToOne(() => InstallmentPlan, (installmentPlan) => installmentPlan.payments, { eager: true })
+  installmentPlan!: InstallmentPlan;
+
+
+  @Column({ nullable: true })
+  paidBy?: string;
+
+  @CreateDateColumn({ type: 'timestamp with time zone' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ type: 'timestamp with time zone' })
+  updatedAt!: Date;
+
+  @DeleteDateColumn({ type: 'timestamp with time zone', nullable: true })
+  deletedAt?: Date;
 }

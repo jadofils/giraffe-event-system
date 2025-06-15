@@ -6,7 +6,7 @@ import { Event } from '../models/Event';
 import { User } from '../models/User';
 import { TicketType } from '../models/TicketType';
 import { Venue } from '../models/Venue';
-import { PaymentStatus, RegistrationRequestInterface } from '../interfaces/interface'; // Use the request interface for data incoming
+import { RegistrationRequestInterface } from '../interfaces/RegistrationInterface'; // Use the request interface for data incoming
 import { QrCodeService } from '../services/registrations/QrCodeService';
 import { AuthenticatedRequest } from '../middlewares/AuthMiddleware';
 import { RequestHandler, Response } from 'express';
@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { RegistrationService } from '../services/registrations/ValidationRegistrationService';
+import { PaymentStatus } from '../interfaces/Enums/PaymentStatusEnum';
 
 export class RegistrationRepository {
     static findByQRCode(rawQrCodeDataString: string) {

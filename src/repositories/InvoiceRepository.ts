@@ -1,6 +1,7 @@
 // src/repositories/InvoiceRepository.ts
 import { Repository, FindManyOptions, FindOneOptions, DeepPartial } from 'typeorm';
-import { Invoice, InvoiceStatus } from '../models/Invoice';
+import { Invoice } from '../models/Invoice';
+import { InvoiceStatus } from '../interfaces/Enums/InvoiceStatus';
 
 export class InvoiceRepository {
 

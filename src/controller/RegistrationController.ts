@@ -6,12 +6,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { RegistrationService } from "../services/registrations/ValidationRegistrationService";
 // You DON'T need to import AppDataSource, User, Event, TicketType, Venue here anymore
 // because RegistrationRepository and ValidationService will handle getting repositories.
-import { PaymentStatus, RegistrationRequestInterface, RegistrationResponseInterface } from "../interfaces/interface"; // Assuming this is your DTO interface
 import { QrCodeService } from "../services/registrations/QrCodeService";
 import path from "path";
 import fs from "fs";
 import { AppDataSource } from "../config/Database";
 import { User } from "../models/User";
+import { RegistrationRequestInterface, RegistrationResponseInterface } from "../interfaces/RegistrationInterface";
+import { PaymentStatus } from "../interfaces/Index";
 
 
 export class RegistrationController {

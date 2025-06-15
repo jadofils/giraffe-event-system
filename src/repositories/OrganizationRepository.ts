@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/Database';
 import { Organization } from '../models/Organization';
-import { OrganizationInterface } from '../interfaces/interface';//all dto's
+import { OrganizationInterface } from '../interfaces/OrganizationInterface';//all dto's
 import { User } from '../models/User';
 import { In } from 'typeorm/find-options/operator/In';
 

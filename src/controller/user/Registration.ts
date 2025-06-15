@@ -6,7 +6,6 @@ import PasswordService from "../../services/emails/EmailService";
 import { Organization } from "../../models/Organization";
 import { Role } from "../../models/Role";
 import bcrypt from "bcryptjs";
-import { Venue } from "../../models/Venue";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -138,11 +137,13 @@ export class UserController {
         //password is optional, if not provided
         password: hashedPassword, // Use the hashed password
         // Set a default password or generate one dynamically
-        role: {
-          roleId: guestRole.roleId,
-          roleName: guestRole.roleName,
-          permissions: guestRole.permissions || [],
-        }, // Map Role to RoleInterface
+       role: {
+  roleId: guestRole.roleId,
+  roleName: guestRole.roleName,
+  permissions: guestRole.permissions || [],
+  createdAt: guestRole.createdAt ? new Date(guestRole.createdAt) : new Date(),
+  updatedAt: guestRole.updatedAt ? new Date(guestRole.updatedAt) : new Date(),
+}, // Map Role to RoleInterface
       });
 
       const result = await UserRepository.saveUser(user);

@@ -6,7 +6,6 @@ import * as bcrypt from "bcryptjs";
 import { UserController } from './Registration';
 import jwt from 'jsonwebtoken';
 import PasswordService from '../../services/emails/EmailService';
-import { token } from 'morgan';
 
 const SECRET_KEY = process.env.JWT_SECRET || 'sdbgvkghdfcnmfxdxdfggj';
 const COOKIE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours

@@ -1,5 +1,5 @@
 import { AppDataSource } from "../config/Database";
-import { VenueInterface } from "../interfaces/interface"; // Assuming this interface exists and matches your Venue entity
+import { VenueInterface } from "../interfaces/VenueInterface"; // Assuming this interface exists and matches your Venue entity
 import { User } from "../models/User";
 import { Venue } from "../models/Venue";
 import { Between, LessThanOrEqual, MoreThanOrEqual, IsNull, Not } from "typeorm"; // Import for more advanced queries

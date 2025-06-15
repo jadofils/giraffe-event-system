@@ -4,19 +4,14 @@ import { IsUUID, IsDateString, IsNumber, IsEnum, IsString, IsNotEmpty, Min, IsOp
 import { Type } from 'class-transformer';
 
 // --- Enums for better type safety ---
-export enum InvoiceStatus {
-    PENDING = 'pending',
-    PAID = 'paid',
-    OVERDUE = 'overdue',
-    CANCELLED = 'cancelled',
-    REFUNDED = 'refunded'
-}
+import { InvoiceStatus } from '../interfaces/Enums/InvoiceStatus';
 
 // Assuming these exist and are properly defined
 import { User } from './User';
 import { Event } from './Event';
 import { Payment } from './Payment';
 import { Registration } from './Registration';
+import { InstallmentPlan } from './InstallmentPlan';
 
 @Entity('invoices')
 export class Invoice {
@@ -71,7 +66,9 @@ export class Invoice {
 
     @OneToMany(() => Payment, payment => payment.invoice)
     payments?: Payment[];
-
+    
+  @OneToMany(() => InstallmentPlan, plan => plan.invoice)
+installmentPlans!: InstallmentPlan[];
     @OneToOne(() => Registration, registration => registration.invoice, { nullable: true })
     @JoinColumn({ name: 'registrationId' })
     registration?: Registration;

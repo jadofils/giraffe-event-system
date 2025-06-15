@@ -2,7 +2,7 @@
 import { AppDataSource } from "../config/Database";
 import { Role } from "../models/Role";
 import { User } from "../models/User";
-import { RoleInterface } from "../interfaces/interface";
+import { RoleInterface } from "../interfaces/RoleInterface";
 import { ILike } from "typeorm"; // Import ILike for case-insensitive search
 
 export class RoleRepository {
