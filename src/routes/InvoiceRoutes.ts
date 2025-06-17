@@ -53,7 +53,7 @@ router.delete(
 router.post(
     '/:id/mark-paid', 
     markInvoiceAsPaidValidation,
-    InvoiceController.markInvoiceAsPaid
+    InvoiceController.markAsPaid
 );
 
 // POST /api/invoices/:id/send-notification - Send invoice notification

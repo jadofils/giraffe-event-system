@@ -3,6 +3,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { InvoiceService } from '../services/invoice/InvoiceService'; // Assuming InvoiceService also has static methods
 import { InvoiceStatus } from '../interfaces/Enums/InvoiceStatus';
+import { FlutterwavePaymentService } from '../services/payments/FlutterwavePaymentServices';
 
 export class InvoiceController {
 
@@ -122,20 +123,38 @@ export class InvoiceController {
      * @param res Express Response object.
      * @param next Express NextFunction for error propagation.
      */
-    static async markInvoiceAsPaid(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const invoiceId: string = req.params.id; // ID is a UUID string
-            const updatedInvoice = await InvoiceService.markInvoiceAsPaid(invoiceId, req.body.paymentDetails); // Call static service method
+ static async markAsPaid(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const { id } = req.params;
+  const { txRef } = req.body;
 
-            if (!updatedInvoice) {
-                res.status(404).json({ message: 'Invoice not found or could not be marked as paid' });
-                return;
-            }
-            res.status(200).json(updatedInvoice);
-        } catch (error: any) {
-            next(error);
-        }
+  if (!txRef) {
+     res.status(400).json({ success: false, message: 'Transaction reference (txRef) is required.' });
+  }
+
+  try {
+    const paymentResult = await FlutterwavePaymentService.verifyAndRecordPayment(txRef, id);
+    if (!paymentResult.isSuccessful) {
+       res.status(400).json({ success: false, message: 'Payment verification failed or transaction not found.' });
     }
+
+    const updatedInvoice = await InvoiceService.markInvoiceAsPaid(id, txRef);
+    if (!updatedInvoice) {
+       res.status(404).json({ success: false, message: 'Invoice not found or update failed.' });
+    }
+
+     res.status(200).json({
+      success: true,
+      message: 'Invoice marked as paid successfully.',
+      invoice: updatedInvoice,
+    });
+
+  } catch (error: any) {
+    console.error('Error in markAsPaid:', error);
+    if (!res.headersSent) {
+       res.status(500).json({ success: false, message: 'An unexpected error occurred.' });
+    }
+  }
+}
 
     /**
      * Handles POST request to send an invoice notification.

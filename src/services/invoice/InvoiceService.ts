@@ -5,6 +5,7 @@ import { Invoice } from '../../models/Invoice'; // Import Invoice and InvoiceSta
 import { AppDataSource } from '../../config/Database'; // Assuming your TypeORM data source is here
 import { Repository, DeepPartial } from 'typeorm'; // Import Repository and DeepPartial from TypeORM
 import { InvoiceStatus } from '../../interfaces/Enums/InvoiceStatus';
+import { FlutterwavePaymentService } from '../payments/FlutterwavePaymentServices';
 
 export class InvoiceService {
 
@@ -121,20 +122,28 @@ export class InvoiceService {
         return InvoiceService.createInvoice(invoiceData);
     }
 
-    /**
-     * Marks an invoice as paid.
+     /**
+     * Marks an invoice as paid after verifying payment with Flutterwave.
      * @param id The ID of the invoice to mark as paid (UUID string).
-     * @param paymentDetails Optional payment transaction details.
-     * @returns Promise<Invoice | null> The updated invoice or null if not found.
+     * @param txRef The Flutterwave transaction reference to verify.
+     * @returns Promise<Invoice | null> The updated invoice or null if not found or payment failed.
      */
-    static async markInvoiceAsPaid(id: string, paymentDetails?: any): Promise<Invoice | null> {
-        const updateData: DeepPartial<Invoice> = {
-            status: InvoiceStatus.PAID,
-            // Add payment details if your Invoice entity is set up for it
-        };
-        // Delegate to the updateInvoice method within this static service class
-        return InvoiceService.updateInvoice(id, updateData);
+static async markInvoiceAsPaid(id: string, txRef: string): Promise<Invoice | null> {
+    const paymentResult = await FlutterwavePaymentService.verifyAndRecordPayment(txRef, id);
+
+    if (!paymentResult || !paymentResult.isSuccessful) {
+        // Payment failed or not found
+        return null;
     }
+
+    // 2. Update invoice status in the database
+    const updateData: DeepPartial<Invoice> = {
+        status: InvoiceStatus.PAID,
+        // Optionally, store payment reference or details
+        // paymentReference: txRef,
+    };
+    return InvoiceService.updateInvoice(id, updateData);
+}
 
     /**
      * Sends an invoice notification (e.g., email to the user).
