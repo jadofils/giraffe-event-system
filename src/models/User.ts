@@ -12,6 +12,7 @@ import { VenuePayment } from './VenuePayment';
 import { Event } from './Event';
 import { Venue } from './Venue';
 import { Invoice } from './Invoice';
+import { Feedback } from './Feedback';
 
 @Entity('users')
 export class User {
@@ -96,6 +97,9 @@ export class User {
 
   @OneToMany(() => Event, (event) => event.createdBy)
   createdEvents!: Event[];
+
+  @OneToMany(() => Feedback, (feedback) => feedback.user)
+  feedbacks!: Feedback[];
 
   // --- NEW OPTIONAL USER PROFILE FIELDS ---
   @Column({ type: 'varchar', length: 1000, nullable: true })

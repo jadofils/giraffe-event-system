@@ -465,7 +465,7 @@ export class UserController {
 
       const user = await userRepository.findOne({
         where: { userId },
-        relations: ["role", "organization"], // Include related entities
+        relations: ["role", "organizations"], // Include related entities
       });
 
       if (!user) {

@@ -33,6 +33,7 @@ import { Invoice } from './Invoice';
 import { EventCategory } from './EventCategory';
 import { EventType } from '../interfaces/Enums/EventTypeEnum';
 import { EventStatus } from '../interfaces/Enums/EventStatusEnum';
+import { Feedback } from './Feedback';
 
 @Entity('events')
 export class Event {
@@ -161,6 +162,9 @@ export class Event {
 
   @OneToMany(() => Invoice, (invoice) => invoice.event)
   invoices?: Invoice[];
+
+  @OneToMany(() => Feedback, (feedback) => feedback.event)
+  feedbacks!: Feedback[];
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt!: Date;

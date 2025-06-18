@@ -1,5 +1,5 @@
 // src/entity/Feedback.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import {
   IsUUID,
   IsNotEmpty,
@@ -9,6 +9,8 @@ import {
   IsOptional,
   Length,
 } from 'class-validator';
+import { User } from './User';
+import { Event } from './Event';
 
 @Entity('feedback')
 export class Feedback {
@@ -39,4 +41,12 @@ export class Feedback {
     message: 'comments must be at most $constraint2 characters long',
   })
   comments!: string;
+
+  @ManyToOne(() => User, user => user.feedbacks)
+  @JoinColumn({ name: 'userId' })
+  user!: User;
+
+  @ManyToOne(() => Event, event => event.feedbacks)
+  @JoinColumn({ name: 'eventId' })
+  event!: Event;
 }

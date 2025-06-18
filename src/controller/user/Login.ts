@@ -182,8 +182,24 @@ export class LoginController {
         userRepository,
         async () => {
           return await userRepository.findOne({
-            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-            relations: ["organizations", "role"],
+            where: [
+              { email: identifier },
+              { username: identifier },
+              { phoneNumber: identifier },
+            ],
+            relations: [
+              "role",
+              "organizations",
+              "createdEvents",
+              "createdEvents.organization",
+              "createdEvents.venues",
+              "managedVenues",
+              "registrations",
+              "registrations.event",
+              "registrations.venue",
+              "feedbacks",
+              "feedbacks.event"
+            ],
           });
         },
         CACHE_TTL
@@ -223,17 +239,6 @@ export class LoginController {
         return;
       }
 
-      // Prepare organization data for JWT
-      const organization = {
-        organizationId: firstOrganization.organizationId,
-        organizationName: firstOrganization.organizationName,
-        description: firstOrganization.description,
-        contactEmail: firstOrganization.contactEmail,
-        contactPhone: firstOrganization.contactPhone,
-        address: firstOrganization.address,
-        organizationType: firstOrganization.organizationType,
-      };
-
       // Generate JWT token
       const token = jwt.sign(
         {
@@ -241,7 +246,6 @@ export class LoginController {
           email: user.email,
           username: user.username,
           phoneNumber: user.phoneNumber,
-          organization,
           organizationId: firstOrganization.organizationId,
           roles: {
             roleId: user.role.roleId,
@@ -259,19 +263,78 @@ export class LoginController {
         secure: process.env.NODE_ENV === "production",
       });
 
+      // Remove password from user data
+      const { password: _, ...userData } = user;
+
+      // Format the response with all related data
+      const formattedResponse = {
+        ...userData,
+        role: {
+          roleId: user.role.roleId,
+          roleName: user.role.roleName,
+          permissions: user.role.permissions || []
+        },
+        organizations: user.organizations.map(org => ({
+          organizationId: org.organizationId,
+          organizationName: org.organizationName,
+          description: org.description,
+          contactEmail: org.contactEmail,
+          contactPhone: org.contactPhone,
+          address: org.address,
+          organizationType: org.organizationType
+        })),
+        events: user.createdEvents?.map(event => ({
+          eventId: event.eventId,
+          eventTitle: event.eventTitle,
+          description: event.description,
+          eventCategory: event.eventCategoryId,
+          eventType: event.eventType,
+          organizerId: event.organizationId,
+          venueId: event.venues?.[0]?.venueId,
+          maxAttendees: event.maxAttendees,
+          status: event.status,
+          isFeatured: event.isFeatured,
+          qrCode: event.qrCode
+        })) || [],
+        venues: user.managedVenues?.map(venue => ({
+          venueId: venue.venueId,
+          venueName: venue.venueName,
+          location: venue.location,
+          capacity: venue.capacity,
+          amenities: venue.amenities
+        })) || [],
+        registrations: user.registrations?.map(reg => ({
+          registrationId: reg.registrationId,
+          event: reg.event ? {
+            eventId: reg.event.eventId,
+            eventTitle: reg.event.eventTitle
+          } : null,
+          ticketType: reg.ticketType ? {
+            ticketTypeId: reg.ticketType.ticketTypeId,
+            ticketName: reg.ticketType.ticketName,
+            price: reg.ticketType.price
+          } : null,
+          venue: reg.venue ? {
+            venueId: reg.venue.venueId,
+            venueName: reg.venue.venueName
+          } : null,
+          registrationDate: reg.registrationDate,
+          paymentStatus: reg.paymentStatus,
+          attended: reg.attended
+        })) || [],
+        feedbacks: user.feedbacks?.map(feedback => ({
+          feedbackId: feedback.feedbackId,
+          rating: feedback.rating,
+          comments: feedback.comments
+        })) || []
+      };
+
       console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
 
       res.status(200).json({
         success: true,
         message: "Login successful!",
-        user: {
-          userId: user.userId,
-          email: user.email,
-          username: user.username,
-          phoneNumber: user.phoneNumber,
-          roles: user.role,
-          organizations: user.organizations,
-        },
+        user: formattedResponse,
         token,
       });
     } catch (error) {
