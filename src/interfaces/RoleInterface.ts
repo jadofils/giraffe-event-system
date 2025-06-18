@@ -1,9 +1,10 @@
-import { UserInterface } from './UserInterface';
+import { UserInterface } from "./UserInterface";
+import { Permission } from "../models/Permission";
 
 export class RoleInterface {
   roleId!: string;
   roleName!: string;
-  permissions!: string[];
+  permissions!: Permission[];
   description?: string;
   users?: UserInterface[];
   createdAt!: Date;
@@ -12,8 +13,8 @@ export class RoleInterface {
 
   constructor(data: Partial<RoleInterface>) {
     Object.assign(this, {
-      roleId: data.roleId || '',
-      roleName: data.roleName || '',
+      roleId: data.roleId || "",
+      roleName: data.roleName || "",
       permissions: data.permissions || [],
       description: data.description,
       users: data.users,
@@ -25,8 +26,9 @@ export class RoleInterface {
 
   static validate(data: Partial<RoleInterface>): string[] {
     const errors: string[] = [];
-    if (!data.roleName) errors.push('roleName is required');
-    if (!data.permissions || !data.permissions.length) errors.push('at least one permission is required');
+    if (!data.roleName) errors.push("roleName is required");
+    if (!data.permissions || !data.permissions.length)
+      errors.push("at least one permission is required");
     return errors;
   }
 }
