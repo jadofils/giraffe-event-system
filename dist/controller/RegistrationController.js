@@ -8,1329 +8,506 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistrationController = void 0;
 const RegistrationRepository_1 = require("../repositories/RegistrationRepository");
 const uuid_1 = require("uuid");
 const ValidationRegistrationService_1 = require("../services/registrations/ValidationRegistrationService");
-const UserRepository_1 = require("../repositories/UserRepository");
+// You DON'T need to import AppDataSource, User, Event, TicketType, Venue here anymore
+// because RegistrationRepository and ValidationService will handle getting repositories.
+const QrCodeService_1 = require("../services/registrations/QrCodeService");
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+const Database_1 = require("../config/Database");
+const User_1 = require("../models/User");
+const Index_1 = require("../interfaces/Index");
 class RegistrationController {
+    // Create Registration
+    // Static method for creating a registration
+    // Create Registration
+    // Static method for creating a registration
     static createRegistration(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            var _b, _c, _d, _e;
             try {
+                // Accept the body as any, but validate/transform before using as RegistrationRequestInterface
                 const registrationData = req.body;
-                console.log("Incoming registrationData:", registrationData);
-                const buyerId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-                if (!buyerId) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Authentication required. Buyer information not found.",
-                    });
+                // Extract userId directly from request body (no authentication)
+                const userId = registrationData.userId;
+                if (!userId) {
+                    res.status(400).json({ success: false, message: "User ID is required." });
                     return;
                 }
-                const noOfTickets = registrationData.noOfTickets;
-                let finalBoughtForIds = [];
-                if (noOfTickets === 1) {
-                    if (!((_b = registrationData.user) === null || _b === void 0 ? void 0 : _b.userId)) {
-                        res.status(400).json({
-                            success: false,
-                            message: "For a single ticket, the primary user ID is required.",
-                        });
-                        return;
-                    }
-                    finalBoughtForIds = [registrationData.user.userId];
-                }
-                else if (noOfTickets > 1) {
-                    if (!registrationData.boughtForIds || registrationData.boughtForIds.length === 0) {
-                        res.status(400).json({
-                            success: false,
-                            message: "For multiple tickets, boughtForIds must be provided and cannot be empty.",
-                        });
-                        return;
-                    }
-                    if (registrationData.boughtForIds.length !== noOfTickets) {
-                        res.status(400).json({
-                            success: false,
-                            message: `Number of boughtForIds (${registrationData.boughtForIds.length}) must match noOfTickets (${noOfTickets}).`,
-                        });
-                        return;
-                    }
-                    finalBoughtForIds = registrationData.boughtForIds;
+                let finalBuyerId = null;
+                const buyerIdFromRequest = registrationData.buyerId;
+                // Set buyerId based on request or default to userId
+                if (buyerIdFromRequest === null || buyerIdFromRequest === undefined) {
+                    finalBuyerId = userId;
                 }
                 else {
-                    res.status(400).json({
-                        success: false,
-                        message: "Number of tickets must be a positive number.",
-                    });
+                    finalBuyerId = buyerIdFromRequest;
+                }
+                const registrationId = (0, uuid_1.v4)(); // Generate a UUID for the new registration
+                // Ensure noOfTickets is always a number (not undefined)
+                if (registrationData.noOfTickets === undefined || registrationData.noOfTickets === null) {
+                    res.status(400).json({ success: false, message: "Number of tickets (noOfTickets) is required." });
                     return;
                 }
-                // Ensure ticketTypes length also matches noOfTickets
-                if (registrationData.ticketTypes && registrationData.ticketTypes.length !== noOfTickets) {
-                    res.status(400).json({
-                        success: false,
-                        message: `Number of ticketTypes provided (${registrationData.ticketTypes.length}) must match noOfTickets (${noOfTickets}).`,
-                    });
-                    return;
-                }
-                const completeRegistrationData = {
-                    registrationId: (0, uuid_1.v4)(),
-                    event: registrationData.event,
-                    user: registrationData.user,
-                    buyer: { userId: buyerId },
-                    boughtForIds: finalBoughtForIds,
-                    ticketTypes: registrationData.ticketTypes, // This is correct, it's an array of { ticketTypeId: string }
-                    venue: registrationData.venue,
-                    noOfTickets: noOfTickets,
-                    registrationDate: registrationData.registrationDate || new Date().toISOString(),
-                    paymentStatus: registrationData.paymentStatus || "pending",
-                    attended: false,
-                };
-                console.log("Complete registration data to repo:", completeRegistrationData);
-                const validationResult = yield ValidationRegistrationService_1.ValidationService.validateRegistrationIds(completeRegistrationData);
+                const dataForService = Object.assign(Object.assign({}, registrationData), { registrationId: registrationId, userId: userId, buyerId: finalBuyerId, paymentStatus: registrationData.paymentStatus || Index_1.PaymentStatus.PENDING, attended: registrationData.attended || false, boughtForIds: registrationData.boughtForIds || [], eventId: (_b = registrationData.eventId) !== null && _b !== void 0 ? _b : "", ticketTypeId: (_c = registrationData.ticketTypeId) !== null && _c !== void 0 ? _c : "", venueId: (_d = registrationData.venueId) !== null && _d !== void 0 ? _d : "", noOfTickets: Number(registrationData.noOfTickets) });
+                // ---
+                // Step 1: Validate the incoming request data
+                // ---
+                const validationResult = yield ValidationRegistrationService_1.RegistrationService.validateRegistrationIds(dataForService);
                 if (!validationResult.valid) {
                     res.status(400).json({
                         success: false,
                         message: validationResult.message,
-                        errors: validationResult.errors,
+                        errors: validationResult.errors
                     });
                     return;
                 }
-                const capacityValidation = yield ValidationRegistrationService_1.ValidationService.validateEventCapacity(((_c = completeRegistrationData.event) === null || _c === void 0 ? void 0 : _c.eventId) || "", ((_d = completeRegistrationData.venue) === null || _d === void 0 ? void 0 : _d.venueId) || "", completeRegistrationData.noOfTickets);
+                // ---
+                // Step 2: Validate event capacity and ticket cost
+                // ---
+                const capacityValidation = yield ValidationRegistrationService_1.RegistrationService.validateEventCapacity(dataForService.eventId, dataForService.venueId, dataForService.noOfTickets);
                 if (!capacityValidation.valid) {
                     res.status(400).json({
                         success: false,
-                        message: capacityValidation.message,
+                        message: capacityValidation.message
                     });
                     return;
                 }
-                const result = yield RegistrationRepository_1.RegistrationRepository.create(completeRegistrationData);
-                if (result.success && result.data) {
-                    const createdRegistration = result.data;
-                    // Fetch details for all relevant users (buyer, primary attendee, and boughtForIds)
-                    const allUserIds = [
-                        (_e = createdRegistration.buyer) === null || _e === void 0 ? void 0 : _e.userId,
-                        (_f = createdRegistration.user) === null || _f === void 0 ? void 0 : _f.userId,
-                        ...(createdRegistration.boughtForIds || []),
-                    ].filter((id) => typeof id === "string" && id !== null);
-                    const uniqueUserIds = Array.from(new Set(allUserIds));
-                    // Fetch users in parallel
-                    const fetchedUsers = yield Promise.all(uniqueUserIds.map((id) => UserRepository_1.UserRepository.getUserById(id)));
-                    const userMap = new Map();
-                    fetchedUsers
-                        .filter((user) => Boolean(user) && typeof (user === null || user === void 0 ? void 0 : user.userId) === "string")
-                        .forEach((user) => {
-                        if (user && typeof user.userId === "string") {
-                            userMap.set(user.userId, user);
-                        }
-                    });
-                    // Format buyer and user (primary attendee) details
-                    const formattedBuyer = createdRegistration.buyer ? userMap.get(createdRegistration.buyer.userId) : undefined;
-                    const formattedUser = createdRegistration.user ? userMap.get(createdRegistration.user.userId) : undefined;
-                    // Format boughtForIds with full user details
-                    const formattedBoughtForUsers = (createdRegistration.boughtForIds || [])
-                        .map((id) => userMap.get(id))
-                        .filter(Boolean);
-                    // --- IMPORTANT: Construct individualTickets correctly ---
-                    const individualTickets = [];
-                    // Loop up to the number of tickets.
-                    // Both createdRegistration.ticketTypes and formattedBoughtForUsers should have this length
-                    for (let i = 0; i < createdRegistration.noOfTickets; i++) {
-                        const boughtForUser = formattedBoughtForUsers[i];
-                        const ticketType = (_g = createdRegistration.ticketTypes) === null || _g === void 0 ? void 0 : _g[i]; // Access by index from the fetched entity's ticketTypes
-                        individualTickets.push({
-                            ticketNumber: i + 1,
-                            boughtFor: boughtForUser
-                                ? {
-                                    userId: boughtForUser.userId,
-                                    username: boughtForUser.username,
-                                    firstName: boughtForUser.firstName,
-                                    lastName: boughtForUser.lastName,
-                                    email: boughtForUser.email,
-                                    phoneNumber: boughtForUser.phoneNumber || undefined,
-                                }
-                                : { userId: ((_h = createdRegistration.boughtForIds) === null || _h === void 0 ? void 0 : _h[i]) || "N/A" }, // Fallback
-                            ticketType: ticketType
-                                ? {
-                                    ticketTypeId: ticketType.ticketTypeId,
-                                    ticketName: ticketType.ticketName,
-                                    price: ticketType.price,
-                                    description: ticketType.description || undefined,
-                                }
-                                : undefined,
-                        });
-                    }
-                    res.status(201).json({
-                        success: true,
-                        message: result.message,
-                        data: {
-                            registrationId: createdRegistration.registrationId,
-                            event: createdRegistration.event
-                                ? {
-                                /* ... map event details ... */
-                                }
-                                : undefined,
-                            user: formattedUser,
-                            buyer: formattedBuyer,
-                            boughtForIds: createdRegistration.boughtForIds, // Keep original IDs
-                            // Make sure you're mapping the ticketTypes from the *fetched* registration data,
-                            // which should contain the full TicketType objects if `eager: true` or `relations` are used.
-                            ticketTypes: ((_j = createdRegistration.ticketTypes) === null || _j === void 0 ? void 0 : _j.map((tt) => ({
-                                ticketTypeId: tt.ticketTypeId,
-                                ticketName: tt.ticketName,
-                                price: tt.price,
-                                description: tt.description,
-                            }))) || [], // Ensure this is also plural `ticketTypes`
-                            venue: createdRegistration.venue
-                                ? {
-                                /* ... map venue details ... */
-                                }
-                                : undefined,
-                            noOfTickets: createdRegistration.noOfTickets,
-                            registrationDate: createdRegistration.registrationDate,
-                            paymentStatus: createdRegistration.paymentStatus,
-                            qrCode: createdRegistration.qrCode,
-                            checkDate: createdRegistration.checkDate,
-                            attended: createdRegistration.attended,
-                            individualTickets: individualTickets, // Your structured output
-                        },
-                    });
-                }
-                else {
+                const ticketCostValidation = yield ValidationRegistrationService_1.RegistrationService.validateAndCalculateTicketCost(dataForService.ticketTypeId, dataForService.noOfTickets);
+                if (!ticketCostValidation.valid || ticketCostValidation.totalCost === undefined) {
                     res.status(400).json({
                         success: false,
-                        message: result.message,
+                        message: ticketCostValidation.message || "Could not validate ticket type or calculate cost."
                     });
+                    return;
                 }
+                // Update the totalCost in dataForService as it's now calculated and validated
+                dataForService.totalCost = ticketCostValidation.totalCost;
+                // ---
+                // Step 3: Check for duplicate registrations
+                // ---
+                const duplicateValidation = yield ValidationRegistrationService_1.RegistrationService.validateDuplicateRegistration(dataForService.eventId, dataForService.userId, (_e = dataForService.buyerId) !== null && _e !== void 0 ? _e : "", dataForService.boughtForIds);
+                if (!duplicateValidation.valid) {
+                    res.status(400).json({
+                        success: false,
+                        message: duplicateValidation.message
+                    });
+                    return;
+                }
+                // ---
+                // Step 4: Create the registration (after all validations pass)
+                // ---
+                const newRegistrationResponse = yield ValidationRegistrationService_1.RegistrationService.createRegistration(dataForService);
+                res.status(201).json({
+                    success: true,
+                    message: "Registration created successfully",
+                    data: newRegistrationResponse
+                });
             }
             catch (error) {
-                console.error("Error creating registration in controller:", error);
-                res.status(500).json({
-                    success: false,
-                    message: error.message || "Failed to create registration due to an unexpected server error.",
-                });
+                console.error('Error creating registration:', error);
+                if (error instanceof Error) {
+                    if (error.message.includes("not found") || error.message.includes("Validation failed:") || error.message.includes("Not enough capacity") || error.message.includes("already registered")) {
+                        res.status(400).json({
+                            success: false,
+                            message: error.message,
+                            errors: error.message.includes("Validation failed:") ? error.message.split("; ") : undefined
+                        });
+                    }
+                    else {
+                        res.status(500).json({
+                            success: false,
+                            message: "Failed to create registration due to an unexpected server error.",
+                            error: error.message
+                        });
+                    }
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: "An unknown error occurred.",
+                        error: String(error)
+                    });
+                }
             }
         });
     }
-    // Get All Registrations
     static getAllRegistrations(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const registrations = yield RegistrationRepository_1.RegistrationRepository.findAll();
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
+                res.status(200).json({ success: true, data: registrations });
             }
             catch (error) {
-                console.error("Error getting all registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve registrations.",
-                });
+                console.error('Error getting all registrations:', error);
+                res.status(500).json({ success: false, message: "Failed to retrieve registrations." });
             }
         });
-    }
-    // Get Registration by ID
-    static getRegistrationById(req, res) {
+    } /**
+     * Retrieves a user's details and the total cost of all tickets associated with them.
+     * This includes registrations where they are the buyer or the primary attendee.
+     * @param req The authenticated request object, containing userId in params.
+     * @param res The Express response object.
+     */
+    /**
+    * Get ticket cost summary for a specific user
+    * Authorized users: Admin, Manager, Buyer (who purchased tickets), or the target user themselves
+    */
+    static getUserTicketCostSummary(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _b, _c;
+            const loggedInUserId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.userId;
+            const loggedInUserRoles = ((_c = req.user) === null || _c === void 0 ? void 0 : _c.roles) || []; // Array of role names
+            const { userId: targetUserId } = req.params;
+            console.log(`[RegistrationController:getUserTicketCostSummary] Logged-in User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}, Target User ID: ${targetUserId}`);
             try {
-                const { id } = req.params;
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
+                // Basic validation
+                if (!loggedInUserId) {
+                    res.status(401).json({
                         success: false,
-                        message: "Registration not found.",
+                        message: 'Unauthorized: User information is missing from the token.'
                     });
                     return;
                 }
+                if (!targetUserId) {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Target user ID is required.'
+                    });
+                    return;
+                }
+                // Check if target user exists
+                const targetUser = yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                    where: { userId: targetUserId }
+                });
+                if (!targetUser) {
+                    res.status(404).json({
+                        success: false,
+                        message: 'Target user not found.'
+                    });
+                    return;
+                }
+                // Authorization check with case-insensitive role comparison
+                const normalizedRoles = loggedInUserRoles.map((role) => role.roleName.toLowerCase());
+                const hasAdminAccess = normalizedRoles.includes('admin');
+                const hasManagerAccess = normalizedRoles.includes('manager');
+                const isSelfAccess = loggedInUserId === targetUserId;
+                // For Buyer role, we need to check if they actually bought tickets for the target user
+                let hasBuyerAccess = false;
+                if (normalizedRoles.includes('buyer')) {
+                    const buyerRegistrations = yield RegistrationRepository_1.RegistrationRepository.getRepository().find({
+                        where: [
+                            { buyer: { userId: loggedInUserId }, user: { userId: targetUserId } },
+                            { buyer: { userId: loggedInUserId } }
+                        ],
+                        relations: ['buyer', 'user']
+                    });
+                    hasBuyerAccess = buyerRegistrations.some(reg => reg.buyer.userId === loggedInUserId &&
+                        (reg.user.userId === targetUserId ||
+                            (reg.boughtForIds && reg.boughtForIds.includes(targetUserId))));
+                }
+                // Check if user has any of the required permissions
+                const isAuthorized = hasAdminAccess || hasManagerAccess || isSelfAccess || hasBuyerAccess;
+                if (!isAuthorized) {
+                    res.status(403).json({
+                        success: false,
+                        message: 'Forbidden: You do not have permission to view this user\'s ticket cost summary.'
+                    });
+                    return;
+                }
+                // Fetch all registrations for the target user
+                const registrations = yield RegistrationRepository_1.RegistrationRepository.getRepository().find({
+                    where: [
+                        { user: { userId: targetUserId } },
+                        { buyer: { userId: targetUserId } }
+                    ],
+                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue', 'payment'],
+                    order: { registrationDate: 'DESC' }
+                });
+                // Also find registrations where target user is in boughtForIds
+                // Corrected code for additionalRegistrations query
+                const additionalRegistrations = yield RegistrationRepository_1.RegistrationRepository.getRepository()
+                    .createQueryBuilder('registration')
+                    .leftJoinAndSelect('registration.event', 'event')
+                    .leftJoinAndSelect('registration.user', 'user')
+                    .leftJoinAndSelect('registration.buyer', 'buyer')
+                    .leftJoinAndSelect('registration.ticketType', 'ticketType')
+                    .leftJoinAndSelect('registration.venue', 'venue')
+                    .leftJoinAndSelect('registration.payment', 'payment')
+                    // Corrected WHERE clause: Check if the array 'boughtForIds' contains the 'targetUserId'
+                    .where('registration.boughtForIds @> ARRAY[:userId]::uuid[]', { userId: targetUserId })
+                    .getMany();
+                // Combine and deduplicate registrations
+                const allRegistrations = [...registrations, ...additionalRegistrations]
+                    .filter((reg, index, arr) => arr.findIndex(r => r.registrationId === reg.registrationId) === index);
+                // Calculate summary statistics
+                let totalTickets = 0;
+                let totalCost = 0;
+                let totalPaid = 0;
+                let totalPending = 0;
+                let totalRefunded = 0;
+                const registrationSummaries = allRegistrations.map(registration => {
+                    var _b;
+                    const ticketPrice = registration.ticketType ? parseFloat(registration.ticketType.price.toString()) : 0;
+                    const regTotalCost = ticketPrice * registration.noOfTickets;
+                    totalTickets += registration.noOfTickets;
+                    totalCost += regTotalCost;
+                    // Calculate payment totals based on status
+                    switch ((_b = registration.paymentStatus) === null || _b === void 0 ? void 0 : _b.toLowerCase()) {
+                        case 'completed':
+                        case 'paid':
+                            totalPaid += regTotalCost;
+                            break;
+                        case 'pending':
+                            totalPending += regTotalCost;
+                            break;
+                        case 'refunded':
+                            totalRefunded += regTotalCost;
+                            break;
+                    }
+                    return {
+                        registrationId: registration.registrationId,
+                        eventId: registration.eventId,
+                        eventName: registration.event.eventTitle,
+                        eventDate: registration.event.createdAt,
+                        ticketType: registration.ticketType.ticketName,
+                        noOfTickets: registration.noOfTickets,
+                        ticketPrice: ticketPrice,
+                        totalCost: regTotalCost,
+                        paymentStatus: registration.paymentStatus,
+                        registrationStatus: registration.registrationStatus,
+                        registrationDate: registration.registrationDate,
+                        isPrimaryAttendee: registration.user.userId === targetUserId,
+                        isBuyer: registration.buyer.userId === targetUserId,
+                        isInBoughtForIds: registration.boughtForIds ? registration.boughtForIds.includes(targetUserId) : false
+                    };
+                });
+                const summary = {
+                    targetUser: {
+                        userId: targetUser.userId,
+                        fullName: targetUser.lastName,
+                        email: targetUser.email
+                    },
+                    totalRegistrations: allRegistrations.length,
+                    totalTickets,
+                    totalCost: parseFloat(totalCost.toFixed(2)),
+                    totalPaid: parseFloat(totalPaid.toFixed(2)),
+                    totalPending: parseFloat(totalPending.toFixed(2)),
+                    totalRefunded: parseFloat(totalRefunded.toFixed(2)),
+                    registrations: registrationSummaries
+                };
                 res.status(200).json({
                     success: true,
-                    data: Object.assign(Object.assign({}, registration), { 
-                        // Assuming you have a method to fetch user details by ID
-                        boughtForIds: (((_a = registration.data) === null || _a === void 0 ? void 0 : _a.boughtForIds) || []).map((id) => ({
-                            userId: id,
-                            userDetails: UserRepository_1.UserRepository.getUserById(id),
-                        })) }),
+                    message: 'User ticket cost summary retrieved successfully.',
+                    data: summary
                 });
             }
             catch (error) {
-                console.error("Error getting registration by ID:", error);
+                console.error(`Error getting ticket cost summary for user ${targetUserId} by user ${loggedInUserId}:`, error);
                 res.status(500).json({
                     success: false,
-                    message: "Failed to retrieve registration.",
+                    message: 'Failed to retrieve ticket cost summary due to a server error.'
                 });
             }
         });
     }
-    // Update Registration
+    //update registration
     static updateRegistration(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const { id } = req.params;
+                const registrationId = req.params.id;
                 const updateData = req.body;
-                // Check if registration exists
-                const existingRegistration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!existingRegistration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // FIXED: Changed ticketTypeId to ticketTypes
-                if (updateData.eventId || updateData.user || updateData.ticketTypes || updateData.venueId) {
-                    const validation = yield ValidationRegistrationService_1.ValidationService.validateRegistrationIds(Object.assign(Object.assign({}, existingRegistration), updateData));
-                    if (!validation.valid) {
-                        res.status(400).json({
-                            success: false,
-                            message: validation.message,
-                            errors: validation.errors,
-                        });
-                        return;
-                    }
-                }
-                const updatedRegistration = yield RegistrationRepository_1.RegistrationRepository.update(id, updateData);
-                if (!updatedRegistration) {
+                // Validate the update data if necessary
+                const validationResult = yield ValidationRegistrationService_1.RegistrationService.validateRegistrationIds(updateData);
+                if (!validationResult.valid) {
                     res.status(400).json({
                         success: false,
-                        message: "Failed to update registration.",
+                        message: validationResult.message,
+                        errors: validationResult.errors
                     });
                     return;
                 }
-                res.status(200).json({
-                    success: true,
-                    message: "Registration updated successfully",
-                    data: updatedRegistration,
-                });
+                const updatedRegistration = yield RegistrationRepository_1.RegistrationRepository.update(registrationId, updateData);
+                if (!updatedRegistration) {
+                    res.status(404).json({ success: false, message: "Registration not found." });
+                    return;
+                }
+                res.status(200).json({ success: true, data: updatedRegistration });
             }
             catch (error) {
-                console.error("Error updating registration:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to update registration.",
-                });
+                console.error('Error updating registration:', error);
+                res.status(500).json({ success: false, message: "Failed to update registration." });
             }
         });
     }
-    // Delete Registration
+    //delete registrations 
+    /**
+         * Deletes a registration by ID.
+         * @param req - Authenticated request object containing the registration ID.
+         * @param res - Express response object.
+         */
     static deleteRegistration(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const { id } = req.params;
-                // Check if registration exists
-                const existingRegistration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!existingRegistration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
+                const { registrationId } = req.params;
+                if (!registrationId) {
+                    res.status(400).json({ message: 'Registration ID is required.' });
                     return;
                 }
-                const deleted = yield RegistrationRepository_1.RegistrationRepository.delete(id);
-                if (!deleted) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to delete registration.",
-                    });
-                    return;
+                const success = yield RegistrationRepository_1.RegistrationRepository.delete(registrationId);
+                if (success) {
+                    res.status(200).json({ message: 'Registration deleted successfully.' });
                 }
-                res.status(200).json({
-                    success: true,
-                    message: "Registration deleted successfully",
-                });
+                else {
+                    res.status(404).json({ message: 'Registration not found or could not be deleted.' });
+                }
             }
             catch (error) {
-                console.error("Error deleting registration:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to delete registration.",
-                });
+                console.error(`Error deleting registration ${req.params.registrationId}:`, error);
+                res.status(500).json({ message: 'An error occurred while deleting the registration.' });
             }
         });
     }
-    // Get Event Registrations
-    static getEventRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { eventId } = req.params;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findByEventId(eventId);
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting event registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve event registrations.",
-                });
-            }
-        });
-    }
-    // Register for Event (Alternative endpoint)
-    static registerForEvent(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // This can be the same as createRegistration or have different logic
-            yield RegistrationController.createRegistration(req, res);
-        });
-    }
-    // Get Event Registration Stats
-    static getEventRegistrationStats(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { eventId } = req.params;
-                const stats = yield RegistrationRepository_1.RegistrationRepository.getEventRegistrationStats(eventId);
-                res.status(200).json({
-                    success: true,
-                    data: stats,
-                });
-            }
-            catch (error) {
-                console.error("Error getting event registration stats:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve registration statistics.",
-                });
-            }
-        });
-    }
-    // Get User Registrations
-    static getUserRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { user } = req.params;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findByUserId(user);
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting user registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve user registrations.",
-                });
-            }
-        });
-    }
-    // Get User Upcoming Registrations
-    static getUserUpcomingRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { user } = req.params;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findUpcomingByUserId(user);
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting user upcoming registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve upcoming registrations.",
-                });
-            }
-        });
-    }
-    // Get User Registration History
-    static getUserRegistrationHistory(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { user } = req.params;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findHistoryByUserId(user);
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting user registration history:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve registration history.",
-                });
-            }
-        });
-    }
-    // Get Registration QR Code
+    /**
+     * Gets the QR code path stored for a specific registration.
+     * This method retrieves the path from the database, not the image itself.
+     */
     static getRegistrationQrCode(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             try {
                 const { id } = req.params;
                 const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
                 if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
+                    res.status(404).json({ success: false, message: "Registration not found." });
+                    return;
+                }
+                if (!registration.qrCode) {
+                    res.status(404).json({ success: false, message: "QR code not generated for this registration." });
                     return;
                 }
                 res.status(200).json({
                     success: true,
-                    data: { qrCode: (_a = registration.data) === null || _a === void 0 ? void 0 : _a.qrCode },
+                    message: "QR code path retrieved successfully.",
+                    qrCodePath: registration.qrCode,
+                    qrCodeUrl: `/static/${registration.qrCode}` // Provide a full URL
                 });
             }
             catch (error) {
-                console.error("Error getting registration QR code:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve QR code.",
-                });
+                console.error(`Error getting QR code path for registration ${req.params.id}:`, error);
+                res.status(500).json({ success: false, message: "Failed to retrieve QR code path." });
             }
         });
     }
-    // Regenerate QR Code
-    static regenerateQrCode(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // Generate new QR code
-                const QrCodeService = require("../services/registrations/QrCodeService").QrCodeService;
-                const newQrCode = yield QrCodeService.regenerateQrCode(id);
-                // Update registration with new QR code
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updateQrCode(id, newQrCode);
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to regenerate QR code.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "QR code regenerated successfully",
-                    data: { qrCode: newQrCode },
-                });
-            }
-            catch (error) {
-                console.error("Error regenerating QR code:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to regenerate QR code.",
-                });
-            }
-        });
-    }
-    // Validate QR Code
-    static validateQrCode(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { qrCode } = req.params;
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findByQrCode(qrCode);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Invalid QR code.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "QR code is valid",
-                    data: registration,
-                });
-            }
-            catch (error) {
-                console.error("Error validating QR code:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to validate QR code.",
-                });
-            }
-        });
-    }
-    // Check-in Attendee
-    static checkInAttendee(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { checkDate } = req.body;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updateAttendance(id, true, checkDate || new Date().toISOString());
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to check-in attendee.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Attendee checked-in successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error checking-in attendee:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to check-in attendee.",
-                });
-            }
-        });
-    }
-    // Check-in via QR Code
-    static checkInViaQrCode(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
-            try {
-                const { qrCode } = req.body;
-                if (!qrCode) {
-                    res.status(400).json({
-                        success: false,
-                        message: "QR code is required.",
-                    });
-                    return;
-                }
-                // Find registration by QR code
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findByQrCode(qrCode);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Invalid QR code.",
-                    });
-                    return;
-                }
-                // Check if already checked in
-                if ((_a = registration.data) === null || _a === void 0 ? void 0 : _a.attended) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Attendee already checked-in.",
-                    });
-                    return;
-                }
-                // Update attendance
-                const registrationId = (_b = registration.data) === null || _b === void 0 ? void 0 : _b.registrationId;
-                if (!registrationId) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Registration ID not found in registration data.",
-                    });
-                    return;
-                }
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updateAttendance(registrationId, true, new Date().toISOString());
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to check-in attendee.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Attendee checked-in successfully via QR code",
-                    data: { registrationId: (_c = registration.data) === null || _c === void 0 ? void 0 : _c.registrationId },
-                });
-            }
-            catch (error) {
-                console.error("Error checking-in via QR code:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to check-in via QR code.",
-                });
-            }
-        });
-    }
-    // Get Attendance Status
-    static getAttendanceStatus(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            try {
-                const { id } = req.params;
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    data: {
-                        attended: (_a = registration.data) === null || _a === void 0 ? void 0 : _a.attended,
-                        checkDate: (_b = registration.data) === null || _b === void 0 ? void 0 : _b.checkDate,
-                    },
-                });
-            }
-            catch (error) {
-                console.error("Error getting attendance status:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve attendance status.",
-                });
-            }
-        });
-    }
-    // Update Attendance Status
-    static updateAttendanceStatus(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { attended, checkDate } = req.body;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updateAttendance(id, attended, checkDate);
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to update attendance status.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Attendance status updated successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error updating attendance status:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to update attendance status.",
-                });
-            }
-        });
-    }
-    // Get Event Attendance Report
-    static getEventAttendanceReport(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { eventId } = req.params;
-                const attendanceData = yield RegistrationRepository_1.RegistrationRepository.findAttendanceByEvent(eventId);
-                res.status(200).json({
-                    success: true,
-                    data: attendanceData,
-                });
-            }
-            catch (error) {
-                console.error("Error getting event attendance report:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve attendance report.",
-                });
-            }
-        });
-    }
-    // Get Payment Status
-    static getPaymentStatus(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                const { id } = req.params;
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    data: { paymentStatus: (_a = registration.data) === null || _a === void 0 ? void 0 : _a.paymentStatus },
-                });
-            }
-            catch (error) {
-                console.error("Error getting payment status:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve payment status.",
-                });
-            }
-        });
-    }
-    // Process Payment
-    static processPayment(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { paymentDetails } = req.body;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // TODO: Integrate with PaymentService for actual payment processing
-                // const PaymentService = require('../services/registrations/PaymentService').PaymentService;
-                // const paymentResult = await PaymentService.processPayment(id, paymentDetails);
-                // For now, just update payment status
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updatePaymentStatus(id, "paid");
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to process payment.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Payment processed successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error processing payment:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to process payment.",
-                });
-            }
-        });
-    }
-    // Update Payment Status
-    static updatePaymentStatus(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { paymentStatus } = req.body;
-                if (!paymentStatus) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Payment status is required.",
-                    });
-                    return;
-                }
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updatePaymentStatus(id, paymentStatus);
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to update payment status.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Payment status updated successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error updating payment status:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to update payment status.",
-                });
-            }
-        });
-    }
-    // Process Refund
-    static processRefund(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                const { id } = req.params;
-                const { refundDetails } = req.body;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // Check if payment was made
-                if (((_a = registration.data) === null || _a === void 0 ? void 0 : _a.paymentStatus) !== "paid") {
-                    res.status(400).json({
-                        success: false,
-                        message: "Cannot refund unpaid registration.",
-                    });
-                    return;
-                }
-                // TODO: Integrate with PaymentService for actual refund processing
-                // const PaymentService = require('../services/registrations/PaymentService').PaymentService;
-                // const refundResult = await PaymentService.processRefund(id, refundDetails);
-                // For now, just update payment status
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updatePaymentStatus(id, "refunded");
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to process refund.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Refund processed successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error processing refund:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to process refund.",
-                });
-            }
-        });
-    }
-    // Get Ticket Details
-    static getTicketDetails(req, res) {
+    /**
+     * Serves the actual QR code image file for a given registration ID.
+     */
+    static getRegistrationQrCodeImage(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { id } = req.params;
                 const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
+                if (!registration || !registration.qrCode) {
+                    res.status(404).json({ success: false, message: "QR code not found for this registration, or it hasn't been generated yet." });
                     return;
                 }
-                res.status(200).json({
-                    success: true,
-                    data: registration,
-                });
+                // CRITICAL LINE TO CHECK:
+                // __dirname in 'src/controller' -> 'path.join(__dirname, '..')' goes to 'src/'
+                // Then 'uploads/qrcodes' is appended.
+                const QR_CODES_UPLOAD_BASE_DIR = path_1.default.join(__dirname, '..', 'uploads', 'qrcodes'); // THIS MUST BE CORRECT!
+                const absolutePath = path_1.default.join(QR_CODES_UPLOAD_BASE_DIR, registration.qrCode);
+                // This log will now show the path the controller is *actually checking*
+                console.error(`QR code image file not found at: ${absolutePath}`); // This log will still appear if the path is wrong
+                if (!fs_1.default.existsSync(absolutePath)) {
+                    // This message means the file is not at 'absolutePath'
+                    res.status(404).json({ success: false, message: "QR code image file not found on server." });
+                    return;
+                }
+                // If we reach here, the file should exist at 'absolutePath'
+                res.sendFile(absolutePath);
             }
             catch (error) {
-                console.error("Error getting ticket details:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve ticket details.",
-                });
-            }
-        });
-    }
-    // Transfer Ticket
-    static transferTicket(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { newuser } = req.body;
-                if (!newuser) {
-                    res.status(400).json({
-                        success: false,
-                        message: "New user ID is required.",
-                    });
-                    return;
-                }
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // Check if new user exists
-                const userExists = yield ValidationRegistrationService_1.ValidationService.checkUserExists(newuser);
-                if (!userExists) {
-                    res.status(400).json({
-                        success: false,
-                        message: "New user does not exist.",
-                    });
-                    return;
-                }
-                const transferred = yield RegistrationRepository_1.RegistrationRepository.transferTicket(id, newuser);
-                if (!transferred) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to transfer ticket.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Ticket transferred successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error transferring ticket:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to transfer ticket.",
-                });
-            }
-        });
-    }
-    // Resend Ticket
-    static resendTicket(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // TODO: Integrate with TicketService and NotificationService
-                // const TicketService = require('../services/registrations/TicketService').TicketService;
-                // const sent = await TicketService.resendTicket(id);
-                res.status(200).json({
-                    success: true,
-                    message: "Ticket resent successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error resending ticket:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to resend ticket.",
-                });
-            }
-        });
-    }
-    // Download Ticket
-    static downloadTicket(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // TODO: Integrate with TicketService to generate PDF
-                // const TicketService = require('../services/registrations/TicketService').TicketService;
-                // const ticketPdf = await TicketService.generateTicketPdf(id);
-                // For now, return ticket data
-                res.status(200).json({
-                    success: true,
-                    message: "Ticket download ready",
-                    data: registration,
-                });
-            }
-            catch (error) {
-                console.error("Error downloading ticket:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to download ticket.",
-                });
-            }
-        });
-    }
-    // Bulk Create Registrations
-    static bulkCreateRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                const { registrations } = req.body;
-                if (!Array.isArray(registrations) || registrations.length === 0) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Registrations array is required.",
-                    });
-                    return;
-                }
-                // Get buyer from token
-                const buyerId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-                if (!buyerId) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Authentication required.",
-                    });
-                    return;
-                }
-                // Prepare bulk registration data
-                const bulkData = registrations.map((reg) => {
-                    var _a, _b, _c;
-                    return ({
-                        registrationId: (0, uuid_1.v4)(),
-                        eventId: (_a = reg.event) === null || _a === void 0 ? void 0 : _a.eventId,
-                        user: (_b = reg.user) === null || _b === void 0 ? void 0 : _b.user,
-                        buyerId: buyerId,
-                        boughtForId: reg.boughtForId,
-                        // FIXED: Changed from ticketTypeId to ticketTypes
-                        ticketTypes: reg.ticketTypes,
-                        venueId: (_c = reg.venue) === null || _c === void 0 ? void 0 : _c.venueId,
-                        noOfTickets: reg.noOfTickets,
-                        registrationDate: reg.registrationDate || new Date().toISOString(),
-                        paymentStatus: reg.paymentStatus || "pending",
-                        attended: false,
-                    });
-                });
-                // Validate all registrations
-                for (const regData of bulkData) {
-                    const validation = yield ValidationRegistrationService_1.ValidationService.validateRegistrationIds(regData);
-                    if (!validation.valid) {
-                        res.status(400).json({
-                            success: false,
-                            message: `Validation failed for registration: ${validation.message}`,
-                            errors: validation.errors,
-                        });
-                        return;
-                    }
-                }
-                const result = yield RegistrationRepository_1.RegistrationRepository.createBulk(bulkData);
-                res.status(201).json({
-                    success: true,
-                    message: "Bulk registrations created successfully",
-                    data: result,
-                });
-            }
-            catch (error) {
-                console.error("Error creating bulk registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to create bulk registrations.",
-                });
-            }
-        });
-    }
-    // Bulk Check-in
-    static bulkCheckIn(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { registrationIds, checkDate } = req.body;
-                if (!Array.isArray(registrationIds) || registrationIds.length === 0) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Registration IDs array is required.",
-                    });
-                    return;
-                }
-                const result = yield RegistrationRepository_1.RegistrationRepository.bulkCheckIn(registrationIds, checkDate || new Date().toISOString());
-                if (!result) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to perform bulk check-in.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Bulk check-in completed successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error performing bulk check-in:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to perform bulk check-in.",
-                });
-            }
-        });
-    }
-    // Export Registrations
-    static exportRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { eventId } = req.params;
-                const { format } = req.query;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.getRegistrationsForExport(eventId);
-                // TODO: Integrate with ReportService for actual export
-                // const ReportService = require('../services/registrations/ReportService').ReportService;
-                // const exportData = await ReportService.exportRegistrations(registrations, format);
-                res.status(200).json({
-                    success: true,
-                    message: "Registrations exported successfully",
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error exporting registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to export registrations.",
-                });
-            }
-        });
-    }
-    // Get Pending Registrations
-    static getPendingRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findPending();
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting pending registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve pending registrations.",
-                });
-            }
-        });
-    }
-    // Approve Registration
-    static approveRegistration(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // Update payment status to approved (or create a separate approval status)
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updatePaymentStatus(id, "approved");
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to approve registration.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Registration approved successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error approving registration:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to approve registration.",
-                });
-            }
-        });
-    }
-    // Reject Registration
-    static rejectRegistration(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { reason } = req.body;
-                // Check if registration exists
-                const registration = yield RegistrationRepository_1.RegistrationRepository.findById(id);
-                if (!registration) {
-                    res.status(404).json({
-                        success: false,
-                        message: "Registration not found.",
-                    });
-                    return;
-                }
-                // Update payment status to rejected
-                const updated = yield RegistrationRepository_1.RegistrationRepository.updatePaymentStatus(id, "rejected");
-                if (!updated) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Failed to reject registration.",
-                    });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    message: "Registration rejected successfully",
-                });
-            }
-            catch (error) {
-                console.error("Error rejecting registration:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to reject registration.",
-                });
-            }
-        });
-    }
-    // Generate Registration Reports
-    static generateRegistrationReports(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { eventId, startDate, endDate, format } = req.query;
-                // TODO: Integrate with ReportService
-                // const ReportService = require('../services/registrations/ReportService').ReportService;
-                // const report = await ReportService.generateRegistrationReport(filters);
-                res.status(200).json({
-                    success: true,
-                    message: "Registration report generated successfully",
-                    data: { message: "Report generation not yet implemented" },
-                });
-            }
-            catch (error) {
-                console.error("Error generating registration reports:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to generate registration reports.",
-                });
-            }
-        });
-    }
-    // Get Venue Registrations
-    static getVenueRegistrations(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { venueId } = req.params;
-                const registrations = yield RegistrationRepository_1.RegistrationRepository.findByVenueId(venueId);
-                res.status(200).json({
-                    success: true,
-                    data: registrations,
-                });
-            }
-            catch (error) {
-                console.error("Error getting venue registrations:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve venue registrations.",
-                });
-            }
-        });
-    }
-    // Get Venue Capacity Info
-    static getVenueCapacityInfo(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { venueId } = req.params;
-                const capacityInfo = yield RegistrationRepository_1.RegistrationRepository.getVenueCapacityInfo(venueId);
-                res.status(200).json({
-                    success: true,
-                    data: capacityInfo,
-                });
-            }
-            catch (error) {
-                console.error("Error getting venue capacity info:", error);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to retrieve venue capacity information.",
-                });
+                console.error(`Error retrieving QR code image for registration ${req.params.id}:`, error);
+                res.status(500).json({ success: false, message: "Failed to retrieve QR code image due to a server error." });
             }
         });
     }
 }
 exports.RegistrationController = RegistrationController;
+_a = RegistrationController;
+/**
+ * Regenerates the QR code for a specific registration.
+ * Deletes the old QR code file and saves the new one.
+ */
+RegistrationController.regenerateQrCode = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id: registrationId } = req.params;
+        // 1. Find the existing registration
+        const existingRegistration = yield RegistrationRepository_1.RegistrationRepository.findById(registrationId);
+        if (!existingRegistration) {
+            res.status(404).json({ success: false, message: "Registration not found." });
+            return;
+        }
+        // 2. Delete the old QR code file if it exists
+        if (existingRegistration.qrCode) {
+            const oldQrCodePath = path_1.default.join(__dirname, '..', '..', existingRegistration.qrCode);
+            if (fs_1.default.existsSync(oldQrCodePath)) {
+                fs_1.default.unlinkSync(oldQrCodePath); // Synchronous for simplicity, async for production
+                console.log(`Deleted old QR code file: ${oldQrCodePath}`);
+            }
+        }
+        // 3. Generate a new QR code
+        const newQrCodeFilePath = yield QrCodeService_1.QrCodeService.generateQrCode(existingRegistration.registrationId, existingRegistration.user.userId, existingRegistration.event.eventId);
+        // 4. Update the registration with the new QR code file path
+        const updatedRegistration = yield RegistrationRepository_1.RegistrationRepository.update(registrationId, { qrCode: newQrCodeFilePath });
+        if (!updatedRegistration) {
+            // This case should ideally not be hit if existingRegistration was found
+            throw new Error("Failed to update registration with new QR code path.");
+        }
+        res.status(200).json({
+            success: true,
+            message: "QR code regenerated successfully.",
+            data: updatedRegistration,
+            qrCodeUrl: `/static/${newQrCodeFilePath}`
+        });
+    }
+    catch (error) {
+        console.error(`Error regenerating QR code for registration ${req.params.id}:`, error);
+        res.status(500).json({ success: false, message: "Failed to regenerate QR code." });
+    }
+});
+/**
+ * Validates a raw QR code string (the base64 encoded data) and returns the associated registration.
+ * This is typically used for check-in scenarios.
+ */
+RegistrationController.validateQrCode = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { qrCode } = req.params; // Expecting the raw base64 string from the QR code
+        if (!qrCode) {
+            res.status(400).json({ success: false, message: "QR code string is required." });
+            return;
+        }
+        // Use the repository method that leverages QrCodeService for validation
+        const registration = yield RegistrationRepository_1.RegistrationRepository.findByQRCode(qrCode);
+        if (registration === null) {
+            res.status(404).json({ success: false, message: "Invalid or expired QR code, or registration not found." });
+            return;
+        }
+        res.status(200).json({
+            success: true,
+            message: "QR code validated successfully.",
+            data: registration
+        });
+    }
+    catch (error) {
+        console.error(`Error validating QR code:`, error);
+        res.status(500).json({ success: false, message: "Failed to validate QR code." });
+    }
+});

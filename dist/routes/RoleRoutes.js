@@ -8,4 +8,5 @@ router.get("/", RoleController_1.RoleController.getAll);
 router.get("/:id", RoleController_1.RoleController.getById);
 router.put("/:id", RoleController_1.RoleController.update);
 router.delete("/:id", RoleController_1.RoleController.deleteById);
+router.post('/search-by-name', RoleController_1.RoleController.getRolesByName);
 exports.default = router;

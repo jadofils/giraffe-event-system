@@ -16,12 +16,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
 const AppConfig_1 = require("./config/AppConfig");
 const Database_1 = require("./config/Database");
+const redis_1 = require("./config/redis"); // <-- Import the Redis initialization function
 // Bootstrap function to start the application
 function bootstrap() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             // Initialize database connection
             yield (0, Database_1.initializeDatabase)();
+            console.log('Database initialized successfully.'); // Add a success log
+            // Initialize Redis connection
+            yield (0, redis_1.initializeRedis)(); // <-- Await Redis connection
+            console.log('Redis initialized successfully.'); // Add a success log
             // Start the server
             app_1.default.listen(AppConfig_1.AppConfig.PORT, () => {
                 console.log(`Server running on port ${AppConfig_1.AppConfig.PORT}`);
@@ -30,7 +35,7 @@ function bootstrap() {
         }
         catch (error) {
             console.error('Failed to start server:', error);
-            process.exit(1);
+            process.exit(1); // Exit if critical services fail to initialize
         }
     });
 }

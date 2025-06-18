@@ -13,20 +13,34 @@ exports.RoleRepository = void 0;
 // src/repositories/RoleRepository.ts
 const Database_1 = require("../config/Database");
 const Role_1 = require("../models/Role");
+const typeorm_1 = require("typeorm"); // Import ILike for case-insensitive search
 class RoleRepository {
     static findRoleByName(roleName) {
         return __awaiter(this, void 0, void 0, function* () {
             const roleRepository = Database_1.AppDataSource.getRepository(Role_1.Role);
-            return yield roleRepository.findOne({ where: { roleName },
-                relations: ['users',] });
+            return yield roleRepository.findOne({
+                where: { roleName },
+                relations: ['users']
+            });
         });
     }
+    // --- NEW METHOD FOR CASE-INSENSITIVE SEARCH ---
+    static findRolesByNameIgnoreCase(roleName) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const roleRepository = Database_1.AppDataSource.getRepository(Role_1.Role);
+            return yield roleRepository.find({
+                where: { roleName: (0, typeorm_1.ILike)(`%${roleName}%`) }, // Using ILike for case-insensitive LIKE
+                relations: ['users'] // Include relations if needed
+            });
+        });
+    }
+    // --- END NEW METHOD ---
     static createRole(data) {
         var _a, _b, _c;
         const role = new Role_1.Role();
-        role.roleName = (_a = data.RoleName) !== null && _a !== void 0 ? _a : '';
-        role.description = (_b = data.Description) !== null && _b !== void 0 ? _b : '';
-        role.permissions = (_c = data.Permissions) !== null && _c !== void 0 ? _c : [];
+        role.roleName = (_a = data.roleName) !== null && _a !== void 0 ? _a : '';
+        role.description = (_b = data.description) !== null && _b !== void 0 ? _b : '';
+        role.permissions = (_c = data.permissions) !== null && _c !== void 0 ? _c : [];
         return role;
     }
     static saveRole(role) {
@@ -38,7 +52,8 @@ class RoleRepository {
             }
             try {
                 yield roleRepository.save(role);
-                return { success: true, message: 'Role saved successfully',
+                return {
+                    success: true, message: 'Role saved successfully',
                     role: {
                         roleId: role.roleId,
                         roleName: role.roleName,
@@ -70,7 +85,7 @@ class RoleRepository {
         return __awaiter(this, void 0, void 0, function* () {
             const roleRepository = Database_1.AppDataSource.getRepository(Role_1.Role);
             return yield roleRepository.find({
-                relations: ['users',], // Include relations if needed
+                relations: ['users'], // Include relations if needed
             });
         });
     }
@@ -92,9 +107,9 @@ class RoleRepository {
                     return { error: "Role not found." };
                 }
                 // Structured updates
-                role.roleName = roleData.RoleName || role.roleName;
-                role.description = roleData.Description || role.description;
-                role.permissions = roleData.Permissions || role.permissions;
+                role.roleName = roleData.roleName || role.roleName;
+                role.description = roleData.description || role.description;
+                role.permissions = roleData.permissions || role.permissions;
                 const updatedRole = yield roleRepository.save(role);
                 return updatedRole;
             }

@@ -26,9 +26,9 @@ class RoleController {
                     return;
                 }
                 const role = RoleRepository_1.RoleRepository.createRole({
-                    RoleName: roleName,
-                    Description: description,
-                    Permissions: permissions,
+                    roleName: roleName,
+                    description: description,
+                    permissions: permissions,
                 });
                 const result = yield RoleRepository_1.RoleRepository.saveRole(role);
                 if (!result.success) {
@@ -90,9 +90,9 @@ class RoleController {
                     return;
                 }
                 const updatedRole = yield RoleRepository_1.RoleRepository.updateRole(id, {
-                    RoleName: roleName,
-                    Description: description,
-                    Permissions: permissions,
+                    roleName: roleName,
+                    description: description,
+                    permissions: permissions,
                 });
                 if ('error' in updatedRole) {
                     res.status(400).json({ success: false, message: updatedRole.error });
@@ -131,6 +131,27 @@ class RoleController {
             catch (error) {
                 console.error('Error deleting role:', error);
                 res.status(500).json({ success: false, message: 'Internal server error.' });
+            }
+        });
+    }
+    static getRolesByName(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { roleName } = req.body; // Get roleName from the request body
+            if (!roleName || typeof roleName !== 'string' || roleName.trim() === '') {
+                res.status(400).json({ success: false, message: 'Role name is required in the request body.' });
+                return;
+            }
+            try {
+                const roles = yield RoleRepository_1.RoleRepository.findRolesByNameIgnoreCase(roleName);
+                if (roles.length === 0) {
+                    res.status(404).json({ success: false, message: `No roles found matching '${roleName}'.` });
+                    return;
+                }
+                res.status(200).json({ success: true, data: roles });
+            }
+            catch (error) {
+                console.error('Error fetching roles by name (case-insensitive):', error);
+                res.status(500).json({ success: false, message: 'Failed to retrieve roles due to a server error.' });
             }
         });
     }

@@ -1,56 +1,132 @@
 "use strict";
+//@ts-check
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const TicketService_1 = require("../services/registrations/TicketService");
 const RegistrationController_1 = require("../controller/RegistrationController");
+const IsAdmin_1 = require("../middlewares/IsAdmin");
+const AuthMiddleware_1 = require("../middlewares/AuthMiddleware");
+const RegistrationRepository_1 = require("../repositories/RegistrationRepository"); // <--- ADD THIS IMPORT
 const router = express_1.default.Router();
-const registrationController = new RegistrationController_1.RegistrationController();
 // Core Registration Management
+//@ts-expect-error // Consider resolving this type error if createRegistration is not correctly typed
 router.post('/', RegistrationController_1.RegistrationController.createRegistration);
 router.get('/', RegistrationController_1.RegistrationController.getAllRegistrations);
-router.get('/:id', RegistrationController_1.RegistrationController.getRegistrationById);
+router.get('/:userId', AuthMiddleware_1.authenticate, IsAdmin_1.isAdmin, RegistrationController_1.RegistrationController.getUserTicketCostSummary);
 router.put('/:id', RegistrationController_1.RegistrationController.updateRegistration);
-router.delete('/:id', RegistrationController_1.RegistrationController.deleteRegistration);
-// Event-Specific Registrations
-router.get('/events/:eventId/registrations', RegistrationController_1.RegistrationController.getEventRegistrations);
-router.post('/events/:eventId/register', RegistrationController_1.RegistrationController.registerForEvent);
-router.get('/events/:eventId/registrations/stats', RegistrationController_1.RegistrationController.getEventRegistrationStats);
-// User-Specific Registrations
-router.get('/users/:userId/registrations', RegistrationController_1.RegistrationController.getUserRegistrations);
-router.get('/users/:userId/registrations/upcoming', RegistrationController_1.RegistrationController.getUserUpcomingRegistrations);
-router.get('/users/:userId/registrations/history', RegistrationController_1.RegistrationController.getUserRegistrationHistory);
-// QR Code Management
-router.get('/:id/qrcode', RegistrationController_1.RegistrationController.getRegistrationQrCode);
-router.post('/:id/qrcode/regenerate', RegistrationController_1.RegistrationController.regenerateQrCode);
-router.get('/qrcode/:qrCode', RegistrationController_1.RegistrationController.validateQrCode);
-// Attendance Management
-router.post('/:id/checkin', RegistrationController_1.RegistrationController.checkInAttendee);
-router.post('/checkin/qr', RegistrationController_1.RegistrationController.checkInViaQrCode);
-router.get('/:id/attendance', RegistrationController_1.RegistrationController.getAttendanceStatus);
-router.put('/:id/attendance', RegistrationController_1.RegistrationController.updateAttendanceStatus);
-router.get('/events/:eventId/attendance', RegistrationController_1.RegistrationController.getEventAttendanceReport);
-// Payment Management
-router.get('/:id/payment', RegistrationController_1.RegistrationController.getPaymentStatus);
-router.post('/:id/payment', RegistrationController_1.RegistrationController.processPayment);
-router.put('/:id/payment', RegistrationController_1.RegistrationController.updatePaymentStatus);
-router.post('/:id/payment/refund', RegistrationController_1.RegistrationController.processRefund);
-// Ticket Management
-router.get('/:id/ticket', RegistrationController_1.RegistrationController.getTicketDetails);
-router.post('/:id/ticket/transfer', RegistrationController_1.RegistrationController.transferTicket);
-router.post('/:id/ticket/resend', RegistrationController_1.RegistrationController.resendTicket);
-router.get('/:id/ticket/download', RegistrationController_1.RegistrationController.downloadTicket);
-// Bulk Operations
-router.post('/bulk', RegistrationController_1.RegistrationController.bulkCreateRegistrations);
-router.put('/bulk/checkin', RegistrationController_1.RegistrationController.bulkCheckIn);
-router.get('/export/:eventId', RegistrationController_1.RegistrationController.exportRegistrations);
-// Administrative Routes
-router.get('/pending', RegistrationController_1.RegistrationController.getPendingRegistrations);
-router.put('/:id/approve', RegistrationController_1.RegistrationController.approveRegistration);
-router.put('/:id/reject', RegistrationController_1.RegistrationController.rejectRegistration);
-router.get('/reports', RegistrationController_1.RegistrationController.generateRegistrationReports);
-// Venue-Specific Routes
-router.get('/venues/:venueId/registrations', RegistrationController_1.RegistrationController.getVenueRegistrations);
-router.get('/venues/:venueId/capacity', RegistrationController_1.RegistrationController.getVenueCapacityInfo);
+// --- Ticket Management Routes ---
+// Get ticket details with calculated price
+router.get("/:id/details", AuthMiddleware_1.authenticate, (req, res) => TicketService_1.TicketService.getTicketDetails(req, res));
+// Transfer a ticket to another user
+router.put("/:id/transfer", AuthMiddleware_1.authenticate, TicketService_1.TicketService.transferTicket.bind(TicketService_1.TicketService));
+// Add tickets to a registration (increment quantity)
+router.put("/:id/add-tickets", AuthMiddleware_1.authenticate, TicketService_1.TicketService.AddToCartTheNoOfTickets.bind(TicketService_1.TicketService));
+// Cancel specific tickets within a registration
+router.put("/:id/cancel", AuthMiddleware_1.authenticate, TicketService_1.TicketService.cancelRegistration.bind(TicketService_1.TicketService));
+// Resend the ticket email for a registration
+router.post("/:id/resend-ticket", AuthMiddleware_1.authenticate, (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
+    try {
+        // Use AuthenticatedRequest type if available, otherwise keep (req as any)
+        const typedReq = req;
+        const loggedInUserId = (_a = typedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+        const loggedInUserRoles = ((_c = (_b = typedReq.user) === null || _b === void 0 ? void 0 : _b.roles) === null || _c === void 0 ? void 0 : _c.map((role) => typeof role === 'string' ? role : role.roleName)) || [];
+        const { id: registrationId } = typedReq.params;
+        const { userEmail } = typedReq.body; // Optional: specific email to resend to
+        if (!loggedInUserId) {
+            res.status(401).json({ success: false, message: 'Unauthorized: User information is missing.' });
+            return;
+        }
+        if (!registrationId) {
+            res.status(400).json({ success: false, message: 'Registration ID is required.' });
+            return;
+        }
+        // Authorization Check: Fetch registration to apply 'isAuthorizedForRegistration' logic
+        // This ensures only admins, managers, or the owner/buyer can resend tickets.
+        const registration = yield RegistrationRepository_1.RegistrationRepository.getRepository().findOne({
+            where: { registrationId },
+            relations: ['buyer', 'user'] // Need buyer/user for authorization
+        });
+        if (!registration) {
+            res.status(404).json({ success: false, message: 'Registration not found.' });
+            return;
+        }
+        // isAuthorizedForRegistration is a private method in TicketService, but can be accessed for testing purposes with []
+        // In a real application, you might want to expose a public static `authorizeRegistrationAccess` helper on TicketService.
+        if (!TicketService_1.TicketService['isAuthorizedForRegistration'](loggedInUserId, loggedInUserRoles, registration)) {
+            res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to resend this ticket.' });
+            return;
+        }
+        const success = yield TicketService_1.TicketService.resendTicket(registrationId, userEmail);
+        if (success) {
+            res.status(200).json({ success: true, message: 'Ticket email resent successfully.' });
+        }
+        else {
+            res.status(500).json({ success: false, message: 'Failed to resend ticket email. Check server logs.' });
+        }
+    }
+    catch (error) {
+        console.error(`Error in resend-ticket route for registration ${req.params.id}:`, error);
+        next(error); // Pass the error to the next middleware (error handling middleware)
+    }
+}));
+// Generate and download the ticket PDF for a registration
+router.get("/:id/ticket-pdf", AuthMiddleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
+    // Use AuthenticatedRequest type if available, otherwise keep (req as any)
+    const typedReq = req;
+    const loggedInUserId = (_a = typedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+    const loggedInUserRoles = ((_c = (_b = typedReq.user) === null || _b === void 0 ? void 0 : _b.roles) === null || _c === void 0 ? void 0 : _c.map((role) => typeof role === 'string' ? role : role.roleName)) || [];
+    const { id: registrationId } = typedReq.params;
+    if (!loggedInUserId) {
+        res.status(401).json({ success: false, message: 'Unauthorized: User information is missing.' });
+        return;
+    }
+    if (!registrationId) {
+        res.status(400).json({ success: false, message: 'Registration ID is required.' });
+        return;
+    }
+    try {
+        // Authorization Check: Fetch registration to apply 'isAuthorizedForRegistration' logic
+        // This ensures only admins, managers, or the owner/buyer can download the PDF.
+        const registration = yield RegistrationRepository_1.RegistrationRepository.getRepository().findOne({
+            where: { registrationId },
+            relations: ['buyer', 'user']
+        });
+        if (!registration) {
+            res.status(404).json({ success: false, message: 'Registration not found.' });
+            return;
+        }
+        if (!TicketService_1.TicketService['isAuthorizedForRegistration'](loggedInUserId, loggedInUserRoles, registration)) {
+            res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to access this ticket PDF.' });
+            return;
+        }
+        const pdfBuffer = yield TicketService_1.TicketService.generateTicketPdf(registrationId);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=ticket-${registrationId}.pdf`);
+        res.send(pdfBuffer);
+    }
+    catch (error) {
+        console.error(`Error in ticket-pdf route for registration ${registrationId}:`, error);
+        res.status(500).json({ success: false, message: 'Failed to generate ticket PDF due to a server error.' });
+    }
+}));
+// --- QR Code Management Routes ---
+router.delete("/:registrationId", RegistrationController_1.RegistrationController.deleteRegistration);
+router.get("/:id/qr-code/image", RegistrationController_1.RegistrationController.getRegistrationQrCodeImage);
+router.get("/:id/qr-code", RegistrationController_1.RegistrationController.getRegistrationQrCode);
+router.post("/:id/qr-code/regenerate", RegistrationController_1.RegistrationController.regenerateQrCode);
+router.get("/qr-code/validate/:qrCode", RegistrationController_1.RegistrationController.validateQrCode);
 exports.default = router;
