@@ -7,6 +7,8 @@ import { Role } from "../../models/Role";
 import { Organization } from "../../models/Organization"; // Import Organization model
 import { UserInterface } from "../../interfaces/UserInterface"; // Import UserInterface
 import bcrypt from "bcryptjs";
+import { OrganizationRepository } from "../../repositories/OrganizationRepository";
+import { AuthenticatedRequest } from "../../middlewares/AuthMiddleware";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -648,5 +650,15 @@ export class UserController {
         message: 'Internal server error occurred while updating user role',
       });
     }
+  }
+
+  static async getMyOrganizations(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const result = await OrganizationRepository.getOrganizationsByUserId(userId);
+    res.status(result.success ? 200 : 404).json(result);
   }
 }

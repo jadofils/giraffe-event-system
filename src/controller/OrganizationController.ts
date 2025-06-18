@@ -4,8 +4,6 @@ import { OrganizationInterface } from "../interfaces/OrganizationInterface";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 
 export class OrganizationController {
-  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
   /**
    * Get all organizations
    * @route GET /organizations
@@ -33,7 +31,7 @@ export class OrganizationController {
   static async getById(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
@@ -124,7 +122,7 @@ export class OrganizationController {
     const { id } = req.params;
     const data: Partial<OrganizationInterface> = req.body;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
@@ -179,7 +177,7 @@ export class OrganizationController {
   static async delete(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
@@ -206,12 +204,12 @@ export class OrganizationController {
     const { id } = req.params;
     const { userIds }: { userIds: string[] } = req.body;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
-    if (!userIds?.length || userIds.some((uid) => !this.UUID_REGEX.test(uid))) {
+    if (!userIds?.length || userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
       res.status(400).json({ success: false, message: "Valid user IDs are required" });
       return;
     }
@@ -238,12 +236,12 @@ export class OrganizationController {
     const { id } = req.params;
     const { userIds }: { userIds: string[] } = req.body;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
-    if (!userIds?.length || userIds.some((uid) => !this.UUID_REGEX.test(uid))) {
+    if (!userIds?.length || userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
       res.status(400).json({ success: false, message: "Valid user IDs are required" });
       return;
     }
@@ -269,7 +267,7 @@ export class OrganizationController {
   static async getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || !this.UUID_REGEX.test(id)) {
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
       res.status(400).json({ success: false, message: "Valid organization ID is required" });
       return;
     }
@@ -285,5 +283,20 @@ export class OrganizationController {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  }
+
+  /**
+   * Get all organizations for the authenticated user
+   * @route GET /organizations/my
+   * @access Protected
+   */
+  static async getMyOrganizations(req: any, res: any): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const result = await OrganizationRepository.getOrganizationsByUserId(userId);
+    res.status(result.success ? 200 : 404).json(result);
   }
 }
