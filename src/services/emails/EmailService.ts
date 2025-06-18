@@ -11,6 +11,7 @@ declare module 'express-session' {
     username?: string;
     lastname?: string;
     firstname?: string;
+    phoneNumber?: string;
   }
 }
 

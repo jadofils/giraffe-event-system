@@ -10,15 +10,12 @@ export class VenueBookingInterface {
   venueId!: string;
   organizerId!: string;
   organizationId!: string;
-  startDate!: Date;
-  endDate!: Date;
-  startTime!: string;
-  endTime!: string;
   approvalStatus!: ApprovalStatus;
-  event?: EventInterface;
-  venue?: VenueInterface;
-  organizer?: UserInterface;
-  organization?: OrganizationInterface;
+ event?: EventInterface | null;
+venue?: VenueInterface | null;
+organizer?: UserInterface | null;
+organization?: OrganizationInterface | null;
+
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
@@ -30,10 +27,6 @@ export class VenueBookingInterface {
       venueId: data.venueId || '',
       organizerId: data.organizerId || '',
       organizationId: data.organizationId || '',
-      startDate: data.startDate || new Date(),
-      endDate: data.endDate || new Date(),
-      startTime: data.startTime || '',
-      endTime: data.endTime || '',
       approvalStatus: data.approvalStatus || ApprovalStatus.PENDING,
       event: data.event,
       venue: data.venue,

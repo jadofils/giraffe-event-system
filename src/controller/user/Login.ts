@@ -1,18 +1,26 @@
-// src/controller/auth/LoginController.ts
-import { Request, Response } from 'express';
-import { AppDataSource } from '../../config/Database';
-import { User } from '../../models/User';
+import { Request, Response } from "express";
+import { AppDataSource } from "../../config/Database";
+import { User } from "../../models/User";
 import * as bcrypt from "bcryptjs";
-import { UserController } from './Registration';
-import jwt from 'jsonwebtoken';
-import PasswordService from '../../services/emails/EmailService';
+import jwt from "jsonwebtoken";
+import PasswordService from "../../services/emails/EmailService";
+import { CacheService } from "../../services/CacheService";
 
-const SECRET_KEY = process.env.JWT_SECRET || 'sdbgvkghdfcnmfxdxdfggj';
+const SECRET_KEY = process.env.JWT_SECRET || "sdbgvkghdfcnmfxdxdfggj";
 const COOKIE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL = 3600; // 1 hour, consistent with VenueBookingRepository
 
-export class LoginController extends UserController {
-  static async loginWithDefaultPassward(req: Request, res: Response): Promise<void> {
+export class LoginController {
+  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  /**
+   * Login using default or user password
+   * @route POST /api/auth/login/default
+   * @access Public
+   */
+  static async loginWithDefaultPassword(req: Request, res: Response): Promise<void> {
     if (!AppDataSource.isInitialized) {
+      console.error("[Login Attempt] Database not initialized");
       res.status(500).json({ success: false, message: "Database not initialized" });
       return;
     }
@@ -20,36 +28,51 @@ export class LoginController extends UserController {
     const { identifier, password } = req.body;
 
     if (!identifier || !password) {
-      res.status(400).json({
-        success: false,
-        message: "Please enter both email/username and password.",
-      });
+      console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
+      res.status(400).json({ success: false, message: "Please enter both identifier and password." });
       return;
     }
 
     const userRepository = AppDataSource.getRepository(User);
 
     try {
-      const user = await userRepository.findOne({
-        where: [{ email: identifier }, { username: identifier }],
-        relations: ["role", "organizations"],
-      });
+      const cacheKey = `user:identifier:${identifier}`;
+      const user = await CacheService.getOrSetSingle(
+        cacheKey,
+        userRepository,
+        async () => {
+          return await userRepository.findOne({
+            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
+            relations: ["role", "organizations"],
+          });
+        },
+        CACHE_TTL
+      );
 
       if (!user) {
-        res.status(404).json({
-          success: false,
-          message: "No account found with that email or username.",
-        });
+        console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
+        res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
         return;
       }
 
-      // Verify session data matches
-      if (!req.session?.defaultPassword || 
-          !(req.session.defaultEmail === user.email || req.session.username === user.username)) {
-        res.status(401).json({
-          success: false,
-          message: "Session data doesn't match user account.",
-        });
+      // Validate user UUID
+      if (!LoginController.UUID_REGEX.test(user.userId)) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
+        res.status(500).json({ success: false, message: "Invalid user ID format." });
+        return;
+      }
+
+      // Verify session data
+      if (
+        !req.session?.defaultPassword ||
+        !(
+          req.session.defaultEmail === user.email ||
+          req.session.username === user.username ||
+          req.session.phoneNumber === user.phoneNumber
+        )
+      ) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid session data`);
+        res.status(401).json({ success: false, message: "Session data doesn't match user account." });
         return;
       }
 
@@ -61,15 +84,32 @@ export class LoginController extends UserController {
         isMatch = true;
         isSessionPasswordLogin = true;
         PasswordService.invalidateDefaultPassword(req, user.email);
+        // Clear session data
+        req.session.defaultPassword = undefined;
+        req.session.defaultEmail = undefined;
+        req.session.username = undefined;
+        req.session.phoneNumber = undefined;
       } else if (user.password) {
         isMatch = await bcrypt.compare(password, user.password);
       }
 
       if (!isMatch) {
-        res.status(401).json({
-          success: false,
-          message: "Incorrect password. Please try again.",
-        });
+        console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
+        res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
+        return;
+      }
+
+      // Validate organization
+      if (!user.organizations || user.organizations.length === 0) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
+        res.status(401).json({ success: false, message: "User is not associated with any organization." });
+        return;
+      }
+
+      const firstOrganization = user.organizations[0];
+      if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
+        res.status(500).json({ success: false, message: "Invalid organization ID format." });
         return;
       }
 
@@ -79,7 +119,13 @@ export class LoginController extends UserController {
           userId: user.userId,
           email: user.email,
           username: user.username,
+          phoneNumber: user.phoneNumber,
+          organizationId: firstOrganization.organizationId,
           needsPasswordReset: isSessionPasswordLogin,
+          roles: {
+            roleId: user.role.roleId,
+            roleName: user.role.roleName,
+          },
         },
         SECRET_KEY,
         { expiresIn: "24h" }
@@ -94,156 +140,147 @@ export class LoginController extends UserController {
 
       const { password: _, ...userData } = user;
 
+      console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+
       res.status(200).json({
         success: true,
-        message: isSessionPasswordLogin 
-          ? "Login successful! Please create a new password." 
-          : "Login successful!",
+        message: isSessionPasswordLogin ? "Login successful! Please create a new password." : "Login successful!",
         user: { ...userData, needsPasswordReset: isSessionPasswordLogin },
         token,
       });
-
     } catch (error) {
-      console.error("Login error:", error);
+      console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
       res.status(500).json({
         success: false,
         message: "Something went wrong while logging in.",
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }
 
-static async login(req: Request, res: Response): Promise<void> {
-        const { identifier, password } = req.body;
+  /**
+   * Login using user password
+   * @route POST /api/auth/login
+   * @access Public
+   */
+  static async login(req: Request, res: Response): Promise<void> {
+    const { identifier, password } = req.body;
 
-        // Validate request
-        if (!identifier || !password) {
-            res.status(400).json({
-                success: false,
-                message: "Please provide both username/email and password."
-            });
-            return;
-        }
-
-        const userRepository = AppDataSource.getRepository(User);
-
-        try {
-            // Find user by email or username, including organizations
-            const user = await userRepository.findOne({
-                where: [{ email: identifier }, { username: identifier }],
-                relations: ["organizations","role"] // Eager load organizations
-            });
-
-            if (!user) {
-                console.log(`[Login Attempt] Identifier: ${identifier} - No account found.`); // Log attempt for non-existent user
-                res.status(404).json({
-                    success: false,
-                    message: "No account found with that email or username."
-                });
-                return;
-            }
-
-            // Check password
-            let isMatch = false;
-            // The original code had `if (!password) { isMatch = true; }` which implies a default password scenario.
-            // If this is intended for initial user setup without a password, be very careful with security.
-            // For a standard login, `password` should always be present and validated against the hashed password.
-            // I'm assuming for a regular login flow, `password` will always be provided and hashed.
-            if (user.password) {
-                isMatch = await bcrypt.compare(password, user.password);
-            } else {
-                // Handle case where user has no password set (e.g., created via external service)
-                // You might want to prevent login or force a password reset here.
-                // For simplicity, let's assume `isMatch` remains false if no password to compare against.
-                isMatch = false;
-            }
-
-
-            if (!isMatch) {
-                console.log(`[Login Attempt] User ID: ${user.userId} (${identifier}) - Incorrect password.`); // Log failed password attempt
-                res.status(401).json({
-                    success: false,
-                    message: "Incorrect password. Please try again."
-                });
-                return;
-            }
-
-            // Ensure organizations exist before generating token
-            if (!user.organizations || user.organizations.length === 0) {
-                console.log(`[Login Attempt] User ID: ${user.userId} (${identifier}) - Not associated with any organization.`); // Log for missing organization
-                res.status(401).json({
-                    success: false,
-                    message: "Unauthorized: User is not associated with any organization."
-                });
-                return;
-            }
-
-            // Extract full organization details
-            const organizations = user.organizations.map(org => ({
-                organizationId: org.organizationId,
-                organizationName: org.organizationName,
-                description: org.description,
-                contactEmail: org.contactEmail,
-                contactPhone: org.contactPhone,
-                address: org.address,
-                organizationType: org.organizationType
-            }));
-
-            // Console log the organizations found (for debugging)
-            console.log("Organizations found for user:", JSON.stringify(organizations, null, 2));
-
-            // Extract first organization ID
-            const firstOrganizationId = organizations[0].organizationId;
-            console.log("First Organization ID for user:", firstOrganizationId);
-
-            // Determine the primary role for logging. If `user.roles` is an array of strings,
-            // you might pick the first one or prioritize based on your application logic.
-            const userRoles = user.role.roleId ? user.role.roleId : 'N/A';
-
-            // --- Console log role name and logged-in user ID ---
-            console.log(`[Login Success] User ID: ${user.userId}, Role(s): ${userRoles}`);
-
-
-            // Generate JWT token with full organization details AND first organization ID
-            const token = jwt.sign(
-                {
-                    userId: user.userId,
-                    email: user.email,
-                    username: user.username,
-                    organizations, // Store full organization details
-                    organizationId: firstOrganizationId, // Store first organization ID separately
-                    roles:{
-                      roleId:user.role
-                    },
-                },
-                SECRET_KEY,
-                { expiresIn: "24h" }
-            );
-
-            // Send the token as response
-            res.status(200).json({
-                success: true,
-                user: {
-                    userId: user.userId,
-                    email: user.email,
-                    username: user.username,
-                    roles: user.roles,
-                    // You're mapping `organizationId` to `organizationId` which is redundant here.
-                    // It should just be `organizations: organizations` if you want the full array of objects.
-                    organizations: organizations, // Send full organization details
-                },
-                message: "Login successful!",
-                token
-            });
-
-        } catch (error) {
-            console.error("Login error:", error);
-            res.status(500).json({
-                success: false,
-                message: "Something went wrong while logging in.",
-                error: error instanceof Error ? error.message : 'Unknown error',
-            });
-        }
+    // Validate request
+    if (!identifier || !password) {
+      console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
+      res.status(400).json({ success: false, message: "Please provide both identifier and password." });
+      return;
     }
 
+    const userRepository = AppDataSource.getRepository(User);
+
+    try {
+      const cacheKey = `user:identifier:${identifier}`;
+      const user = await CacheService.getOrSetSingle(
+        cacheKey,
+        userRepository,
+        async () => {
+          return await userRepository.findOne({
+            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
+            relations: ["organizations", "role"],
+          });
+        },
+        CACHE_TTL
+      );
+
+      if (!user) {
+        console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
+        res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
+        return;
+      }
+
+      // Validate user UUID
+      if (!LoginController.UUID_REGEX.test(user.userId)) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
+        res.status(500).json({ success: false, message: "Invalid user ID format." });
+        return;
+      }
+
+      // Check password
+      if (!user.password || !(await bcrypt.compare(password, user.password))) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
+        res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
+        return;
+      }
+
+      // Validate organization
+      if (!user.organizations || user.organizations.length === 0) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
+        res.status(401).json({ success: false, message: "User is not associated with any organization." });
+        return;
+      }
+
+      const firstOrganization = user.organizations[0];
+      if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
+        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
+        res.status(500).json({ success: false, message: "Invalid organization ID format." });
+        return;
+      }
+
+      // Prepare organization data for JWT
+      const organization = {
+        organizationId: firstOrganization.organizationId,
+        organizationName: firstOrganization.organizationName,
+        description: firstOrganization.description,
+        contactEmail: firstOrganization.contactEmail,
+        contactPhone: firstOrganization.contactPhone,
+        address: firstOrganization.address,
+        organizationType: firstOrganization.organizationType,
+      };
+
+      // Generate JWT token
+      const token = jwt.sign(
+        {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          phoneNumber: user.phoneNumber,
+          organization,
+          organizationId: firstOrganization.organizationId,
+          roles: {
+            roleId: user.role.roleId,
+            roleName: user.role.roleName,
+          },
+        },
+        SECRET_KEY,
+        { expiresIn: "24h" }
+      );
+
+      res.cookie("authToken", token, {
+        httpOnly: true,
+        maxAge: COOKIE_EXPIRATION,
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        secure: process.env.NODE_ENV === "production",
+      });
+
+      console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+
+      res.status(200).json({
+        success: true,
+        message: "Login successful!",
+        user: {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          phoneNumber: user.phoneNumber,
+          roles: user.role,
+          organizations: user.organizations,
+        },
+        token,
+      });
+    } catch (error) {
+      console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
+      res.status(500).json({
+        success: false,
+        message: "Something went wrong while logging in.",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
 }

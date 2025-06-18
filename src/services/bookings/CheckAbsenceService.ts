@@ -1,198 +1,263 @@
-import { VenueBookingInterface } from "../../interfaces/VenueBookingInterface";
-import { AppDataSource } from "../../config/Database";
-import { VenueBooking } from "../../models/VenueBooking";
-import { Between } from "typeorm";
-import { AuthenticatedRequest } from "../../middlewares/AuthMiddleware";
-import { checkConflict } from "./BookingService";
+import { AppDataSource } from '../../config/Database';
+import { VenueBooking } from '../../models/VenueBooking';
+import { Event } from '../../models/Event';
+import { AuthenticatedRequest } from '../../middlewares/AuthMiddleware';
+import { VenueBookingInterface } from '../../interfaces/VenueBookingInterface';
+import { checkConflict } from './BookingService';
 
 /**
- * Service to check availability of time slots
+ * Service to check availability of time slots for venue bookings.
  */
 export class CheckAbsenceService {
   /**
-   * Check available days, hours, and minutes for a specific venue.
+   * Checks available days, hours, and minutes for a specific venue using the associated event's dates and times.
    * @param req - Authenticated request containing user token.
-   * @param venueId - The venue ID to check availability.
-   * @param startDate - The start date range.
-   * @param endDate - The end date range.
-   * @returns List of available time slots, free days, and detailed gaps.
+   * @param venueId - The venue ID to check availability for.
+   * @param queryStartDate - The start date range for the availability check.
+   * @param queryEndDate - The end date range for the availability check.
+   * @returns Object containing available days, hours, and minutes, or an error response.
    */
   static async getAvailableSlots(
     req: AuthenticatedRequest,
     venueId: string,
-    startDate: Date,
-    endDate: Date
-  ): Promise<{ availableDays: string[], availableHours: string[], availableMinutes: string[] } | { success: false; message: string }> {
+    queryStartDate: Date,
+    queryEndDate: Date
+  ): Promise<{
+    availableDays: string[];
+    availableHours: string[];
+    availableMinutes: string[];
+  } | { success: false; message: string }> {
     try {
-      // Ensure user is authenticated
+      // Validate user authentication
       const user = req.user;
       if (!user) {
-        return { success: false, message: "Unauthorized access. User token is required." };
+        return { success: false, message: 'Unauthorized access. User token is required.' };
       }
-      
+
       console.log(`Checking availability for User: ${user.userId}, Organization: ${user.organizationId}`);
-      
+
+      // Fetch approved bookings with their associated events
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
-      
-      // Fetch booked slots for the venue within the date range
-      const bookedSlots = await bookingRepo.find({
-        where: {
-          venue: { venueId: venueId },
-          startDate: Between(startDate, endDate),
-        },
-        order: { startDate: "ASC", startTime: "ASC" },
-      });
-      
+      const bookedSlots = await bookingRepo
+        .createQueryBuilder('booking')
+        .leftJoinAndSelect('booking.event', 'event')
+        .where('booking.venueVenueId = :venueId', { venueId })
+        .andWhere('booking.approvalStatus = :status', { status: 'approved' })
+        .andWhere('event.startDate BETWEEN :queryStartDate AND :queryEndDate', {
+          queryStartDate,
+          queryEndDate,
+        })
+        .orderBy('event.startDate', 'ASC')
+        .addOrderBy('event.startTime', 'ASC')
+        .getMany();
+
       const availableDays: string[] = [];
       const availableHours: string[] = [];
       const availableMinutes: string[] = [];
-      
-      let currentDate = new Date(startDate);
-      
-      while (currentDate <= endDate) {
+
+      let currentDate = new Date(queryStartDate);
+      currentDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+      const endBoundaryDate = new Date(queryEndDate);
+      endBoundaryDate.setHours(23, 59, 59, 999); // Normalize to end of day
+
+      while (currentDate.getTime() <= endBoundaryDate.getTime()) {
         const currentDateStr = currentDate.toISOString().slice(0, 10);
         const dailyBookings = bookedSlots.filter(
-          (booking) => booking.startDate.toISOString().slice(0, 10) === currentDateStr
+          (booking) =>
+            booking.event && booking.event.startDate?.toISOString().slice(0, 10) === currentDateStr
         );
-        
+
         if (dailyBookings.length === 0) {
-          availableDays.push(currentDateStr); // Mark as fully available
+          availableDays.push(currentDateStr); // Mark day as fully available
         } else {
-          let previousEndTime = "00:00"; // Start of the day
-          
-          // Sort bookings by start time
-          dailyBookings.sort((a, b) => a.startTime.localeCompare(b.startTime));
-          
+          let previousEndTime = '00:00'; // Start of the day
+
+          // Sort bookings by event start time
+        dailyBookings.sort((a, b) => {
+    const startA = a.event?.startTime ?? ""; // Default to empty string if undefined
+    const startB = b.event?.startTime ?? ""; 
+
+    return startA.localeCompare(startB);
+});
+
           for (const booking of dailyBookings) {
-            const { startTime } = booking;
-            
+            if (!booking.event || !booking.event.startTime || !booking.event.endTime) {
+              continue; // Skip bookings with incomplete event data
+            }
+
+            const { startTime, endTime } = booking.event;
+
+            // Identify gaps before the current booking
             if (previousEndTime < startTime) {
               availableHours.push(`${previousEndTime} - ${startTime} on ${currentDateStr}`);
-              availableMinutes.push(`${previousEndTime} - ${startTime} minutes`);
+              availableMinutes.push(`${previousEndTime} - ${startTime} on ${currentDateStr}`);
             }
-            
-            previousEndTime = booking.endTime; // Update latest end time
+
+            previousEndTime = endTime;
           }
-          
+
           // Check for availability after the last booking
-          if (previousEndTime < "23:59") {
+          if (previousEndTime < '23:59') {
             availableHours.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
-            availableMinutes.push(`${previousEndTime} - 23:59 minutes`);
+            availableMinutes.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
           }
         }
-        
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1);
+
+        currentDate.setDate(currentDate.getDate() + 1); // Move to next day
       }
-      
+
       return { availableDays, availableHours, availableMinutes };
     } catch (error) {
-      console.error("Error checking available slots:", error);
-      return { success: false, message: "Failed to check booking availability." };
+      console.error('Error checking available slots:', error);
+      return { success: false, message: 'Failed to check booking availability.' };
     }
   }
 }
 
 /**
- * Enhanced booking validation service that checks both conflicts and availability
+ * Checks if the requested booking time is within available slots using the event's dates and times.
+ * @param req - Authenticated request containing user token.
+ * @param bookingData - The booking data including the associated event.
+ * @returns Object indicating success and an optional message.
  */
-export async function validateBooking(
+export async function checkAvailability(
   req: AuthenticatedRequest,
   bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    // Step 1: Check if the requested time is available
-    const availabilityCheck = await checkAvailability(req, bookingData);
-    if (!availabilityCheck.success) {
-      return availabilityCheck;
+    // Validate event data
+    if (
+      !bookingData.event ||
+      !bookingData.event.startDate ||
+      !bookingData.event.endDate ||
+      !bookingData.event.startTime ||
+      !bookingData.event.endTime
+    ) {
+      return {
+        success: false,
+        message: 'Booking event data (dates/times) is missing or incomplete, cannot check availability.',
+      };
     }
-    
-    // Step 2: Check for conflicts with existing bookings
-    const conflictCheck = await checkConflict(bookingData);
-    if (!conflictCheck.success) {
-      return conflictCheck;
-    }
-    
-    return { success: true, message: "Booking is valid and available." };
-  } catch (error) {
-    console.error("Error validating booking:", error);
-    return { success: false, message: "Failed to validate booking." };
-  }
-}
 
-/**
- * Check if the requested booking time is within available slots
- */
-async function checkAvailability(
-  req: AuthenticatedRequest,
-  bookingData: VenueBookingInterface
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    const startDate = new Date(bookingData.startDate);
-    const endDate = new Date(bookingData.endDate);
-    const requestedDate = startDate.toISOString().slice(0, 10);
-    const requestedStartTime = bookingData.startTime;
-    const requestedEndTime = bookingData.endTime;
-    
-    // Get available slots for the venue
+    const requestedStartDate = new Date(bookingData.event.startDate);
+    const requestedEndDate = new Date(bookingData.event.endDate);
+    const requestedDate = requestedStartDate.toISOString().slice(0, 10);
+    const requestedStartTime = bookingData.event.startTime;
+    const requestedEndTime = bookingData.event.endTime;
+
+    // Fetch available slots
     const availableSlotsResult = await CheckAbsenceService.getAvailableSlots(
       req,
       bookingData.venueId,
-      startDate,
-      endDate
+      requestedStartDate,
+      requestedEndDate
     );
-    
+
     if ('success' in availableSlotsResult && !availableSlotsResult.success) {
       return availableSlotsResult;
     }
-    
+
     const { availableDays, availableHours } = availableSlotsResult as {
       availableDays: string[];
       availableHours: string[];
       availableMinutes: string[];
     };
-    
+
     // Check if the day is completely available
     if (availableDays.includes(requestedDate)) {
       return { success: true };
     }
-    
+
     // Check if the requested time range falls within available hours
     let isAvailable = false;
-    
+
     for (const timeSlot of availableHours) {
       if (timeSlot.includes(`on ${requestedDate}`)) {
         const timeRange = timeSlot.split(' on ')[0];
         const [availableStart, availableEnd] = timeRange.split(' - ');
-        
-        // Check if requested time is within this available slot
+
         if (requestedStartTime >= availableStart && requestedEndTime <= availableEnd) {
           isAvailable = true;
           break;
         }
       }
     }
-    
+
     if (!isAvailable) {
-      // Find the nearest available time slot for a helpful message
-      let nearestSlot = "";
+      let nearestSlot = '';
       for (const timeSlot of availableHours) {
         if (timeSlot.includes(`on ${requestedDate}`)) {
           nearestSlot = timeSlot.split(' on ')[0];
           break;
         }
       }
-      
-      const message = nearestSlot 
+
+      const message = nearestSlot
         ? `The requested time (${requestedStartTime} - ${requestedEndTime}) is not available. The nearest available time slot on ${requestedDate} is ${nearestSlot}.`
         : `The requested time (${requestedStartTime} - ${requestedEndTime}) is not available on ${requestedDate}.`;
-      
+
       return { success: false, message };
     }
-    
+
     return { success: true };
   } catch (error) {
-    console.error("Error checking availability:", error);
-    return { success: false, message: "Failed to check availability." };
+    console.error('Error checking availability:', error);
+    return { success: false, message: 'Failed to check availability.' };
+  }
+}
+
+/**
+ * Validates a booking by checking both availability and conflicts.
+ * Ensures event details are populated before validation.
+ * @param req - Authenticated request containing user token.
+ * @param bookingData - The booking data including the associated event.
+ * @returns Object indicating success and an optional message.
+ */
+export async function validateBooking(
+  req: AuthenticatedRequest,
+  bookingData: VenueBookingInterface
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    // Ensure event details are populated
+    if (
+      !bookingData.event ||
+      !bookingData.event.startDate ||
+      !bookingData.event.endDate ||
+      !bookingData.event.startTime ||
+      !bookingData.event.endTime
+    ) {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId: bookingData.eventId },
+        select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime', 'eventTitle']      });
+
+      if (!event) {
+        return {
+          success: false,
+          message: 'Associated event not found for booking validation. Cannot proceed.',
+        };
+      }
+     // bookingData.event=event
+      
+
+    }
+
+    // Check availability
+    const availabilityCheck = await checkAvailability(req, bookingData);
+    if (!availabilityCheck.success) {
+      return availabilityCheck;
+    }
+
+    // Check for conflicts
+    const conflictCheck = await checkConflict(bookingData);
+    if (!conflictCheck.success) {
+      return conflictCheck;
+    }
+
+    return { success: true, message: 'Booking is valid and available.' };
+  } catch (error) {
+    console.error('Error validating booking:', error);
+    return { success: false, message: 'Failed to validate booking.' };
   }
 }

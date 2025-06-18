@@ -10,22 +10,24 @@ import { InvoiceInterface } from './InvoiceInterface';
 export class EventInterface {
   eventId!: string;
   eventTitle!: string;
-  description?: string;
-  eventCategory?: string;
+  description?: string | undefined;
+  eventCategory?: string | undefined;
   eventType!: EventType;
   startDate!: Date; // Note: Add to Event.ts
   endDate!: Date; // Note: Add to Event.ts
   startTime!: string; // Note: Add to Event.ts
   endTime!: string; // Note: Add to Event.ts
-  maxAttendees?: number;
+  maxAttendees?: number | undefined;
   status!: EventStatus;
   isFeatured!: boolean;
   qrCode?: string;
   imageURL?: string;
   organizerId!: string;
+  organizationId!: string;
   venueId!: string;
   organizer?: UserInterface;
   venue?: VenueInterface;
+  venues?: VenueInterface[];
   bookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
   payments?: PaymentInterface[];
@@ -38,7 +40,7 @@ export class EventInterface {
     Object.assign(this, {
       eventId: data.eventId || '',
       eventTitle: data.eventTitle || '',
-      description: data.description,
+      description: data.description ?? undefined,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.PUBLIC,
       startDate: data.startDate || new Date(),
@@ -51,13 +53,15 @@ export class EventInterface {
       qrCode: data.qrCode,
       imageURL: data.imageURL,
       organizerId: data.organizerId || '',
+      organizationId: data.organizationId || '',
       venueId: data.venueId || '',
       organizer: data.organizer,
       venue: data.venue,
-      bookings: data.bookings,
-      registrations: data.registrations,
-      payments: data.payments,
-      invoices: data.invoices,
+      venues: data.venues || [],
+      bookings: data.bookings || [],
+      registrations: data.registrations || [],
+      payments: data.payments || [],
+      invoices: data.invoices || [],
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,

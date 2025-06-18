@@ -1,13 +1,21 @@
-import { Router } from "express";
-import { EventController } from "../controller/eventController";
+import { Router } from 'express';
+import { authenticate } from '../middlewares/AuthMiddleware';
+import { EventController } from '../controller/eventController';
 
 const router = Router();
 
-router.get("/all",EventController.getAll);
-router.get("/get/:id",EventController.getById);
-router.get("/getByOrgizerId",EventController.getByOrganizerId);
-router.post("/create",EventController.create);
-router.put("/update/:id",EventController.update);
-router.delete("/delete/:id",EventController.delete);
+router.post('/', authenticate, EventController.create);
+router.post('/bulk', authenticate, EventController.createMultiple);
+router.get('/', EventController.getAll);
+router.get('/:id', EventController.getById);
+router.get('/organizer', authenticate, EventController.getByOrganizerId);
+router.get('/', EventController.getByOrganizationId); // Query: ?organizationId=...
+router.get('/', EventController.getByVenueId); // Query: ?venueId=...
+router.get('/', EventController.getByStatus); // Query: ?status=...
+router.get('/', EventController.getByDateRange); // Query: ?startDate=...&endDate=...
+router.put('/:id', authenticate, EventController.update);
+router.delete('/:id', authenticate, EventController.delete);
+router.post('/:id/venues', authenticate, EventController.assignVenues);
+router.delete('/:id/venues', authenticate, EventController.removeVenues);
 
-export const eventRoute= router;
+export default router;

@@ -135,10 +135,10 @@ export class RegistrationService {
           eventId: fullyPopulatedRegistration.event.eventId,
           eventTitle: fullyPopulatedRegistration.event.eventTitle,
           description: fullyPopulatedRegistration.event.description,
-          eventCategory: fullyPopulatedRegistration.event.eventCategory,
+          eventCategory: fullyPopulatedRegistration.event.eventCategoryId,
           eventType: fullyPopulatedRegistration.event.eventType,
-          organizerId: fullyPopulatedRegistration.event.organizerId,
-          venueId: fullyPopulatedRegistration.event.venueId,
+          organizerId: fullyPopulatedRegistration.event.organizationId,
+          venueId: fullyPopulatedRegistration.event.venues?.[0]?.venueId,
           maxAttendees: fullyPopulatedRegistration.event.maxAttendees,
           status: fullyPopulatedRegistration.event.status,
           isFeatured: fullyPopulatedRegistration.event.isFeatured,
@@ -151,11 +151,9 @@ export class RegistrationService {
           lastName: fullyPopulatedRegistration.user.lastName,
           email: fullyPopulatedRegistration.user.email,
           phoneNumber: fullyPopulatedRegistration.user.phoneNumber,
-          createdAt: fullyPopulatedRegistration.user.createdAt?.toISOString(),
-          updatedAt: fullyPopulatedRegistration.user.updatedAt?.toISOString(),
-          deletedAt:
-            fullyPopulatedRegistration.user.deletedAt?.toISOString() ||
-            undefined,
+          createdAt: fullyPopulatedRegistration.user.createdAt,
+          updatedAt: fullyPopulatedRegistration.user.updatedAt,
+          deletedAt: fullyPopulatedRegistration.user.deletedAt,
         } as UserInterface,
         buyer: {
           userId: fullyPopulatedRegistration.buyer.userId,
@@ -164,11 +162,9 @@ export class RegistrationService {
           lastName: fullyPopulatedRegistration.buyer.lastName,
           email: fullyPopulatedRegistration.buyer.email,
           phoneNumber: fullyPopulatedRegistration.buyer.phoneNumber,
-          createdAt: fullyPopulatedRegistration.buyer.createdAt?.toISOString(),
-          updatedAt: fullyPopulatedRegistration.buyer.updatedAt?.toISOString(),
-          deletedAt:
-            fullyPopulatedRegistration.buyer.deletedAt?.toISOString() ||
-            undefined,
+          createdAt: fullyPopulatedRegistration.buyer.createdAt,
+          updatedAt: fullyPopulatedRegistration.buyer.updatedAt,
+          deletedAt: fullyPopulatedRegistration.buyer.deletedAt,
         } as UserInterface,
         boughtForIds: fullyPopulatedRegistration.boughtForIds || [],
         ticketType: {
@@ -199,8 +195,6 @@ export class RegistrationService {
           capacity: fullyPopulatedRegistration.venue.capacity,
           location: fullyPopulatedRegistration.venue.location,
           managerId: fullyPopulatedRegistration.venue.managerId,
-          isAvailable: fullyPopulatedRegistration.venue.isAvailable,
-          isBooked: fullyPopulatedRegistration.venue.isBooked,
           createdAt: fullyPopulatedRegistration.venue.createdAt?.toISOString(),
           updatedAt: fullyPopulatedRegistration.venue.updatedAt?.toISOString(),
           deletedAt:

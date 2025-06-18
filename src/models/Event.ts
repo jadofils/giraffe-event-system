@@ -4,11 +4,13 @@ import {
   Column,
   OneToMany,
   ManyToOne,
+  OneToOne,
+  ManyToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
-} from "typeorm";
+} from 'typeorm';
 import {
   IsUUID,
   IsNotEmpty,
@@ -20,103 +22,133 @@ import {
   IsBoolean,
   IsDateString,
   IsString,
-} from "class-validator";
+} from 'class-validator';
+import { Venue } from './Venue';
+import { User } from './User';
+import { Organization } from './Organization';
+import { VenueBooking } from './VenueBooking';
+import { Registration } from './Registration';
+import { Payment } from './Payment';
+import { Invoice } from './Invoice';
+import { EventCategory } from './EventCategory';
+import { EventType } from '../interfaces/Enums/EventTypeEnum';
+import { EventStatus } from '../interfaces/Enums/EventStatusEnum';
 
-import { Venue } from "./Venue";
-import { User } from "./User";
-import { VenueBooking } from "./VenueBooking";
-import { Registration } from "./Registration";
-import { Payment } from "./Payment";
-import { Invoice } from "./Invoice";
-import { EventType } from "../interfaces/Enums/EventTypeEnum";
-import { EventStatus } from "../interfaces/Enums/EventStatusEnum";
-
-@Entity("events")
+@Entity('events')
 export class Event {
-  @PrimaryGeneratedColumn("uuid")
-  @IsUUID("4", { message: "eventId must be a valid UUID" })
+  @PrimaryGeneratedColumn('uuid')
+  @IsUUID('4', { message: 'eventId must be a valid UUID' })
   eventId!: string;
 
   @Column()
-  @IsNotEmpty({ message: "Event title is required" })
-  @Length(3, 100, { message: "Event title must be between $constraint1 and $constraint2 characters" })
+  @IsNotEmpty({ message: 'Event title is required' })
+  @Length(3, 100, { message: 'Event title must be between $constraint1 and $constraint2 characters' })
   eventTitle!: string;
 
-  @Column({ type: "text", nullable: true }) // Allow null values
+  @Column({ type: 'text', nullable: true })
   @IsOptional()
-  @Length(0, 5000, { message: "Description must be at most $constraint2 characters long" })
+  @Length(0, 5000, { message: 'Description must be at most $constraint2 characters long' })
   description?: string;
 
-  @Column({ nullable: true }) // Allow null values
-  @IsOptional()
-  @Length(0, 50, { message: "Event category must be at most $constraint2 characters long" })
-  eventCategory?: string;
-
-  @Column({ type: "enum", enum: EventType, default: EventType.PUBLIC })
-  @IsEnum(EventType, { message: "Event type must be one of: public, private" })
+  @Column({ type: 'enum', enum: EventType, default: EventType.PUBLIC })
+  @IsEnum(EventType, { message: 'Event type must be one of: public, private' })
   eventType!: EventType;
 
-  @Column({ type: 'timestamp with time zone', nullable: true }) // ✅ Allow NULL values
+  @Column({ type: 'timestamp with time zone', nullable: true })
   @IsOptional()
-  @IsDateString({}, { message: "Start date must be a valid date" })
-  startDate?: Date;
+  @IsDateString({}, { message: 'Start date must be a valid date' })
+  startDate!: Date;
 
-  @Column({ type: 'timestamp with time zone', nullable: true }) // ✅ Allow NULL values
+  @Column({ type: 'timestamp with time zone', nullable: true })
   @IsOptional()
-  @IsDateString({}, { message: "End date must be a valid date" })
-  endDate?: Date;
+  @IsDateString({}, { message: 'End date must be a valid date' })
+  endDate!: Date;
 
-  @Column({ nullable: true }) // Allow null values
+  @Column({ nullable: true })
   @IsOptional()
-  @IsString({ message: "Start time must be a string" })
-  startTime?: string;
+  @IsString({ message: 'Start time must be a string' })
+  startTime!: string;
 
-  @Column({ nullable: true }) // Allow null values
+  @Column({ nullable: true })
   @IsOptional()
-  @IsString({ message: "End time must be a string" })
-  endTime?: string;
+  @IsString({ message: 'End time must be a string' })
+  endTime!: string;
 
-  @Column({ type: "int", nullable: true }) // ✅ Allow NULL values instead of forcing a default
+  @Column({ type: 'int', nullable: true })
   @IsOptional()
-  @IsInt({ message: "Max attendees must be an integer" })
-  @Min(1, { message: "Max attendees must be at least 1" })
+  @IsInt({ message: 'Max attendees must be an integer' })
+  @Min(1, { message: 'Max attendees must be at least 1' })
   maxAttendees?: number;
 
-  @Column({ type: "enum", enum: EventStatus, default: EventStatus.DRAFT })
-  @IsEnum(EventStatus, { message: "Invalid event status" })
+  @Column({ type: 'enum', enum: EventStatus, default: EventStatus.DRAFT })
+  @IsEnum(EventStatus, { message: 'Invalid event status' })
   status!: EventStatus;
 
   @Column({ default: false })
-  @IsBoolean({ message: "isFeatured must be a boolean" })
+  @IsBoolean({ message: 'isFeatured must be a boolean' })
   isFeatured!: boolean;
 
-  @Column({ nullable: true }) // Allow null values
+  @Column({ nullable: true })
   @IsOptional()
-  @Length(0, 255, { message: "QR Code must be at most $constraint2 characters long" })
+  @Length(0, 255, { message: 'QR Code must be at most $constraint2 characters long' })
   qrCode?: string;
 
-  @Column({ nullable: true }) // Allow null values
+  @Column({ nullable: true })
   @IsOptional()
-  @Length(0, 255, { message: "Image URL must be at most $constraint2 characters long" })
+  @Length(0, 255, { message: 'Image URL must be at most $constraint2 characters long' })
   imageURL?: string;
 
-  @Column({ type: "uuid" })
-  @IsNotEmpty({ message: "Organizer ID is required" })
-  @IsUUID("4", { message: "Organizer ID must be a valid UUID" })
+  @Column({ type: 'uuid' })
+  @IsNotEmpty({ message: 'Organization ID is required' })
+  @IsUUID('4', { message: 'Organization ID must be a valid UUID' })
+  organizationId!: string;
+
+  @Column({ type: 'uuid' })
+  @IsNotEmpty({ message: 'Organizer ID is required' })
+  @IsUUID('4', { message: 'Organizer ID must be a valid UUID' })
   organizerId!: string;
 
-  @Column({ type: "uuid" })
-  @IsNotEmpty({ message: "Venue ID is required" })
-  @IsUUID("4", { message: "Venue ID must be a valid UUID" })
-  venueId!: string;
+  @Column({ type: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID('4', { message: 'eventCategoryId must be a valid UUID' })
+  eventCategoryId?: string;
 
-  @ManyToOne(() => Venue, (venue) => venue.events)
-  @JoinColumn({ name: "venueId" })
-  venue!: Venue;
+  @Column({ type: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID('4', { message: 'venueBookingId must be a valid UUID' })
+  venueBookingId?: string;
 
-  @ManyToOne(() => User, (user) => user.eventsOrganizer, { eager: false })
-  @JoinColumn({ name: "organizerId" })
+  @Column({ type: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID('4', { message: 'createdByUserId must be a valid UUID' })
+  createdByUserId?: string;
+
+  @Column({ type: 'json', nullable: true })
+  socialMediaLinks?: { [key: string]: string };
+
+  // Relationships
+  @ManyToOne(() => Organization, (organization) => organization.events)
+  @JoinColumn({ name: 'organizationId' })
+  organization!: Organization;
+
+  @ManyToOne(() => User, (user) => user.createdEvents)
+  @JoinColumn({ name: 'organizerId' })
   organizer!: User;
+
+  @ManyToOne(() => User, (user) => user.createdEvents)
+  @JoinColumn({ name: 'createdByUserId' })
+  createdBy?: User;
+
+  @ManyToMany(() => Venue, (venue) => venue.events)
+  venues!: Venue[];
+
+  @ManyToOne(() => EventCategory, (eventCategory) => eventCategory.events)
+  @JoinColumn({ name: 'eventCategoryId' })
+  eventCategoryRef?: EventCategory;
+
+  @OneToOne(() => VenueBooking, (venueBooking) => venueBooking.event, { cascade: ['insert', 'update'], onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'venueBookingId' })
+  venueBooking?: VenueBooking;
 
   @OneToMany(() => VenueBooking, (booking) => booking.event)
   bookings!: VenueBooking[];
@@ -130,12 +162,12 @@ export class Event {
   @OneToMany(() => Invoice, (invoice) => invoice.event)
   invoices?: Invoice[];
 
-  @CreateDateColumn({ type: "timestamp with time zone" })
+  @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: "timestamp with time zone" })
+  @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt!: Date;
 
-  @DeleteDateColumn({ type: "timestamp with time zone", nullable: true }) // ✅ Allow NULL values
+  @DeleteDateColumn({ type: 'timestamp with time zone', nullable: true })
   deletedAt?: Date;
 }

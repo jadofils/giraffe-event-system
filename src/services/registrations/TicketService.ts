@@ -119,19 +119,19 @@ export class TicketService {
 
                 buyer: {
                     userId: registration.buyer?.userId, // Add null check
-                    fullName: registration.buyer?.fullName, // Add null check
+                    lastName: registration.buyer?.lastName, // Add null check
                     email: registration.buyer?.email, // Add null check
                 },
 
                 primaryAttendee: {
                     userId: registration.user?.userId, // Add null check
-                    fullName: registration.user?.fullName, // Add null check
+                    lastName: registration.user?.lastName, // Add null check
                     email: registration.user?.email, // Add null check
                 },
 
                 boughtForAttendees: boughtForUsersDetails.map(user => ({
                     userId: user.userId,
-                    fullName: user.fullName,
+                    lastName: user.lastName,
                     email: user.email,
                 })),
 
@@ -139,7 +139,7 @@ export class TicketService {
                     eventId: registration.event?.eventId, // Add null check
                     eventName: registration.event?.eventTitle, // Add null check
                     eventType: registration.event?.eventType, // Add null check
-                    category: registration.event?.eventCategory, // Add null check
+                    category: registration.event?.eventCategoryId, // Add null check
                     description: registration.event?.description, // Add null check
                 },
 
@@ -150,7 +150,6 @@ export class TicketService {
                     capacity: registration.venue?.capacity, // Add null check
                     manager: registration.venue?.manager, // Add null check
                     location: registration.venue?.location, // Add null check
-                    isAvailable: registration.venue?.isAvailable, // Add null check
                 },
                 totalCost: totalCost
             };
@@ -510,7 +509,7 @@ export class TicketService {
             doc.fontSize(12);
             doc.text(`Event Date: ${new Date(registration.event?.createdAt || '').toLocaleDateString()}`);
             doc.text(`Event Type: ${registration.event?.eventType || 'N/A'}`);
-            doc.text(`Category: ${registration.event?.eventCategory || 'N/A'}`);
+            doc.text(`Category: ${registration.event?.eventCategoryId || 'N/A'}`);
             doc.moveDown();
 
             // Venue Information
@@ -528,9 +527,9 @@ export class TicketService {
             doc.moveDown();
 
             // Attendee Information
-            doc.text(`Primary Attendee: ${registration.user?.fullName || 'N/A'}`);
+            doc.text(`Primary Attendee: ${registration.user?.lastName || 'N/A'}`);
             doc.text(`Email: ${registration.user?.email || 'N/A'}`);
-            doc.text(`Buyer: ${registration.buyer?.fullName || 'N/A'}`);
+            doc.text(`Buyer: ${registration.buyer?.lastName || 'N/A'}`);
             doc.moveDown();
 
             // Registration Details

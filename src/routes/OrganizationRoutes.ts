@@ -1,18 +1,19 @@
-// src/routes/OrganizationRoutes.ts
-import { Router } from 'express';
-import { OrganizationController } from '../controller/OrganizationController';
-import { verifyJWT } from '../middlewares/AuthMiddleware';
+// src/routes/organizationRoutes.ts
+import { Router } from "express";
+import { authenticate } from "../middlewares/AuthMiddleware";
+import { OrganizationController } from "../controller/OrganizationController";
 
 const router = Router();
 
-// All other organization routes
-router.get('/all', OrganizationController.getAll);
-router.get('/:id', OrganizationController.getById);
-router.post('/add', OrganizationController.create);
-router.put('/update/:id',verifyJWT, OrganizationController.update);
-router.delete('/delete/:id',verifyJWT, OrganizationController.delete);
+router.get("/", authenticate, OrganizationController.getAll);
+router.get("/:id", authenticate, OrganizationController.getById);
+router.post("/", authenticate, OrganizationController.create);
+router.post("/bulk", authenticate, OrganizationController.bulkCreate);
+router.put("/:id", authenticate, OrganizationController.update);
+router.put("/bulk", authenticate, OrganizationController.bulkUpdate);
+router.delete("/:id", authenticate, OrganizationController.delete);
+router.post("/:id/users", authenticate, OrganizationController.assignUsers);
+router.delete("/:id/users", authenticate, OrganizationController.removeUsers);
+router.get("/:id/users", authenticate, OrganizationController.getUsers);
 
-// Add user to organization (ensure the correct route is defined)
-router.put('/:organizationId/addUser',verifyJWT, OrganizationController.assignUsersToOrganization);
-
-export default router;
+export const organizationRoutes = router;

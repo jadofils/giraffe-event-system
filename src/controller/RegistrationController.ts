@@ -343,7 +343,7 @@ const additionalRegistrations = await RegistrationRepository.getRepository()
         const summary = {
             targetUser: {
                 userId: targetUser.userId,
-                fullName: targetUser.fullName,
+                fullName: targetUser.lastName,
                 email: targetUser.email
             },
             totalRegistrations: allRegistrations.length,
@@ -457,7 +457,7 @@ const additionalRegistrations = await RegistrationRepository.getRepository()
             // 3. Generate a new QR code
             const newQrCodeFilePath = await QrCodeService.generateQrCode(
                 existingRegistration.registrationId,
-                existingRegistration.user.id,
+                existingRegistration.user.userId,
                 existingRegistration.event.eventId
             );
 

@@ -21,7 +21,7 @@ export class Registration {
     @Column({ type: 'uuid' })
     eventId!: string;
 
-    @ManyToOne(() => User, user => user.registrationsAsAttendee, { nullable: false, eager: true })
+   @ManyToOne(() => User, user => user.registrationsAsAttendee, { nullable: false, eager: true })
     @JoinColumn({ name: 'userId' })
     user!: User;
 
@@ -29,15 +29,7 @@ export class Registration {
     @Column({ type: 'uuid' })
     userId!: string;
 
-    @ManyToOne(() => User, user => user.registrationsAsBuyer, { nullable: false, eager: true })
-    @JoinColumn({ name: 'buyerId' })
-    buyer!: User;
-
-    // Direct foreign key column for buyerId
-    @Column({ type: 'uuid' })
-    buyerId!: string;
-
-    // --- CRUCIAL CHANGE HERE ---
+ // --- CRUCIAL CHANGE HERE ---
     // Define the column to use PostgreSQL's native UUID array type
     @Column('uuid', { array: true, nullable: true, default: () => "'{}'" }) // 'uuid' for element type, array: true for array
     @IsOptional()
@@ -45,7 +37,16 @@ export class Registration {
     @IsUUID('4', { each: true, message: 'Each boughtForId must be a valid UUID' })
     @ValidateIf(o => o.boughtForIds !== undefined && o.boughtForIds !== null && o.boughtForIds.length > 0) // Better validation condition
     boughtForIds?: string[];
-    // --- END CRUCIAL CHANGE ---
+
+  @ManyToOne(() => User, user => user.registrationsAsBuyer, { nullable: false, eager: true })
+    @JoinColumn({ name: 'buyerId' })
+    buyer!: User;
+
+    // Direct foreign key column for buyerId
+    @Column({ type: 'uuid' })
+    buyerId!: string;
+
+ 
 
     @ManyToOne(() => TicketType, ticketType => ticketType.registrations, { nullable: false, eager: true })
     @JoinColumn({ name: 'ticketTypeId' })

@@ -31,7 +31,7 @@ export interface AuthenticatedRequest extends Request {
     };
 }
 
-export const verifyJWT = async (
+export const authenticate = async (
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
@@ -128,7 +128,7 @@ export const verifyJWT = async (
 };
 
 // No changes needed for isAdmin if it uses req.user.userId and req.user.roles correctly.
-// Since verifyJWT now populates req.user.roles correctly, isAdmin should work fine.
+// Since authenticate now populates req.user.roles correctly, isAdmin should work fine.
 // (You'd likely adjust isAdmin to check permissions instead of just roleName string matching for more granularity)
 
 /* Example DTO, just keeping it here for context as it's part of the original paste

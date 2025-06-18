@@ -2,209 +2,277 @@ import { Request, Response } from "express";
 import { UserRepository } from "../../repositories/UserRepository";
 import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
-import PasswordService from "../../services/emails/EmailService";
-import { Organization } from "../../models/Organization";
+import PasswordService from "../../services/emails/EmailService"; // Assuming this is correct
 import { Role } from "../../models/Role";
+import { Organization } from "../../models/Organization"; // Import Organization model
+import { UserInterface } from "../../interfaces/UserInterface"; // Import UserInterface
 import bcrypt from "bcryptjs";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
     try {
-      const { username, firstName, lastName, email, phoneNumber,password,confirmPassword } = req.body;
-      console.log("Registering user with data in controller:", req.body);
+      const usersData = Array.isArray(req.body) ? req.body : [req.body];
+      const results = [];
 
-      // === Validation Checks ===
-      if (!username || username.length < 3 || username.length > 50) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Username must be between 3 and 50 characters",
-          });
-        return;
-      }
-
-      if (!firstName || firstName.length < 1 || firstName.length > 50) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "First name must be between 1 and 50 characters",
-          });
-        return;
-      }
-
-      if (!lastName || lastName.length < 1 || lastName.length > 50) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Last name must be between 1 and 50 characters",
-          });
-        return;
-      }
-
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Email must be a valid email address",
-          });
-        return;
-      }
-
-      if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber)) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Phone number must be a valid phone number",
-          });
-        return;
-      }
-      // === Password Validation but be optional ===
-      if (password && password.length < 6) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Password must be at least 6 characters long",
-          });
-        return;
-      }
-      if (password && password !== confirmPassword) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: "Passwords do not match",
-          });
-        return;
-      }
-      //password should be hashed before saving to the database,and regex validation
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$/;
-      if (password && !passwordRegex.test(password)) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Password must be at least 6 characters long and contain at least one uppercase letter, one lowercase letter, and one number",
-          });
-        return;
-      }
-      //hashing password it with salt by bcryptjs
-       const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
-
-
-
-      // === Check for Existing User ===
-   
-      const existingUser = await UserRepository.findExistingUser(
-        email,
-        username
+      // First, check for existing users
+      const existingUsersMap = await UserRepository.findExistingUsers(
+        usersData.map(data => ({
+          email: data.email || '',
+          username: data.username || '',
+          phoneNumber:data.phoneNumber || ''
+        }))
       );
-      if (existingUser) {
-        res
-          .status(400)
-          .json({ success: false, message: "User already exists" });
-        return;
+
+      // Process each user
+      for (const userInput of usersData) {
+      const {
+        username,
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        password,
+          confirmPassword,
+        bio,
+        profilePictureURL,
+        preferredLanguage,
+        timezone,
+        emailNotificationsEnabled,
+        smsNotificationsEnabled,
+        socialMediaLinks,
+        dateOfBirth,
+        gender,
+        addressLine1,
+        addressLine2,
+        city,
+        stateProvince,
+        postalCode,
+        country,
+        organization: organizationNameFromRequest,
+        } = userInput as Partial<UserInterface> & { confirmPassword?: string; organization?: string };
+
+        // Check if user already exists
+        if (email && existingUsersMap.has(email) || username && existingUsersMap.has(username)) {
+          results.push({
+            success: false,
+            message: "User already exists with that username or email.",
+            user: { username, email }
+          });
+          continue;
+        }
+
+      // === Input Validation ===
+      const errors: string[] = [];
+
+      if (!username || username.length < 3 || username.length > 50) {
+        errors.push("Username must be between 3 and 50 characters.");
+      }
+      if (!firstName || firstName.length < 1 || firstName.length > 50) {
+        errors.push("First name must be between 1 and 50 characters.");
+      }
+      if (!lastName || lastName.length < 1 || lastName.length > 50) {
+        errors.push("Last name must be between 1 and 50 characters.");
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.push("Invalid email format.");
+      }
+      if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber)) {
+        errors.push("Invalid phone number format.");
       }
 
-      // === Assign Default Role ===
+        // Password validation only if password is provided
+        if (password) {
+          if (password.length < 6) {
+        errors.push("Password must be at least 6 characters long.");
+      }
+      if (password !== confirmPassword) {
+        errors.push("Passwords do not match.");
+      }
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$/;
+          if (!passwordRegex.test(password)) {
+        errors.push("Password must contain at least one uppercase letter, one lowercase letter, and one number.");
+          }
+      }
+
+      if (errors.length > 0) {
+          results.push({
+            success: false,
+            message: errors.join(" "),
+            user: { username, email }
+          });
+          continue;
+        }
+
+        // === Hash password only if provided ===
+        const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
+
+      // === Default Role Assignment ===
       const roleRepository = AppDataSource.getRepository(Role);
-      const guestRole = await roleRepository.findOne({
-        where: { roleName: "GUEST" },
-      });
+      const guestRole = await roleRepository.findOne({ where: { roleName: "GUEST" } });
 
       if (!guestRole) {
-        res
-          .status(500)
-          .json({
+          results.push({
             success: false,
             message: "Default GUEST role not found. Please initialize roles.",
+            user: { username, email }
           });
-        return;
+          continue;
       }
 
-      const user = UserRepository.createUser({
-        username: username,
-        firstName: firstName,
-        lastName: lastName,
-        email: email,
-        phoneNumber: phoneNumber,
-        //password is optional, if not provided
-        password: hashedPassword, // Use the hashed password
-        // Set a default password or generate one dynamically
-       role: {
-  roleId: guestRole.roleId,
-  roleName: guestRole.roleName,
-  permissions: guestRole.permissions || [],
-  createdAt: guestRole.createdAt ? new Date(guestRole.createdAt) : new Date(),
-  updatedAt: guestRole.updatedAt ? new Date(guestRole.updatedAt) : new Date(),
-}, // Map Role to RoleInterface
-      });
+      // === Handle Organization ===
+      const organizationRepository = AppDataSource.getRepository(Organization);
+      const defaultOrgName = "Independent";
+      const effectiveOrgName = (organizationNameFromRequest?.trim() || defaultOrgName).toLowerCase() === "independent"
+        ? defaultOrgName
+        : organizationNameFromRequest!.trim();
 
-      const result = await UserRepository.saveUser(user);
+      let userOrganization = await organizationRepository.findOne({ where: { organizationName: effectiveOrgName } });
 
-      if (!result.user) {
-        res
-          .status(400)
-          .json({
+      if (!userOrganization && effectiveOrgName === defaultOrgName) {
+        userOrganization = organizationRepository.create({
+          organizationName: defaultOrgName,
+          organizationType: "General",
+          description: "Auto-created organization: Independent",
+          contactEmail: "admin@independent.com",
+        });
+        await organizationRepository.save(userOrganization);
+      }
+
+        // === Create User Data ===
+        const userData = {
+        username,
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        bio,
+        profilePictureURL,
+        preferredLanguage,
+        timezone,
+        emailNotificationsEnabled,
+        smsNotificationsEnabled,
+        socialMediaLinks,
+        dateOfBirth,
+        gender,
+        addressLine1,
+        addressLine2,
+        city,
+        stateProvince,
+        postalCode,
+        country,
+        roleId: guestRole.roleId,
+        };
+
+        // Only add password if it was provided
+        if (hashedPassword) {
+          Object.assign(userData, { password: hashedPassword });
+        }
+
+        // Create and save user
+        const user = UserRepository.createUser(userData);
+      const savedUser = await AppDataSource.getRepository(User).save(user);
+
+        if (userOrganization) {
+          savedUser.organizations = [userOrganization];
+          await AppDataSource.getRepository(User).save(savedUser);
+        }
+
+   const completeUser = await AppDataSource.getRepository(User).findOne({
+  where: { userId: savedUser.userId },
+          relations: ['role', 'organizations'],
+});
+
+      if (!completeUser) {
+          results.push({
             success: false,
-            message: result.message || "Failed to save user",
+            message: "User registration failed during final fetch.",
+            user: { username, email }
           });
-        return;
+          continue;
       }
 
-      const savedUser = result.user;
-
-      // === Send Default Password Email ===
+      // === Optional: Send welcome email ===
       try {
         const emailSent = await PasswordService.sendDefaultPassword(
-          email,
-          savedUser.lastName,
-          savedUser.firstName,
-          savedUser.username,
+          email!,
+          completeUser.lastName,
+          completeUser.firstName,
+          completeUser.username,
           req
         );
 
         if (!emailSent) {
-          console.warn(
-            `Failed to send email to ${email}, but user was created successfully`
-          );
-          // Continue with registration despite email failure
+          console.warn(`Email not sent to ${email}, but user created.`);
         }
-      } catch (emailError) {
-        console.error("Error sending welcome email:", emailError);
-        // Continue with registration despite email failure
+      } catch (emailErr) {
+        console.error("Email sending error:", emailErr);
       }
 
-      res.status(201).json({
-        success: true,
-        message:
-          "User registered successfully. If email is configured correctly, a default password was sent.",
-        user: {
-          id: savedUser.userId,
-          username: savedUser.username,
-          email: savedUser.email,
-          firstName: savedUser.firstName,
-          lastName: savedUser.lastName,
-          phoneNumber: savedUser.phoneNumber,
+        // === Add successful result ===
+        const userResponse = {
+          userId: completeUser.userId,
+          username: completeUser.username,
+          email: completeUser.email,
+          firstName: completeUser.firstName,
+          lastName: completeUser.lastName,
+          phoneNumber: completeUser.phoneNumber,
+          bio: completeUser.bio,
+          profilePictureURL: completeUser.profilePictureURL,
+          preferredLanguage: completeUser.preferredLanguage,
+          timezone: completeUser.timezone,
+          emailNotificationsEnabled: completeUser.emailNotificationsEnabled,
+          smsNotificationsEnabled: completeUser.smsNotificationsEnabled,
+          socialMediaLinks: completeUser.socialMediaLinks,
+          dateOfBirth: completeUser.dateOfBirth,
+          gender: completeUser.gender,
+          addressLine1: completeUser.addressLine1,
+          addressLine2: completeUser.addressLine2,
+          city: completeUser.city,
+          stateProvince: completeUser.stateProvince,
+          postalCode: completeUser.postalCode,
+          country: completeUser.country,
+          role: completeUser.role
+            ? {
+                roleId: completeUser.role.roleId,
+                roleName: completeUser.role.roleName,
+                permissions: completeUser.role.permissions || [],
+              }
+            : null,
+          organizations: completeUser.organizations?.map(org => ({
+            organizationId: org.organizationId,
+            organizationName: org.organizationName,
+            description: org.description,
+            contactEmail: org.contactEmail,
+            contactPhone: org.contactPhone,
+            address: org.address,
+            city: org.city,
+            country: org.country,
+            postalCode: org.postalCode,
+            stateProvince: org.stateProvince,
+            organizationType: org.organizationType,
+          })) || [],
+        };
 
-          Role: {
-            RoleID: guestRole.roleId,
-            RoleName: guestRole.roleName,
-            Permissions: guestRole.permissions || [],
-          }, // Map Role to RoleInterface
-        },
+        results.push({
+          success: true,
+          message: "User registered successfully.",
+          user: userResponse
+        });
+      }
+
+      // === Send Response ===
+      const allSuccessful = results.every(result => result.success);
+      const statusCode = allSuccessful ? 201 : (results.some(result => result.success) ? 207 : 400);
+      
+      res.status(statusCode).json({
+        success: allSuccessful,
+        message: allSuccessful ? "All users registered successfully" : "Some users failed to register",
+        results
       });
-    } catch (error) {
-      console.error("Error in register:", error);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+
+    } catch (err) {
+      console.error("Unexpected error during registration:", err);
+      res.status(500).json({ success: false, message: "Internal server error." });
     }
   }
 
@@ -213,9 +281,7 @@ export class UserController {
   }
 
   static async updateProfile(req: Request, res: Response): Promise<void> {
-    res
-      .status(200)
-      .json({ success: true, message: "Profile updated successfully" });
+    res.status(200).json({ success: true, message: "Profile updated successfully" });
   }
 
   static async getAllUsers(req: Request, res: Response): Promise<void> {
@@ -234,31 +300,48 @@ export class UserController {
         lastName: user?.lastName,
         email: user?.email,
         phoneNumber: user?.phoneNumber,
-        Role: user?.role
+        // Include new optional fields
+        bio: user?.bio,
+        profilePictureURL: user?.profilePictureURL,
+        preferredLanguage: user?.preferredLanguage,
+        timezone: user?.timezone,
+        emailNotificationsEnabled: user?.emailNotificationsEnabled,
+        smsNotificationsEnabled: user?.smsNotificationsEnabled,
+        socialMediaLinks: user?.socialMediaLinks,
+        dateOfBirth: user?.dateOfBirth,
+        gender: user?.gender,
+        addressLine1: user?.addressLine1,
+        addressLine2: user?.addressLine2,
+        city: user?.city,
+        stateProvince: user?.stateProvince,
+        postalCode: user?.postalCode,
+        country: user?.country,
+        // Relationships
+        role: user?.role
           ? {
-              RoleID: user.role.roleId,
-              RoleName: user.role.roleName,
-              Permissions: user.role.permissions || [],
+              roleId: user.role.roleId,
+              roleName: user.role.roleName,
+              permissions: user.role.permissions || [],
             }
           : null,
-        organizations:
-          user?.organizations?.map((organization: Organization) => ({
-            OrganizationID: organization.organizationId,
-            OrganizationName: organization.organizationName,
-            Description: organization.description || "",
-            ContactEmail: organization.contactEmail,
-            ContactPhone: organization.contactPhone || "",
-            Address: organization.address || "",
-            OrganizationType: organization.organizationType || "",
-          })) || [],
+        // Corrected: 'organization' is singular and an object, not an array
+        organization: user?.organizations?.[0]
+          ? {
+              organizationId: user.organizations[0].organizationId,
+              organizationName: user.organizations[0].organizationName,
+              description: user.organizations[0].description || "",
+              contactEmail: user.organizations[0].contactEmail,
+              contactPhone: user.organizations[0].contactPhone || "",
+              address: user.organizations[0].address || "",
+              organizationType: user.organizations[0].organizationType || "",
+            }
+          : null,
       }));
 
       res.status(200).json({ success: true, users: formattedUsers });
     } catch (error) {
       console.error("Error in getAllUsers:", error);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+      res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
 
@@ -278,92 +361,100 @@ export class UserController {
         lastName: user.lastName,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        Role: user.role
+        // Include new optional fields
+        bio: user.bio,
+        profilePictureURL: user.profilePictureURL,
+        preferredLanguage: user.preferredLanguage,
+        timezone: user.timezone,
+        emailNotificationsEnabled: user.emailNotificationsEnabled,
+        smsNotificationsEnabled: user.smsNotificationsEnabled,
+        socialMediaLinks: user.socialMediaLinks,
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        addressLine1: user.addressLine1,
+        addressLine2: user.addressLine2,
+        city: user.city,
+        stateProvince: user.stateProvince,
+        postalCode: user.postalCode,
+        country: user.country,
+        // Relationships
+        role: user.role
           ? {
-              RoleID: user.role.roleId,
-              RoleName: user.role.roleName,
-              Permissions: user.role.permissions || [],
+              roleId: user.role.roleId,
+              roleName: user.role.roleName,
+              permissions: user.role.permissions || [],
             }
           : null,
-        organizations:
-          user?.organizations?.map((organization: Organization) => ({
-            OrganizationID: organization.organizationId,
-            OrganizationName: organization.organizationName,
-            Description: organization.description || "",
-            ContactEmail: organization.contactEmail,
-            ContactPhone: organization.contactPhone || "",
-            Address: organization.address || "",
-            OrganizationType: organization.organizationType || "",
-          })) || [],
-          //get registration data from user which looks like this
-          /*
-          */
-          registrations: user.registrations?.map((registration) => ({
-            registrationIds:{
-              registrationId: registration.registrationId,
-              registrationDate: registration.registrationDate,
-              paymentStatus: registration.paymentStatus,
-              attended: registration.attended,
-            },
-     
-            eventId:{
-              eventId: registration.event.eventId,
-              eventTitle: registration.event.eventTitle,
-              description: registration.event.description,
-              eventCategory: registration.event.eventCategory,
-              eventType: registration.event.eventType,
-            },
-            
-            // Handle both array and single object cases for ticketType
-            ticketType: Array.isArray(registration.ticketType)
-              ? (registration.ticketType as any[]).map((ticket) => ({
-                  ticketTypeId: ticket.ticketTypeId,
-                  ticketTypeName: ticket.ticketName,
-                  price: ticket.price,
-                  description: ticket.description,
-                }))
-              : registration.ticketType && typeof registration.ticketType === 'object'
-                ? [{
-                    ticketTypeId: (registration.ticketType as any).ticketTypeId,
-                    ticketTypeName: (registration.ticketType as any).ticketName,
-                    price: (registration.ticketType as any).price,
-                    description: (registration.ticketType as any).description,
-                  }]
-                : [],
-
-          
-            eventName: {
-              eventId: registration.event.eventId,
-              eventTitle: registration.event.eventTitle,
-              description: registration.event.description,
-              eventCategory: registration.event.eventCategory,
-              eventType: registration.event.eventType,
-            },
-            
-            venueName: {
+        // Corrected: 'organization' is singular and an object, not an array
+        organization: user.organizations?.[0]
+          ? {
+              organizationId: user.organizations[0].organizationId,
+              organizationName: user.organizations[0].organizationName,
+              description: user.organizations[0].description || "",
+              contactEmail: user.organizations[0].contactEmail,
+              contactPhone: user.organizations[0].contactPhone || "",
+              address: user.organizations[0].address || "",
+              organizationType: user.organizations[0].organizationType || "",
+            }
+          : null,
+        // Format registrationsAsAttendee
+        registrations: user.registrationsAsAttendee?.map((registration) => ({
+          registrationIds: {
+            registrationId: registration.registrationId,
+            registrationDate: registration.registrationDate,
+            paymentStatus: registration.paymentStatus,
+            attended: registration.attended,
+          },
+          eventId: {
+            eventId: registration.event.eventId,
+            eventTitle: registration.event.eventTitle,
+            description: registration.event.description,
+            eventCategory: registration.event.eventCategoryId,
+            eventType: registration.event.eventType,
+          },
+          // Handle both array and single object cases for ticketType (as per your original logic)
+          ticketType: Array.isArray(registration.ticketType)
+            ? (registration.ticketType as any[]).map((ticket) => ({
+                ticketTypeId: ticket.ticketTypeId,
+                ticketTypeName: ticket.ticketName,
+                price: ticket.price,
+                description: ticket.description,
+              }))
+            : registration.ticketType && typeof registration.ticketType === 'object'
+              ? [{
+                  ticketTypeId: (registration.ticketType as any).ticketTypeId,
+                  ticketTypeName: (registration.ticketType as any).ticketName,
+                  price: (registration.ticketType as any).price,
+                  description: (registration.ticketType as any).description,
+                }]
+              : [],
+          eventName: { // Duplicated from eventId above, consider if both are needed
+            eventId: registration.event.eventId,
+            eventTitle: registration.event.eventTitle,
+            description: registration.event.description,
+            eventCategory: registration.event.eventCategoryId,
+            eventType: registration.event.eventType,
+          },
+          venueName: registration.venue // Check if venue is always loaded here, or make it optional
+            ? {
               venueId: registration.venue.venueId,
               venueName: registration.venue.venueName,
               capacity: registration.venue.capacity,
               location: registration.venue.location,
               managerId: registration.venue.managerId,
-              isAvailable: registration.venue.isAvailable,
-              isBooked: registration.venue.isBooked,
-            },
-            noOfTickets: registration.noOfTickets,
-            qrcode: registration.qrCode,
-            registrationDate: registration.registrationDate,
-            paymentStatus: registration.paymentStatus,
-            attended: registration.attended,
-          
-          })) || [],
-          
+            }
+            : null,
+          noOfTickets: registration.noOfTickets,
+          qrcode: registration.qrCode,
+          registrationDate: registration.registrationDate,
+          paymentStatus: registration.paymentStatus,
+          attended: registration.attended,
+        })) || [],
       };
       res.status(200).json({ success: true, user: formattedUser });
     } catch (error) {
       console.error("Error in getUserById:", error);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+      res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
 
@@ -371,28 +462,50 @@ export class UserController {
     try {
       const userId = req.params.id;
       const userRepository = AppDataSource.getRepository(User);
-  
+
       const user = await userRepository.findOne({
         where: { userId },
-        relations: ["role", "organizations"], // Include related entities
+        relations: ["role", "organization"], // Include related entities
       });
-  
+
       if (!user) {
         res.status(404).json({ success: false, message: "User not found" });
         return;
       }
-  
-      const { username, firstName, lastName, email, phoneNumber } = req.body;
-  
-      // Update user fields if they exist in the request
-      if (username) user.username = username;
-      if (firstName) user.firstName = firstName;
-      if (lastName) user.lastName = lastName;
-      if (email) user.email = email;
-      if (phoneNumber) user.phoneNumber = phoneNumber;
-  
+
+      // Destructure all possible updatable fields, including new optional ones
+      const updateData: Partial<UserInterface> = req.body;
+
+      // Update user fields if they exist in the request body
+      // This is a more concise way to update all fields
+      Object.assign(user, updateData);
+
+      // Explicitly handle password if present (needs hashing)
+      if (updateData.password) {
+        const hashedPassword = await bcrypt.hash(updateData.password, 10);
+        user.password = hashedPassword;
+      }
+
+      // Handle organization update if organizationName is provided
+      if (updateData.organization?.organizationName) {
+          const organizationRepository = AppDataSource.getRepository(Organization);
+          let userOrganization = await organizationRepository.findOne({ 
+              where: { organizationName: updateData.organization.organizationName } 
+          });
+
+          if (!userOrganization) {
+              userOrganization = organizationRepository.create({
+                  organizationName: updateData.organization.organizationName,
+                  organizationType: "General",
+                  description: `Auto-created during update: ${updateData.organization.organizationName}`,
+              });
+              await organizationRepository.save(userOrganization);
+          }
+          user.organizations = [userOrganization];
+      }
+
       const updatedUser = await userRepository.save(user);
-  
+
       res.status(200).json({
         success: true,
         message: "User updated successfully",
@@ -403,21 +516,40 @@ export class UserController {
           lastName: updatedUser.lastName,
           email: updatedUser.email,
           phoneNumber: updatedUser.phoneNumber,
-          Role: updatedUser.role
+          bio: updatedUser.bio,
+          profilePictureURL: updatedUser.profilePictureURL,
+          preferredLanguage: updatedUser.preferredLanguage,
+          timezone: updatedUser.timezone,
+          emailNotificationsEnabled: updatedUser.emailNotificationsEnabled,
+          smsNotificationsEnabled: updatedUser.smsNotificationsEnabled,
+          socialMediaLinks: updatedUser.socialMediaLinks,
+          dateOfBirth: updatedUser.dateOfBirth,
+          gender: updatedUser.gender,
+          addressLine1: updatedUser.addressLine1,
+          addressLine2: updatedUser.addressLine2,
+          city: updatedUser.city,
+          stateProvince: updatedUser.stateProvince,
+          postalCode: updatedUser.postalCode,
+          country: updatedUser.country,
+          role: updatedUser.role
             ? {
-                RoleID: updatedUser.role.roleId,
-                RoleName: updatedUser.role.roleName,
-                Permissions: updatedUser.role.permissions || [],
+                roleId: updatedUser.role.roleId,
+                roleName: updatedUser.role.roleName,
+                permissions: updatedUser.role.permissions || [],
               }
             : null,
-          organizations: updatedUser.organizations?.map((organization: Organization) => ({
-            OrganizationID: organization.organizationId,
-            OrganizationName: organization.organizationName,
-            Description: organization.description || "",
-            ContactEmail: organization.contactEmail,
-            ContactPhone: organization.contactPhone || "",
-            Address: organization.address || "",
-            OrganizationType: organization.organizationType || "",
+          organizations: updatedUser.organizations?.map(org => ({
+            organizationId: org.organizationId,
+            organizationName: org.organizationName,
+            description: org.description,
+            contactEmail: org.contactEmail,
+            contactPhone: org.contactPhone,
+            address: org.address,
+            city: org.city,
+            country: org.country,
+            postalCode: org.postalCode,
+            stateProvince: org.stateProvince,
+            organizationType: org.organizationType,
           })) || [],
         },
       });
@@ -426,7 +558,6 @@ export class UserController {
       res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
-  
 
   static async deleteUser(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
@@ -446,9 +577,7 @@ export class UserController {
       }
     } catch (error) {
       console.error("Error in deleteUser:", error);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+      res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
 
@@ -456,60 +585,41 @@ export class UserController {
     try {
       const { userId, roleId } = req.body;
 
-      // Validate input
       if (!userId || !roleId) {
         res.status(400).json({ message: "User ID and Role ID are required" });
         return;
       }
 
-      // Call the repository function to assign the new role
       const result = await UserRepository.assignUserRole(userId, roleId);
 
-      // Handle the response from the repository
-      if (result.message === "User role updated successfully") {
-        res.status(200).json({ message: result.message,data: result });
-      } else if (
-        result.message === "User not found" ||
-        result.message === "Role not found" ||
-        result.message === "User is not currently assigned the GUEST role"
-      ) {
-        res.status(400).json({ message: result.message });
+      if (result.success) { // Check success boolean rather than message string
+        res.status(200).json({ message: result.message, data: result });
       } else {
-        res.status(500).json({ message: "Failed to assign user role" });
+        // Use the message from the repository for client response
+        res.status(400).json({ message: result.message });
       }
     } catch (error) {
-      console.error("Error in updateUserRole:", error);
+      console.error("Error in updateDefaultUserRole:", error); // Corrected log message
       res.status(500).json({ message: "Internal server error" });
     }
   }
 
   static async updateAssignedUserRole(req: Request, res: Response): Promise<void> {
     try {
-      // Get userId from URL parameters
       const { userId } = req.params;
-  
-      // Get roleId from request body
       const { roleId } = req.body;
-  
+
       if (!userId) {
-        res.status(400).json({
-          success: false,
-          message: 'userId is required in the URL parameters',
-        });
+        res.status(400).json({ success: false, message: 'userId is required in the URL parameters' });
         return;
       }
-  
       if (!roleId) {
-        res.status(400).json({
-          success: false,
-          message: 'roleId is required in the request body',
-        });
+        res.status(400).json({ success: false, message: 'roleId is required in the request body' });
         return;
       }
-  
-      // Call the repository method
+
       const result = await UserRepository.updateUserRole(userId, roleId);
-  
+
       if (result.success) {
         res.status(200).json({
           success: true,
@@ -531,13 +641,12 @@ export class UserController {
         });
       }
     } catch (error) {
-      console.error('Error in updateUserRole controller:', error);
-  
+      console.error('Error in updateAssignedUserRole controller:', error);
+
       res.status(500).json({
         success: false,
         message: 'Internal server error occurred while updating user role',
       });
     }
   }
-
 }

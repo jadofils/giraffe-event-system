@@ -6,10 +6,18 @@ export class OrganizationInterface {
   description!: string;
   contactEmail!: string;
   contactPhone?: string;
-  isExternal!: boolean;
   address!: string;
-  organizationType!: string;
   user?: UserInterface;
+
+ // Initialize optional fields
+  city?: string;
+  country?: string;
+  postalCode?: string;
+  stateProvince?: string;
+  organizationType?: string;
+      
+
+
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
@@ -21,10 +29,13 @@ export class OrganizationInterface {
       description: data.description || '',
       contactEmail: data.contactEmail || '',
       contactPhone: data.contactPhone,
-      isExternal: data.isExternal ?? false,
       address: data.address || '',
       organizationType: data.organizationType || '',
       user: data.user,
+      city: data.city,
+      country: data.country,
+      postalCode: data.postalCode,
+      stateProvince: data.stateProvince,
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,

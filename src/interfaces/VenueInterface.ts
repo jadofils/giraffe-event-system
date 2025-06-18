@@ -2,13 +2,19 @@ export class VenueInterface {
   venueId!: string;
   venueName!: string;
   capacity!: number;
+  amount!: number;
   location!: string;
   latitude?: number;
   longitude?: number;
   googleMapsLink?: string;
   managerId?: string;
-  isAvailable?: boolean;
-  isBooked?: boolean;
+  organizationId?: string;
+  amenities?: string;
+  venueType?: string;
+  contactPerson?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  websiteURL?: string;
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
@@ -17,17 +23,23 @@ export class VenueInterface {
     Object.assign(this, {
       venueId: data.venueId || '',
       venueName: data.venueName || '',
+      organizationId: data.organizationId || '',
       capacity: data.capacity || 0,
       location: data.location || '',
       latitude: data.latitude,
       longitude: data.longitude,
       googleMapsLink: data.googleMapsLink,
       managerId: data.managerId,
-      isAvailable: data.isAvailable ?? true,
-      isBooked: data.isBooked ?? false,
+      amount: data.amount || 0,
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,
+      amenities: data.amenities,
+      venueType: data.venueType,
+      contactPerson: data.contactPerson,
+      contactEmail: data.contactEmail,
+      contactPhone: data.contactPhone,
+      websiteURL: data.websiteURL,
     });
   }
 
