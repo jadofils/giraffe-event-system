@@ -1,21 +1,22 @@
 import { DataSource } from "typeorm";
 import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
 import { SeederFactoryManager } from "typeorm-extension";
-
+import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DB_URL,
-  synchronize: true, 
-  logging: false, 
+  synchronize: true,
+  logging: false,
   entities: ["src/models/**/*.ts"],
   migrations: ["src/models/migrations/*.ts"],
   extra: {
     connectionTimeoutMillis: 30000,
   },
-  ssl: process.env.NODE_ENV === 'production' 
-    ? { rejectUnauthorized: true }
-    : false, // Adjust SSL for development
-  schema: 'public',
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : false, // Adjust SSL for development
+  schema: "public",
 });
 
 // Track if seeding has been completed
@@ -27,11 +28,14 @@ export const initializeDatabase = async (): Promise<void> => {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
       console.log("Database connection established!");
-      
+
       // Only run seeding if it hasn't been completed yet
       if (!isSeedingCompleted) {
         await seedDefaultRoles();
         await runSeeders();
+        console.log("Seeding admin role with all permissions...");
+        await AdminRoleSeeder.seed();
+        console.log("Admin role seeding completed!");
         isSeedingCompleted = true;
         console.log("Initial database seeding completed!");
       }
@@ -47,10 +51,10 @@ async function runSeeders() {
   try {
     const seeder = new IndependentOrganizationSeeder();
     const factoryManager = new SeederFactoryManager();
-    
+
     // Run the independent organization seeder
     await seeder.run(AppDataSource, factoryManager);
-    
+
     console.log("Database seeding completed!");
   } catch (error) {
     console.error("Error during database seeding:", error);
@@ -61,56 +65,8 @@ async function runSeeders() {
 // Function to seed default roles
 async function seedDefaultRoles() {
   try {
-    const roleRepository = AppDataSource.getRepository('Role');
-    
-    // Define default roles
-    const defaultRoles = [
-      {
-        roleName: 'GUEST',
-        permissions: ['read:public'],
-        description: 'Default role for new users'
-      },
-      {
-        roleName: 'USER',
-        permissions: ['read:public', 'write:own'],
-        description: 'Standard user role'
-      },
-      {
-        roleName: 'ADMIN',
-        permissions: ['read:all', 'write:all', 'delete:all'],
-        description: 'Administrator role'
-      },
-      {
-        roleName: 'ORGANIZER_MANAGER',
-        permissions: ['read:public', 'write:own', 'manage:events', 'manage:venues'],
-        description: 'Role for event and venue organizers'
-      }
-    ];
-
-    // Get all existing roles first
-    const existingRoles = await roleRepository.find();
-    const existingRoleNames = new Set(existingRoles.map(role => role.roleName));
-
-    // Create only new roles
-    for (const roleData of defaultRoles) {
-      if (existingRoleNames.has(roleData.roleName)) {
-        console.log(`Role '${roleData.roleName}' already exists, skipping...`);
-        continue;
-      }
-
-      try {
-        console.log(`Creating default ${roleData.roleName} role...`);
-        const newRole = roleRepository.create(roleData);
-        await roleRepository.save(newRole);
-        console.log(`Default ${roleData.roleName} role created successfully!`);
-      } catch (saveError: any) {
-        if (saveError.code === '23505') { // PostgreSQL unique violation error code
-          console.log(`Role '${roleData.roleName}' already exists (concurrent creation), skipping...`);
-          continue;
-        }
-        throw saveError; // Re-throw if it's a different error
-      }
-    }
+    const roleRepository = AppDataSource.getRepository("Role");
+    // No default roles to seed
   } catch (error) {
     console.error("Error seeding default roles:", error);
     throw error;
