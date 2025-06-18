@@ -5,40 +5,42 @@ import { User } from "../models/User";
 import { In } from "typeorm";
 import { CacheService } from "../services/CacheService";
 
-const CACHE_TTL = 3600; // 1 hour
+const CACHE_TTL = 3600; // 1 hour in seconds
 
 export class OrganizationRepository {
   private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  private static repo = AppDataSource.getRepository(Organization);
 
   /**
-   * Get all organizations
-   * @returns List of organizations with users
+   * Get all organizations with caching
+   * @returns List of organizations with users and their roles
    */
   static async getAll(): Promise<{ success: boolean; data?: Organization[]; message?: string }> {
     try {
       const cacheKey = "org:all";
       const organizations = await CacheService.getOrSetMultiple(
         cacheKey,
-        AppDataSource.getRepository(Organization),
+        OrganizationRepository.repo,
         async () => {
-          return await AppDataSource.getRepository(Organization).find({
+          return await OrganizationRepository.repo.find({
             relations: ["users", "users.role"],
+            order: { organizationName: "ASC" },
           });
         },
         CACHE_TTL
       );
 
-      return { success: true, data: organizations };
+      return { success: true, data: organizations, message: "Organizations retrieved successfully" };
     } catch (error) {
-      console.error("[Organization Fetch Error]:", error);
+      console.error("[Organization Fetch All Error]:", error);
       return { success: false, message: "Failed to fetch organizations" };
     }
   }
 
   /**
-   * Get an organization by ID
+   * Get an organization by ID with caching
    * @param id Organization UUID
-   * @returns Organization with users
+   * @returns Organization with users and their roles
    */
   static async getById(id: string): Promise<{ success: boolean; data?: Organization; message?: string }> {
     if (!id || !this.UUID_REGEX.test(id)) {
@@ -49,9 +51,9 @@ export class OrganizationRepository {
       const cacheKey = `org:id:${id}`;
       const organization = await CacheService.getOrSetSingle(
         cacheKey,
-        AppDataSource.getRepository(Organization),
+        OrganizationRepository.repo,
         async () => {
-          return await AppDataSource.getRepository(Organization).findOne({
+          return await OrganizationRepository.repo.findOne({
             where: { organizationId: id },
             relations: ["users", "users.role"],
           });
@@ -63,7 +65,7 @@ export class OrganizationRepository {
         return { success: false, message: "Organization not found" };
       }
 
-      return { success: true, data: organization };
+      return { success: true, data: organization, message: "Organization retrieved successfully" };
     } catch (error) {
       console.error(`[Organization Fetch Error] ID: ${id}:`, error);
       return { success: false, message: "Failed to fetch organization" };
@@ -71,7 +73,7 @@ export class OrganizationRepository {
   }
 
   /**
-   * Create a new organization (not saved)
+   * Create a new organization entity (not saved)
    * @param data Organization data
    * @returns Organization entity
    */
@@ -84,17 +86,69 @@ export class OrganizationRepository {
       return { success: false, message: "Required fields (name, email, address, type) are missing" };
     }
 
-    const organization = new Organization();
-    organization.organizationName = data.organizationName;
-    organization.description = data.description ?? "";
-    organization.contactEmail = data.contactEmail;
-    organization.contactPhone = data.contactPhone ?? "";
-    organization.address = data.address;
-    organization.organizationType = data.organizationType;
-    organization.createdAt = new Date();
-    organization.updatedAt = new Date();
+    try {
+      const organization = OrganizationRepository.repo.create({
+        organizationName: data.organizationName,
+        description: data.description ?? "",
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone ?? "",
+        address: data.address,
+        organizationType: data.organizationType,
+        city: data.city ?? "",
+        country: data.country ?? "",
+        postalCode: data.postalCode ?? "",
+        stateProvince: data.stateProvince ?? "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-    return { success: true, data: organization };
+      return { success: true, data: organization, message: "Organization entity created" };
+    } catch (error) {
+      console.error("[Organization Create Entity Error]:", error);
+      return { success: false, message: "Failed to create organization entity" };
+    }
+  }
+
+  /**
+   * Save an organization
+   * @param org Organization entity
+   * @returns Saved organization
+   */
+  static async save(org: Organization): Promise<{ success: boolean; data?: Organization; message?: string }> {
+    if (!org.organizationName || !org.contactEmail || !org.address || !org.organizationType) {
+      return { success: false, message: "Required fields (name, email, address, type) are missing" };
+    }
+
+    try {
+      // Check for duplicates (excluding self if updating)
+      const existing = await OrganizationRepository.repo.findOne({
+        where: [
+          { organizationName: org.organizationName },
+          { contactEmail: org.contactEmail },
+        ],
+      });
+
+      if (existing && existing.organizationId !== org.organizationId) {
+        return {
+          success: false,
+          message: "Organization with this name or email already exists",
+        };
+      }
+
+      org.updatedAt = new Date();
+      const savedOrganization = await OrganizationRepository.repo.save(org);
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${savedOrganization.organizationId}`,
+      ]);
+
+      return { success: true, data: savedOrganization, message: "Organization saved successfully" };
+    } catch (error) {
+      console.error("[Organization Save Error]:", error);
+      return { success: false, message: "Failed to save organization" };
+    }
   }
 
   /**
@@ -112,35 +166,49 @@ export class OrganizationRepository {
     }
 
     try {
-      const repo = AppDataSource.getRepository(Organization);
       const organizations: Organization[] = [];
-      const existingNames = new Set<string>();
-      const existingEmails = new Set<string>();
+      const names = new Set<string>();
+      const emails = new Set<string>();
 
       // Validate and create entities
       for (const item of data) {
-        if (
-          !item.organizationName ||
-          !item.contactEmail ||
-          !item.address ||
-          !item.organizationType
-        ) {
-          return { success: false, message: "Required fields missing in one or more organizations" };
+        // Check required fields for each organization
+        const missingFields = [];
+        if (!item.organizationName) missingFields.push('organizationName');
+        if (!item.contactEmail) missingFields.push('contactEmail');
+        if (!item.address) missingFields.push('address');
+        if (!item.organizationType) missingFields.push('organizationType');
+
+        if (missingFields.length > 0) {
+          return {
+            success: false,
+            message: `Required fields missing for organization: ${missingFields.join(', ')}`,
+          };
         }
 
-        if (existingNames.has(item.organizationName) || existingEmails.has(item.contactEmail)) {
+        // Type assertions for required fields
+        const orgName = item.organizationName!;
+        const orgEmail = item.contactEmail!;
+        const orgAddress = item.address!;
+        const orgType = item.organizationType!;
+
+        if (names.has(orgName) || emails.has(orgEmail)) {
           return { success: false, message: "Duplicate organization name or email in bulk data" };
         }
-        existingNames.add(item.organizationName);
-        existingEmails.add(item.contactEmail);
+        names.add(orgName);
+        emails.add(orgEmail);
 
-        const org = repo.create({
-          organizationName: item.organizationName,
+        const org = OrganizationRepository.repo.create({
+          organizationName: orgName,
           description: item.description ?? "",
-          contactEmail: item.contactEmail,
+          contactEmail: orgEmail,
           contactPhone: item.contactPhone ?? "",
-          address: item.address,
-          organizationType: item.organizationType,
+          address: orgAddress,
+          organizationType: orgType,
+          city: item.city ?? "",
+          country: item.country ?? "",
+          postalCode: item.postalCode ?? "",
+          stateProvince: item.stateProvince ?? "",
           createdAt: new Date(),
           updatedAt: new Date(),
         });
@@ -148,11 +216,8 @@ export class OrganizationRepository {
       }
 
       // Check existing organizations
-      const existing = await repo.find({
-        where: [
-          { organizationName: In([...existingNames]) },
-          { contactEmail: In([...existingEmails]) },
-        ],
+      const existing = await OrganizationRepository.repo.find({
+        where: [{ organizationName: In([...names]) }, { contactEmail: In([...emails]) }],
       });
 
       if (existing.length) {
@@ -162,65 +227,21 @@ export class OrganizationRepository {
         };
       }
 
-      // Save all organizations
-      const savedOrganizations = await repo.save(organizations);
+      // Save all organizations in a transaction
+      const savedOrganizations = await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
+        return await transactionalEntityManager.save(Organization, organizations);
+      });
 
       // Invalidate cache
-      await CacheService.invalidateMultiple(["org:all", ...savedOrganizations.map((org) => `org:id:${org.organizationId}`)]);
+      await CacheService.invalidateMultiple([
+        "org:all",
+        ...savedOrganizations.map((org) => `org:id:${org.organizationId}`),
+      ]);
 
       return { success: true, data: savedOrganizations, message: "Organizations created successfully" };
     } catch (error) {
       console.error("[Organization Bulk Create Error]:", error);
       return { success: false, message: "Failed to create organizations" };
-    }
-  }
-
-  /**
-   * Save an organization
-   * @param org Organization entity
-   * @returns Saved organization
-   */
-  static async save(org: Organization): Promise<{
-    success: boolean;
-    data?: Organization;
-    message?: string;
-  }> {
-    if (!org.organizationName || !org.contactEmail || !org.address || !org.organizationType) {
-      return { success: false, message: "Required fields (name, email, address, type) are missing" };
-    }
-
-    try {
-      const repo = AppDataSource.getRepository(Organization);
-
-      // Check for duplicates
-      const existing = await repo.findOne({
-        where: [
-          { organizationName: org.organizationName },
-          { contactEmail: org.contactEmail },
-        ],
-      });
-
-      if (existing && existing.organizationId !== org.organizationId) {
-        return {
-          success: false,
-          message: "Organization with this name or email already exists",
-          data: existing,
-        };
-      }
-
-      org.updatedAt = new Date();
-      const savedOrganization = await repo.save(org);
-
-      // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${savedOrganization.organizationId}`,
-      ]);
-
-      return { success: true, data: savedOrganization, message: "Organization saved successfully" };
-    } catch (error) {
-      console.error("[Organization Save Error]:", error);
-      return { success: false, message: "Failed to save organization" };
     }
   }
 
@@ -239,8 +260,7 @@ export class OrganizationRepository {
     }
 
     try {
-      const repo = AppDataSource.getRepository(Organization);
-      const organization = await repo.findOne({
+      const organization = await OrganizationRepository.repo.findOne({
         where: { organizationId: id },
         relations: ["users"],
       });
@@ -251,10 +271,10 @@ export class OrganizationRepository {
 
       // Check for duplicate name/email
       if (data.organizationName || data.contactEmail) {
-        const existing = await repo.findOne({
+        const existing = await OrganizationRepository.repo.findOne({
           where: [
-            { organizationName: data.organizationName || "" },
-            { contactEmail: data.contactEmail || "" },
+            { organizationName: data.organizationName || organization.organizationName },
+            { contactEmail: data.contactEmail || organization.contactEmail },
           ],
         });
         if (existing && existing.organizationId !== id) {
@@ -262,17 +282,30 @@ export class OrganizationRepository {
         }
       }
 
-      repo.merge(organization, {
-        organizationName: data.organizationName ?? organization.organizationName,
-        description: data.description ?? organization.description,
-        contactEmail: data.contactEmail ?? organization.contactEmail,
-        contactPhone: data.contactPhone ?? organization.contactPhone,
-        address: data.address ?? organization.address,
-        organizationType: data.organizationType ?? organization.organizationType,
+      // Update only provided fields
+      const updateData: Partial<Organization> = {
+        organizationName: data.organizationName,
+        description: data.description,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        address: data.address,
+        organizationType: data.organizationType,
+        city: data.city,
+        country: data.country,
+        postalCode: data.postalCode,
+        stateProvince: data.stateProvince,
         updatedAt: new Date(),
+      };
+
+      // Remove undefined values to avoid overwriting with null
+      Object.keys(updateData).forEach((key) => {
+        if (updateData[key as keyof typeof updateData] === undefined) {
+          delete updateData[key as keyof typeof updateData];
+        }
       });
 
-      const updatedOrganization = await repo.save(organization);
+      OrganizationRepository.repo.merge(organization, updateData);
+      const updatedOrganization = await OrganizationRepository.repo.save(organization);
 
       // Invalidate cache
       await CacheService.invalidateMultiple([
@@ -284,6 +317,95 @@ export class OrganizationRepository {
       return { success: true, data: updatedOrganization, message: "Organization updated successfully" };
     } catch (error) {
       console.error(`[Organization Update Error] ID: ${id}:`, error);
+      return { success: false, message: "Failed to update organization" };
+    }
+  }
+
+  /**
+   * Update an organization with array inputs for fields
+   * @param id Organization UUID
+   * @param data Partial organization data with possible array values
+   * @returns Updated organization
+   */
+  static async updateWithArray(
+    id: string,
+    data: Partial<Record<keyof OrganizationInterface, string | string[]>>
+  ): Promise<{ success: boolean; data?: Organization; message?: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+
+    try {
+      const organization = await OrganizationRepository.repo.findOne({
+        where: { organizationId: id },
+        relations: ["users"],
+      });
+
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+
+      // Prepare update data, handling arrays by taking the last value
+      const updateData: Partial<Organization> = {
+        updatedAt: new Date(),
+      };
+
+      const fields: (keyof OrganizationInterface)[] = [
+        "organizationName",
+        "description",
+        "contactEmail",
+        "contactPhone",
+        "address",
+        "organizationType",
+        "city",
+        "country",
+        "postalCode",
+        "stateProvince",
+      ];
+
+      for (const field of fields) {
+        if (data[field] !== undefined) {
+          const value = Array.isArray(data[field]) ? (data[field] as string[])[(data[field] as string[]).length - 1] : (data[field] as string);
+          if (value !== undefined) {
+            (updateData as Record<string, string>)[field] = value;
+          }
+        }
+      }
+
+      // Check for duplicate name/email
+      if (updateData.organizationName || updateData.contactEmail) {
+        const existing = await OrganizationRepository.repo.findOne({
+          where: [
+            { organizationName: updateData.organizationName || organization.organizationName },
+            { contactEmail: updateData.contactEmail || organization.contactEmail },
+          ],
+        });
+        if (existing && existing.organizationId !== id) {
+          return { success: false, message: "Organization name or email already exists" };
+        }
+      }
+
+      // Validate required fields if provided
+      const requiredFields = ["organizationName", "contactEmail", "address", "organizationType"] as const;
+      for (const field of requiredFields) {
+        if (updateData[field as keyof Organization] === "") {
+          return { success: false, message: `Required field ${field} cannot be empty` };
+        }
+      }
+
+      OrganizationRepository.repo.merge(organization, updateData);
+      const updatedOrganization = await OrganizationRepository.repo.save(organization);
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${id}`,
+        ...organization.users.map((user) => `org:user:${user.userId}`),
+      ]);
+
+      return { success: true, data: updatedOrganization, message: "Organization updated successfully" };
+    } catch (error) {
+      console.error(`[Organization UpdateWithArray Error] ID: ${id}:`, error);
       return { success: false, message: "Failed to update organization" };
     }
   }
@@ -303,51 +425,59 @@ export class OrganizationRepository {
     }
 
     try {
-      const repo = AppDataSource.getRepository(Organization);
       const updatedOrganizations: Organization[] = [];
       const invalidateKeys: string[] = ["org:all"];
 
-      for (const { id, data } of updates) {
-        if (!id || !this.UUID_REGEX.test(id)) {
-          return { success: false, message: `Invalid organization ID: ${id}` };
-        }
-
-        const organization = await repo.findOne({
-          where: { organizationId: id },
-          relations: ["users"],
-        });
-
-        if (!organization) {
-          return { success: false, message: `Organization not found: ${id}` };
-        }
-
-        // Check for duplicate name/email
-        if (data.organizationName || data.contactEmail) {
-          const existing = await repo.findOne({
-            where: [
-              { organizationName: data.organizationName || "" },
-              { contactEmail: data.contactEmail || "" },
-            ],
-          });
-          if (existing && existing.organizationId !== id) {
-            return { success: false, message: "Organization name or email already exists" };
+      await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
+        for (const { id, data } of updates) {
+          if (!id || !this.UUID_REGEX.test(id)) {
+            throw new Error(`Invalid organization ID: ${id}`);
           }
+
+          const organization = await transactionalEntityManager.findOne(Organization, {
+            where: { organizationId: id },
+            relations: ["users"],
+          });
+
+          if (!organization) {
+            throw new Error(`Organization not found: ${id}`);
+          }
+
+          // Check for duplicate name/email
+          if (data.organizationName || data.contactEmail) {
+            const existing = await transactionalEntityManager.findOne(Organization, {
+              where: [
+                { organizationName: data.organizationName || organization.organizationName },
+                { contactEmail: data.contactEmail || organization.contactEmail },
+              ],
+            });
+            if (existing && existing.organizationId !== id) {
+              throw new Error("Organization name or email already exists");
+            }
+          }
+
+          transactionalEntityManager.merge(Organization, organization, {
+            organizationName: data.organizationName ?? organization.organizationName,
+            description: data.description ?? organization.description,
+            contactEmail: data.contactEmail ?? organization.contactEmail,
+            contactPhone: data.contactPhone ?? organization.contactPhone,
+            address: data.address ?? organization.address,
+            organizationType: data.organizationType ?? organization.organizationType,
+            city: data.city ?? organization.city,
+            country: data.country ?? organization.country,
+            postalCode: data.postalCode ?? organization.postalCode,
+            stateProvince: data.stateProvince ?? organization.stateProvince,
+            updatedAt: new Date(),
+          });
+
+          const updatedOrg = await transactionalEntityManager.save(Organization, organization);
+          updatedOrganizations.push(updatedOrg);
+          invalidateKeys.push(
+            `org:id:${id}`,
+            ...organization.users.map((user) => `org:user:${user.userId}`)
+          );
         }
-
-        repo.merge(organization, {
-          organizationName: data.organizationName ?? organization.organizationName,
-          description: data.description ?? organization.description,
-          contactEmail: data.contactEmail ?? organization.contactEmail,
-          contactPhone: data.contactPhone ?? organization.contactPhone,
-          address: data.address ?? organization.address,
-          organizationType: data.organizationType ?? organization.organizationType,
-          updatedAt: new Date(),
-        });
-
-        const updatedOrg = await repo.save(organization);
-        updatedOrganizations.push(updatedOrg);
-        invalidateKeys.push(`org:id:${id}`, ...organization.users.map((user) => `org:user:${user.userId}`));
-      }
+      });
 
       // Invalidate cache
       await CacheService.invalidateMultiple(invalidateKeys);
@@ -355,7 +485,7 @@ export class OrganizationRepository {
       return { success: true, data: updatedOrganizations, message: "Organizations updated successfully" };
     } catch (error) {
       console.error("[Organization Bulk Update Error]:", error);
-      return { success: false, message: "Failed to update organizations" };
+      return { success: false, message: error instanceof Error ? error.message : "Failed to update organizations" };
     }
   }
 
@@ -370,8 +500,7 @@ export class OrganizationRepository {
     }
 
     try {
-      const repo = AppDataSource.getRepository(Organization);
-      const organization = await repo.findOne({
+      const organization = await OrganizationRepository.repo.findOne({
         where: { organizationId: id },
         relations: ["users"],
       });
@@ -380,11 +509,15 @@ export class OrganizationRepository {
         return { success: false, message: "Organization not found" };
       }
 
-      const result = await repo.delete(id);
-
-      if (result.affected === 0) {
-        return { success: false, message: "Organization not found or already deleted" };
+      // Check if organization has associated users
+      if (organization.users && organization.users.length > 0) {
+        return {
+          success: false,
+          message: `Cannot delete organization with ${organization.users.length} associated user(s). Please remove users first.`,
+        };
       }
+
+      await OrganizationRepository.repo.remove(organization);
 
       // Invalidate cache
       await CacheService.invalidateMultiple([
@@ -419,11 +552,7 @@ export class OrganizationRepository {
     }
 
     try {
-      const organizationRepo = AppDataSource.getRepository(Organization);
-      const userRepo = AppDataSource.getRepository(User);
-
-      // Fetch organization with existing users
-      const organization = await organizationRepo.findOne({
+      const organization = await OrganizationRepository.repo.findOne({
         where: { organizationId },
         relations: ["users"],
       });
@@ -432,7 +561,7 @@ export class OrganizationRepository {
         return { success: false, message: "Organization not found" };
       }
 
-      // Fetch users
+      const userRepo = AppDataSource.getRepository(User);
       const users = await userRepo.find({
         where: { userId: In(userIds) },
         relations: ["organizations"],
@@ -448,12 +577,16 @@ export class OrganizationRepository {
       );
 
       if (!newUsers.length) {
-        return { success: true, message: "All users are already assigned to this organization", data: organization };
+        return {
+          success: true,
+          message: "All users are already assigned to this organization",
+          data: organization,
+        };
       }
 
       // Assign users
       organization.users = [...(organization.users || []), ...newUsers];
-      const updatedOrganization = await organizationRepo.save(organization);
+      const updatedOrganization = await OrganizationRepository.repo.save(organization);
 
       // Invalidate cache
       await CacheService.invalidateMultiple([
@@ -465,7 +598,7 @@ export class OrganizationRepository {
 
       return {
         success: true,
-        message: `${newUsers.length} users assigned to organization`,
+        message: `${newUsers.length} user(s) assigned to organization`,
         data: updatedOrganization,
       };
     } catch (error) {
@@ -493,8 +626,7 @@ export class OrganizationRepository {
     }
 
     try {
-      const organizationRepo = AppDataSource.getRepository(Organization);
-      const organization = await organizationRepo.findOne({
+      const organization = await OrganizationRepository.repo.findOne({
         where: { organizationId },
         relations: ["users"],
       });
@@ -504,11 +636,17 @@ export class OrganizationRepository {
       }
 
       // Filter users to remove
-      organization.users = organization.users.filter(
-        (user) => !userIds.includes(user.userId)
-      );
+      const usersToRemove = organization.users.filter((user) => userIds.includes(user.userId));
+      if (!usersToRemove.length) {
+        return {
+          success: true,
+          message: "No specified users are assigned to this organization",
+          data: organization,
+        };
+      }
 
-      const updatedOrganization = await organizationRepo.save(organization);
+      organization.users = organization.users.filter((user) => !userIds.includes(user.userId));
+      const updatedOrganization = await OrganizationRepository.repo.save(organization);
 
       // Invalidate cache
       await CacheService.invalidateMultiple([
@@ -520,7 +658,7 @@ export class OrganizationRepository {
 
       return {
         success: true,
-        message: `${userIds.length} users removed from organization`,
+        message: `${usersToRemove.length} user(s) removed from organization`,
         data: updatedOrganization,
       };
     } catch (error) {
@@ -530,7 +668,7 @@ export class OrganizationRepository {
   }
 
   /**
-   * Get users by organization
+   * Get users by organization with caching
    * @param organizationId Organization UUID
    * @returns Users associated with organization
    */
@@ -549,7 +687,7 @@ export class OrganizationRepository {
         cacheKey,
         AppDataSource.getRepository(User),
         async () => {
-          const organization = await AppDataSource.getRepository(Organization).findOne({
+          const organization = await OrganizationRepository.repo.findOne({
             where: { organizationId },
             relations: ["users", "users.role"],
           });
@@ -558,7 +696,7 @@ export class OrganizationRepository {
         CACHE_TTL
       );
 
-      return { success: true, data: users };
+      return { success: true, data: users, message: "Users retrieved successfully" };
     } catch (error) {
       console.error(`[Organization Fetch Users Error] Org ID: ${organizationId}:`, error);
       return { success: false, message: "Failed to fetch users for organization" };

@@ -5,6 +5,7 @@ import * as bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import PasswordService from "../../services/emails/EmailService";
 import { CacheService } from "../../services/CacheService";
+import { Raw } from "typeorm";
 
 const SECRET_KEY = process.env.JWT_SECRET || "sdbgvkghdfcnmfxdxdfggj";
 const COOKIE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours
@@ -41,10 +42,14 @@ export class LoginController {
         cacheKey,
         userRepository,
         async () => {
-          return await userRepository.findOne({
-            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-            relations: ["role", "organizations"],
-          });
+          return await userRepository
+            .createQueryBuilder("user")
+            .leftJoinAndSelect("user.role", "role")
+            .leftJoinAndSelect("user.organizations", "organizations")
+            .where("user.email = :identifier", { identifier })
+            .orWhere("user.username = :identifier", { identifier })
+            .orWhere("user.phoneNumber = :identifier", { identifier })
+            .getOne();
         },
         CACHE_TTL
       );
@@ -181,26 +186,23 @@ export class LoginController {
         cacheKey,
         userRepository,
         async () => {
-          return await userRepository.findOne({
-            where: [
-              { email: identifier },
-              { username: identifier },
-              { phoneNumber: identifier },
-            ],
-            relations: [
-              "role",
-              "organizations",
-              "createdEvents",
-              "createdEvents.organization",
-              "createdEvents.venues",
-              "managedVenues",
-              "registrations",
-              "registrations.event",
-              "registrations.venue",
-              "feedbacks",
-              "feedbacks.event"
-            ],
-          });
+          return await userRepository
+            .createQueryBuilder("user")
+            .leftJoinAndSelect("user.role", "role")
+            .leftJoinAndSelect("user.organizations", "organizations")
+            .leftJoinAndSelect("user.createdEvents", "createdEvents")
+            .leftJoinAndSelect("createdEvents.organization", "eventOrganization")
+            .leftJoinAndSelect("createdEvents.venues", "eventVenues")
+            .leftJoinAndSelect("user.managedVenues", "managedVenues")
+            .leftJoinAndSelect("user.registrations", "registrations")
+            .leftJoinAndSelect("registrations.event", "registrationEvent")
+            .leftJoinAndSelect("registrations.venue", "registrationVenue")
+            .leftJoinAndSelect("user.feedbacks", "feedbacks")
+            .leftJoinAndSelect("feedbacks.event", "feedbackEvent")
+            .where("user.email = :identifier", { identifier })
+            .orWhere("user.username = :identifier", { identifier })
+            .orWhere("user.phoneNumber = :identifier", { identifier })
+            .getOne();
         },
         CACHE_TTL
       );

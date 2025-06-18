@@ -45,8 +45,8 @@ export class EventController {
       if (venues && Array.isArray(venues) && venues.length > 0) {
         const venueIds = venues.map(v => v.venueId).filter(Boolean);
         for (const venueId of venueIds) {
-          const venueResult = await VenueRepository.getById(venueId);
-          if (!venueResult) {
+          const venueResult = await VenueRepository.getVenueById(venueId);
+          if (!venueResult.success || !venueResult.data) {
             res.status(404).json({ success: false, message: `Venue with ID ${venueId} not found.` });
             return;
           }
@@ -111,8 +111,8 @@ export class EventController {
         if (eventData.venues && Array.isArray(eventData.venues) && eventData.venues.length > 0) {
           const venueIds = eventData.venues.map(v => v.venueId).filter(Boolean);
           for (const venueId of venueIds) {
-            const venueResult = await VenueRepository.getById(venueId);
-            if (!venueResult) {
+            const venueResult = await VenueRepository.getVenueById(venueId);
+            if (!venueResult.success || !venueResult.data) {
               res.status(404).json({ success: false, message: `Venue with ID ${venueId} not found.` });
               return;
             }
@@ -320,8 +320,8 @@ export class EventController {
       if (venues && Array.isArray(venues) && venues.length > 0) {
         const venueIds = venues.map(v => v.venueId).filter(Boolean);
         for (const venueId of venueIds) {
-          const venueResult = await VenueRepository.getById(venueId);
-          if (!venueResult) {
+          const venueResult = await VenueRepository.getVenueById(venueId);
+          if (!venueResult.success || !venueResult.data) {
             res.status(404).json({ success: false, message: `Venue with ID ${venueId} not found.` });
             return;
           }
@@ -405,8 +405,8 @@ export class EventController {
     try {
       // Validate venues
       for (const venueId of venueIds) {
-        const venueResult = await VenueRepository.getById(venueId);
-        if (!venueResult) {
+        const venueResult = await VenueRepository.getVenueById(venueId);
+        if (!venueResult.success || !venueResult.data) {
           res.status(404).json({ success: false, message: `Venue with ID ${venueId} not found.` });
           return;
         }
@@ -442,8 +442,8 @@ export class EventController {
     try {
       // Validate venues
       for (const venueId of venueIds) {
-        const venueResult = await VenueRepository.getById(venueId);
-        if (!venueResult) {
+        const venueResult = await VenueRepository.getVenueById(venueId);
+        if (!venueResult.success || !venueResult.data) {
           res.status(404).json({ success: false, message: `Venue with ID ${venueId} not found.` });
           return;
         }

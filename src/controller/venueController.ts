@@ -4,6 +4,8 @@ import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
 import { VenueRepository } from "../repositories/venueRepository";
+import { AppDataSource } from "../config/Database";
+import { VenueBooking } from "../models/VenueBooking";
 
 export class VenueController {
   // Create a single venue
@@ -47,13 +49,13 @@ export class VenueController {
   
       };
 
-      const createResult = await VenueRepository.create(newVenueData);
+      const createResult = await VenueRepository.createVenue(newVenueData);
       if (!createResult.success || !createResult.data) {
         res.status(400).json({ success: false, message: createResult.message });
         return;
       }
 
-      const saveResult = await VenueRepository.save(createResult.data);
+      const saveResult = await VenueRepository.saveVenue(createResult.data[0]);
       if (saveResult.success && saveResult.data) {
         res.status(201).json({ success: true, message: "Venue created successfully.", data: saveResult.data });
       } else {
@@ -81,7 +83,7 @@ export class VenueController {
     }
 
     try {
-      const createResult = await VenueRepository.createMultiple(venuesData);
+      const createResult = await VenueRepository.createMultipleVenues(venuesData);
       res.status(createResult.success ? 201 : 207).json({
         success: createResult.success,
         message: createResult.success ? "All venues created successfully." : "Some venues failed to create.",
@@ -103,7 +105,7 @@ export class VenueController {
     }
 
     try {
-      const result = await VenueRepository.getById(id);
+      const result = await VenueRepository.getVenueById(id);
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
@@ -124,7 +126,7 @@ export class VenueController {
     }
 
     try {
-      const result = await VenueRepository.getByManagerId(userId);
+      const result = await VenueRepository.getVenuesByManagerId(userId);
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
@@ -139,7 +141,7 @@ export class VenueController {
   // Get all venues
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
-      const result = await VenueRepository.getAll();
+      const result = await VenueRepository.getAllVenues();
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
@@ -190,7 +192,7 @@ export class VenueController {
 
       };
 
-      const updateResult = await VenueRepository.update(id, updateData);
+      const updateResult = await VenueRepository.updateVenue(id, updateData);
       if (updateResult.success && updateResult.data) {
         res.status(200).json({ success: true, message: "Venue updated successfully.", data: updateResult.data });
       } else {
@@ -274,7 +276,7 @@ export class VenueController {
     }
 
     try {
-      const deleteResult = await VenueRepository.delete(id);
+      const deleteResult = await VenueRepository.deleteVenue(id);
       if (deleteResult.success) {
         res.status(200).json({ success: true, message: deleteResult.message || "Venue deleted successfully." });
       } else {
@@ -302,7 +304,7 @@ export class VenueController {
     }
 
     try {
-      const restoreResult = await VenueRepository.restore(id);
+      const restoreResult = await VenueRepository.restoreVenue(id);
       if (restoreResult.success && restoreResult.data) {
         res.status(200).json({ success: true, message: "Venue restored successfully.", data: restoreResult.data });
       } else {
@@ -324,7 +326,7 @@ export class VenueController {
     }
 
     try {
-      const result = await VenueRepository.getDeleted();
+      const result = await VenueRepository.getDeletedVenues();
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
@@ -356,7 +358,7 @@ export class VenueController {
         return;
       }
 
-      const venueResult = await VenueRepository.getById(venueId);
+      const venueResult = await VenueRepository.getVenueById(venueId);
       if (!venueResult.success || !venueResult.data) {
         res.status(404).json({ success: false, message: "Venue not found." });
         return;
@@ -482,6 +484,23 @@ export class VenueController {
     } catch (err) {
       console.error("Error getting venues by proximity:", err);
       res.status(500).json({ success: false, message: "Failed to get venues by proximity." });
+    }
+  }
+
+  // Get bookings by venue
+  static async getBookingsByVenue(req: Request, res: Response): Promise<void> {
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+
+    try {
+      const bookings = await AppDataSource.getRepository(VenueBooking).find({ where: { venueId } });
+      res.status(200).json({ success: true, data: bookings });
+    } catch (error) {
+      console.error("Error in getBookingsByVenue:", error);
+      res.status(500).json({ success: false, message: "Failed to get venue bookings." });
     }
   }
 }
