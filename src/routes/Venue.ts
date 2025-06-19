@@ -42,6 +42,13 @@ router.get("/search", VenueController.searchVenues);
  */
 router.get("/count", VenueController.getVenueCount);
 
+/**
+ * @route GET /api/venues/:id/resources
+ * @description Get all resources for a venue by its ID.
+ * @access Public
+ */
+// router.get('/:id/resources', VenueController.getResourcesByVenueId); // Removed to avoid conflict
+
 // --- Authenticated Routes (Requires User Login) ---
 
 /**
@@ -83,6 +90,44 @@ router.post(
   authenticate,
   VenueController.assignManagerToVenue
 );
+
+/**
+ * @route POST /api/venues/:venueId/resources
+ * @description Bulk add resources to a venue.
+ * @access Authenticated
+ * @body { resources: [{ resourceId: string, quantity: number }] }
+ */
+router.post(
+  "/:venueId/resources",
+  authenticate,
+  VenueController.addResourcesToVenue
+);
+
+/**
+ * @route DELETE /api/venues/:venueId/resources/:resourceId
+ * @description Remove a resource from a venue.
+ * @access Authenticated
+ */
+router.delete(
+  "/:venueId/resources/:resourceId",
+  authenticate,
+  VenueController.removeResourceFromVenue
+);
+
+/**
+ * @route GET /api/venues/:venueId/resources
+ * @description Get all resources assigned to a venue.
+ * @access Public
+ */
+router.get("/:venueId/resources", VenueController.getVenueResources);
+
+/**
+ * @route POST /api/venues/add-with-resources
+ * @description Create a new venue and assign resources in one request.
+ * @access Authenticated
+ * @body { venueName, capacity, location, amount, ...otherVenueFields, resources: [{ resourceId, quantity }] }
+ */
+router.post('/add-with-resources', authenticate, VenueController.createVenueWithResources);
 
 // --- Admin-Only Routes (Requires Admin Role) ---
 

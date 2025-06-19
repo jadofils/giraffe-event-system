@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
 import { VenueRepository } from "../repositories/venueRepository";
+import { VenueResourceRepository } from "../repositories/VenueResourceRepository";
 
 export class VenueController {
   // Create a single venue
@@ -748,6 +749,203 @@ export class VenueController {
         success: false,
         message: "Failed to assign manager due to a server error.",
       });
+    }
+  }
+
+  // Get resources for a venue by ID
+  static async getResourcesByVenueId(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { id } = req.params;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    try {
+      const result = await VenueRepository.getResourcesByVenueId(id);
+      if (result.success) {
+        res.status(200).json({ success: true, data: result.data });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: result.message || "No resources found for this venue.",
+        });
+      }
+    } catch (err) {
+      console.error("Error getting resources for venue:", err);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get resources for venue.",
+      });
+    }
+  }
+
+  // Add resources to a venue (bulk)
+  static async addResourcesToVenue(req: Request, res: Response): Promise<void> {
+    const { resources } = req.body;
+    const { venueId } = req.params;
+    if (!venueId || !Array.isArray(resources) || resources.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and a non-empty resources array are required",
+      });
+      return;
+    }
+    try {
+      const created = await VenueResourceRepository.addResourcesToVenue(
+        venueId,
+        resources
+      );
+      res.status(201).json({ success: true, data: created });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to add resources to venue" });
+    }
+  }
+
+  // Remove a resource from a venue
+  static async removeResourceFromVenue(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { venueId, resourceId } = req.params;
+    if (!venueId || !resourceId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and resourceId are required",
+      });
+      return;
+    }
+    try {
+      const removed = await VenueResourceRepository.removeResourceFromVenue(
+        venueId,
+        resourceId
+      );
+      if (removed) {
+        res
+          .status(200)
+          .json({ success: true, message: "Resource removed from venue" });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: "Resource not found for this venue",
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to remove resource from venue",
+      });
+    }
+  }
+
+  // Get all resources assigned to a venue
+  static async getVenueResources(req: Request, res: Response): Promise<void> {
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    try {
+      const resources = await VenueResourceRepository.getResourcesByVenueId(
+        venueId
+      );
+      res.status(200).json({ success: true, data: resources });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to get resources for venue" });
+    }
+  }
+
+  // Create a venue and assign resources in one request
+  static async createVenueWithResources(
+    req: AuthenticatedRequest,
+    res: Response
+  ): Promise<void> {
+    const userId = req.user?.userId;
+    const { resources, ...venueData } = req.body;
+    if (!userId) {
+      res
+        .status(401)
+        .json({ success: false, message: "Authentication required." });
+      return;
+    }
+    if (
+      !venueData.venueName ||
+      !venueData.capacity ||
+      !venueData.location ||
+      !venueData.amount
+    ) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: "Required fields: venueName, capacity, location, amount.",
+        });
+      return;
+    }
+    try {
+      // Create the venue
+      const createResult = await VenueRepository.create(venueData);
+      if (!createResult.success || !createResult.data) {
+        res.status(400).json({ success: false, message: createResult.message });
+        return;
+      }
+      const saveResult = await VenueRepository.save(createResult.data);
+      if (!saveResult.success || !saveResult.data) {
+        res
+          .status(500)
+          .json({
+            success: false,
+            message: saveResult.message || "Failed to save venue.",
+          });
+        return;
+      }
+      let assignedResources: any[] = [];
+      if (Array.isArray(resources) && resources.length > 0) {
+        // Support creating new resources inline
+        const resourceAssignments: { resourceId: string; quantity: number }[] =
+          [];
+        for (const r of resources) {
+          if (r.resource) {
+            // Create the resource first
+            const created = await import(
+              "../repositories/ResourceRepository"
+            ).then((m) => m.ResourceRepository.createResource(r.resource));
+            resourceAssignments.push({
+              resourceId: created.resourceId,
+              quantity: r.quantity,
+            });
+          } else if (r.resourceId) {
+            resourceAssignments.push({
+              resourceId: r.resourceId,
+              quantity: r.quantity,
+            });
+          }
+        }
+        assignedResources = await VenueResourceRepository.addResourcesToVenue(
+          saveResult.data.venueId,
+          resourceAssignments
+        );
+      }
+      res.status(201).json({
+        success: true,
+        message: "Venue and resources created successfully.",
+        data: { venue: saveResult.data, resources: assignedResources },
+      });
+    } catch (err) {
+      console.error("Error creating venue with resources:", err);
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Failed to create venue with resources.",
+        });
     }
   }
 }

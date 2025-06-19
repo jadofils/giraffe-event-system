@@ -49,40 +49,7 @@ export class OrganizationController {
     }
   }
 
-  /**
-   * Create a new organization
-   * @route POST /organizations
-   * @access Protected
-   */
-  static async create(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const data: Partial<OrganizationInterface> = req.body;
 
-    if (!data.organizationName || !data.contactEmail || !data.address || !data.organizationType) {
-      res.status(400).json({
-        success: false,
-        message: "Required fields (name, email, address, type) are missing",
-      });
-      return;
-    }
-
-    try {
-      const created = OrganizationRepository.create(data);
-      if (!created.success) {
-        res.status(400).json(created);
-        return;
-      }
-
-      const saved = await OrganizationRepository.save(created.data!);
-      res.status(saved.success ? 201 : saved.data ? 400 : 500).json(saved);
-    } catch (error) {
-      console.error("[OrganizationController Create Error]:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
 
   /**
    * Create multiple organizations
@@ -145,30 +112,7 @@ export class OrganizationController {
    * @route PUT /organizations/bulk
    * @access Protected
    */
-  static async bulkUpdate(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const updates: { id: string; data: Partial<OrganizationInterface> }[] = req.body.updates;
-
-    if (!updates?.length) {
-      res.status(400).json({
-        success: false,
-        message: "At least one organization update is required",
-      });
-      return;
-    }
-
-    try {
-      const result = await OrganizationRepository.bulkUpdate(updates);
-      res.status(result.success ? 200 : 400).json(result);
-    } catch (error) {
-      console.error("[OrganizationController BulkUpdate Error]:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
-
+ 
   /**
    * Delete an organization
    * @route DELETE /organizations/:id
@@ -285,18 +229,5 @@ export class OrganizationController {
     }
   }
 
-  /**
-   * Get all organizations for the authenticated user
-   * @route GET /organizations/my
-   * @access Protected
-   */
-  static async getMyOrganizations(req: any, res: any): Promise<void> {
-    const userId = req.user?.userId;
-    if (!userId) {
-      res.status(401).json({ success: false, message: "Unauthorized" });
-      return;
-    }
-    const result = await OrganizationRepository.getOrganizationsByUserId(userId);
-    res.status(result.success ? 200 : 404).json(result);
-  }
+
 }

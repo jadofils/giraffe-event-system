@@ -27,30 +27,30 @@ export class UserController {
 
       // Process each user
       for (const userInput of usersData) {
-        const {
-          username,
-          firstName,
-          lastName,
-          email,
-          phoneNumber,
-          password,
+      const {
+        username,
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        password,
           confirmPassword,
-          bio,
-          profilePictureURL,
-          preferredLanguage,
-          timezone,
-          emailNotificationsEnabled,
-          smsNotificationsEnabled,
-          socialMediaLinks,
-          dateOfBirth,
-          gender,
-          addressLine1,
-          addressLine2,
-          city,
-          stateProvince,
-          postalCode,
-          country,
-          organization: organizationNameFromRequest,
+        bio,
+        profilePictureURL,
+        preferredLanguage,
+        timezone,
+        emailNotificationsEnabled,
+        smsNotificationsEnabled,
+        socialMediaLinks,
+        dateOfBirth,
+        gender,
+        addressLine1,
+        addressLine2,
+        city,
+        stateProvince,
+        postalCode,
+        country,
+        organization: organizationNameFromRequest,
         } = userInput as Partial<UserInterface> & {
           confirmPassword?: string;
           organization?: string;
@@ -69,33 +69,33 @@ export class UserController {
           continue;
         }
 
-        // === Input Validation ===
-        const errors: string[] = [];
+      // === Input Validation ===
+      const errors: string[] = [];
 
-        if (!username || username.length < 3 || username.length > 50) {
-          errors.push("Username must be between 3 and 50 characters.");
-        }
-        if (!firstName || firstName.length < 1 || firstName.length > 50) {
-          errors.push("First name must be between 1 and 50 characters.");
-        }
-        if (!lastName || lastName.length < 1 || lastName.length > 50) {
-          errors.push("Last name must be between 1 and 50 characters.");
-        }
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          errors.push("Invalid email format.");
-        }
-        if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber)) {
-          errors.push("Invalid phone number format.");
-        }
+      if (!username || username.length < 3 || username.length > 50) {
+        errors.push("Username must be between 3 and 50 characters.");
+      }
+      if (!firstName || firstName.length < 1 || firstName.length > 50) {
+        errors.push("First name must be between 1 and 50 characters.");
+      }
+      if (!lastName || lastName.length < 1 || lastName.length > 50) {
+        errors.push("Last name must be between 1 and 50 characters.");
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.push("Invalid email format.");
+      }
+      if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber)) {
+        errors.push("Invalid phone number format.");
+      }
 
         // Password validation only if password is provided
         if (password) {
           if (password.length < 6) {
-            errors.push("Password must be at least 6 characters long.");
-          }
-          if (password !== confirmPassword) {
-            errors.push("Passwords do not match.");
-          }
+        errors.push("Password must be at least 6 characters long.");
+      }
+      if (password !== confirmPassword) {
+        errors.push("Passwords do not match.");
+      }
           const passwordRegex =
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$/;
           if (!passwordRegex.test(password)) {
@@ -103,9 +103,9 @@ export class UserController {
               "Password must contain at least one uppercase letter, one lowercase letter, and one number."
             );
           }
-        }
+      }
 
-        if (errors.length > 0) {
+      if (errors.length > 0) {
           results.push({
             success: false,
             message: errors.join(" "),
@@ -119,69 +119,69 @@ export class UserController {
           ? await bcrypt.hash(password, 10)
           : undefined;
 
-        // === Default Role Assignment ===
-        const roleRepository = AppDataSource.getRepository(Role);
+      // === Default Role Assignment ===
+      const roleRepository = AppDataSource.getRepository(Role);
         const guestRole = await roleRepository.findOne({
           where: { roleName: "GUEST" },
         });
 
-        if (!guestRole) {
+      if (!guestRole) {
           results.push({
             success: false,
             message: "Default GUEST role not found. Please initialize roles.",
             user: { username, email },
           });
           continue;
-        }
+      }
 
-        // === Handle Organization ===
+      // === Handle Organization ===
         const organizationRepository =
           AppDataSource.getRepository(Organization);
-        const defaultOrgName = "Independent";
+      const defaultOrgName = "Independent";
         const effectiveOrgName =
           (
             organizationNameFromRequest?.trim() || defaultOrgName
           ).toLowerCase() === "independent"
-            ? defaultOrgName
-            : organizationNameFromRequest!.trim();
+        ? defaultOrgName
+        : organizationNameFromRequest!.trim();
 
         let userOrganization = await organizationRepository.findOne({
           where: { organizationName: effectiveOrgName },
         });
 
-        if (!userOrganization && effectiveOrgName === defaultOrgName) {
-          userOrganization = organizationRepository.create({
-            organizationName: defaultOrgName,
-            organizationType: "General",
-            description: "Auto-created organization: Independent",
-            contactEmail: "admin@independent.com",
-          });
-          await organizationRepository.save(userOrganization);
-        }
+      if (!userOrganization && effectiveOrgName === defaultOrgName) {
+        userOrganization = organizationRepository.create({
+          organizationName: defaultOrgName,
+          organizationType: "General",
+          description: "Auto-created organization: Independent",
+          contactEmail: "admin@independent.com",
+        });
+        await organizationRepository.save(userOrganization);
+      }
 
         // === Create User Data ===
         const userData = {
-          username,
-          firstName,
-          lastName,
-          email,
-          phoneNumber,
-          bio,
-          profilePictureURL,
-          preferredLanguage,
-          timezone,
-          emailNotificationsEnabled,
-          smsNotificationsEnabled,
-          socialMediaLinks,
-          dateOfBirth,
-          gender,
-          addressLine1,
-          addressLine2,
-          city,
-          stateProvince,
-          postalCode,
-          country,
-          roleId: guestRole.roleId,
+        username,
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        bio,
+        profilePictureURL,
+        preferredLanguage,
+        timezone,
+        emailNotificationsEnabled,
+        smsNotificationsEnabled,
+        socialMediaLinks,
+        dateOfBirth,
+        gender,
+        addressLine1,
+        addressLine2,
+        city,
+        stateProvince,
+        postalCode,
+        country,
+        roleId: guestRole.roleId,
         };
 
         // Only add password if it was provided
@@ -191,43 +191,43 @@ export class UserController {
 
         // Create and save user
         const user = UserRepository.createUser(userData);
-        const savedUser = await AppDataSource.getRepository(User).save(user);
+      const savedUser = await AppDataSource.getRepository(User).save(user);
 
         if (userOrganization) {
           savedUser.organizations = [userOrganization];
           await AppDataSource.getRepository(User).save(savedUser);
         }
 
-        const completeUser = await AppDataSource.getRepository(User).findOne({
-          where: { userId: savedUser.userId },
+   const completeUser = await AppDataSource.getRepository(User).findOne({
+  where: { userId: savedUser.userId },
           relations: ["role", "organizations"],
-        });
+});
 
-        if (!completeUser) {
+      if (!completeUser) {
           results.push({
             success: false,
             message: "User registration failed during final fetch.",
             user: { username, email },
           });
           continue;
-        }
+      }
 
-        // === Optional: Send welcome email ===
-        try {
-          const emailSent = await PasswordService.sendDefaultPassword(
-            email!,
-            completeUser.lastName,
-            completeUser.firstName,
-            completeUser.username,
-            req
-          );
+      // === Optional: Send welcome email ===
+      try {
+        const emailSent = await PasswordService.sendDefaultPassword(
+          email!,
+          completeUser.lastName,
+          completeUser.firstName,
+          completeUser.username,
+          req
+        );
 
-          if (!emailSent) {
-            console.warn(`Email not sent to ${email}, but user created.`);
-          }
-        } catch (emailErr) {
-          console.error("Email sending error:", emailErr);
+        if (!emailSent) {
+          console.warn(`Email not sent to ${email}, but user created.`);
         }
+      } catch (emailErr) {
+        console.error("Email sending error:", emailErr);
+      }
 
         // === Add successful result ===
         const userResponse = {
@@ -261,21 +261,21 @@ export class UserController {
             : null,
           organizations:
             completeUser.organizations?.map((org) => ({
-              organizationId: org.organizationId,
-              organizationName: org.organizationName,
-              contactEmail: org.contactEmail,
-              contactPhone: org.contactPhone,
-              address: org.address,
-              city: org.city,
-              country: org.country,
-              postalCode: org.postalCode,
-              stateProvince: org.stateProvince,
-              organizationType: org.organizationType,
+            organizationId: org.organizationId,
+            organizationName: org.organizationName,
+            contactEmail: org.contactEmail,
+            contactPhone: org.contactPhone,
+            address: org.address,
+            city: org.city,
+            country: org.country,
+            postalCode: org.postalCode,
+            stateProvince: org.stateProvince,
+            organizationType: org.organizationType,
               description: org.description,
               createdAt: org.createdAt,
               updatedAt: org.updatedAt,
               deletedAt: org.deletedAt,
-            })) || [],
+          })) || [],
         };
 
         results.push({
@@ -292,7 +292,7 @@ export class UserController {
         : results.some((result) => result.success)
         ? 207
         : 400;
-
+      
       res.status(statusCode).json({
         success: allSuccessful,
         message: allSuccessful
@@ -482,11 +482,11 @@ export class UserController {
             deletedAt: registration.deletedAt,
             event: registration.event
               ? {
-                  eventId: registration.event.eventId,
-                  eventTitle: registration.event.eventTitle,
-                  description: registration.event.description,
-                  eventCategory: registration.event.eventCategoryId,
-                  eventType: registration.event.eventType,
+            eventId: registration.event.eventId,
+            eventTitle: registration.event.eventTitle,
+            description: registration.event.description,
+            eventCategory: registration.event.eventCategoryId,
+            eventType: registration.event.eventType,
                   startDate: registration.event.startDate,
                   endDate: registration.event.endDate,
                   startTime: registration.event.startTime,
@@ -558,16 +558,16 @@ export class UserController {
                 }
               : null,
             venue: registration.venue
-              ? {
-                  venueId: registration.venue.venueId,
-                  venueName: registration.venue.venueName,
-                  capacity: registration.venue.capacity,
+            ? {
+              venueId: registration.venue.venueId,
+              venueName: registration.venue.venueName,
+              capacity: registration.venue.capacity,
                   amount: registration.venue.amount,
-                  location: registration.venue.location,
+              location: registration.venue.location,
                   latitude: registration.venue.latitude,
                   longitude: registration.venue.longitude,
                   googleMapsLink: registration.venue.googleMapsLink,
-                  managerId: registration.venue.managerId,
+              managerId: registration.venue.managerId,
                   organizationId: registration.venue.organizationId,
                   amenities: registration.venue.amenities,
                   venueType: registration.venue.venueType,
@@ -695,8 +695,8 @@ export class UserController {
                   createdAt: booking.organization.createdAt,
                   updatedAt: booking.organization.updatedAt,
                   deletedAt: booking.organization.deletedAt,
-                }
-              : null,
+            }
+            : null,
           })) || [],
 
         // Created Events (all fields, with nested venues, bookings, registrations, payments, invoices)
@@ -705,7 +705,7 @@ export class UserController {
             eventId: event.eventId,
             eventTitle: event.eventTitle,
             // ...map all event fields and nested objects as above
-          })) || [],
+        })) || [],
       };
       res.status(200).json({ success: true, user: formattedUser });
     } catch (error) {
@@ -748,19 +748,19 @@ export class UserController {
       if (updateData.organization?.organizationName) {
         const organizationRepository =
           AppDataSource.getRepository(Organization);
-        let userOrganization = await organizationRepository.findOne({
+          let userOrganization = await organizationRepository.findOne({ 
           where: { organizationName: updateData.organization.organizationName },
-        });
-
-        if (!userOrganization) {
-          userOrganization = organizationRepository.create({
-            organizationName: updateData.organization.organizationName,
-            organizationType: "General",
-            description: `Auto-created during update: ${updateData.organization.organizationName}`,
           });
-          await organizationRepository.save(userOrganization);
-        }
-        user.organizations = [userOrganization];
+
+          if (!userOrganization) {
+              userOrganization = organizationRepository.create({
+                  organizationName: updateData.organization.organizationName,
+                  organizationType: "General",
+                  description: `Auto-created during update: ${updateData.organization.organizationName}`,
+              });
+              await organizationRepository.save(userOrganization);
+          }
+          user.organizations = [userOrganization];
       }
 
       const updatedUser = await userRepository.save(user);
@@ -799,21 +799,21 @@ export class UserController {
             : null,
           organizations:
             updatedUser.organizations?.map((org) => ({
-              organizationId: org.organizationId,
-              organizationName: org.organizationName,
-              contactEmail: org.contactEmail,
-              contactPhone: org.contactPhone,
-              address: org.address,
-              city: org.city,
-              country: org.country,
-              postalCode: org.postalCode,
-              stateProvince: org.stateProvince,
-              organizationType: org.organizationType,
+            organizationId: org.organizationId,
+            organizationName: org.organizationName,
+            contactEmail: org.contactEmail,
+            contactPhone: org.contactPhone,
+            address: org.address,
+            city: org.city,
+            country: org.country,
+            postalCode: org.postalCode,
+            stateProvince: org.stateProvince,
+            organizationType: org.organizationType,
               description: org.description,
               createdAt: org.createdAt,
               updatedAt: org.updatedAt,
               deletedAt: org.deletedAt,
-            })) || [],
+          })) || [],
         },
       });
     } catch (error) {
