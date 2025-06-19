@@ -13,12 +13,13 @@ import InvoiceRoutes from './InvoiceRoutes';
 import PaymentRoutes from './PaymentRoutes';
 import InstallmentPlanRoutes from './InstallmentPlanRoutes';
 import EventRoute from './EventRoutes';
+import { isAdmin } from '../middlewares/IsAdmin';
 const router = Router();
   router.use('/static', express.static(path.join(__dirname, '..', '..', 'uploads'))); // Adjust path as needed
 
 // Use versioned routes
 router.use('/users', userRoutes);
-router.use('/roles', roleRoutes);
+router.use('/roles',isAdmin, roleRoutes);
 router.use('/organizations', organizationRoutes); // This makes `/api/v1/organizations/*` available
 router.use("/tickets",tickets); // This makes `/api/v1/tickets-type/*` available
 //resources
