@@ -56,12 +56,10 @@ export class EventController {
         for (const venueId of venueIds) {
           const venueResult = await VenueRepository.getById(venueId);
           if (!venueResult) {
-            res
-              .status(404)
-              .json({
-                success: false,
-                message: `Venue with ID ${venueId} not found.`,
-              });
+            res.status(404).json({
+              success: false,
+              message: `Venue with ID ${venueId} not found.`,
+            });
             return;
           }
           // --- Venue conflict check ---
@@ -95,7 +93,7 @@ export class EventController {
               );
             });
             if (conflictingEvents.length > 0) {
-              return res.status(400).json({
+              res.status(400).json({
                 success: false,
                 message: `Venue is already booked for the requested period by another event.`,
                 conflicts: conflictingEvents.map((e) => ({
@@ -108,6 +106,7 @@ export class EventController {
                   status: e.status,
                 })),
               });
+              return;
             }
           }
         }
@@ -140,29 +139,26 @@ export class EventController {
 
       const saveResult = await EventRepository.save(createResult.data);
       if (saveResult.success && saveResult.data) {
-        res
-          .status(201)
-          .json({
-            success: true,
-            message: "Event created successfully.",
-            data: saveResult.data,
-          });
+        res.status(201).json({
+          success: true,
+          message: "Event created successfully.",
+          data: saveResult.data,
+        });
+        return;
       } else {
-        res
-          .status(500)
-          .json({
-            success: false,
-            message: saveResult.message || "Failed to save event.",
-          });
+        res.status(500).json({
+          success: false,
+          message: saveResult.message || "Failed to save event.",
+        });
+        return;
       }
     } catch (err) {
       console.error("Error creating event:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to create event due to a server error.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to create event due to a server error.",
+      });
+      return;
     }
   }
 
@@ -182,12 +178,10 @@ export class EventController {
     }
 
     if (!eventsData || !Array.isArray(eventsData) || eventsData.length === 0) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "An array of event data is required.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "An array of event data is required.",
+      });
       return;
     }
 
@@ -205,12 +199,10 @@ export class EventController {
           for (const venueId of venueIds) {
             const venueResult = await VenueRepository.getById(venueId);
             if (!venueResult) {
-              res
-                .status(404)
-                .json({
-                  success: false,
-                  message: `Venue with ID ${venueId} not found.`,
-                });
+              res.status(404).json({
+                success: false,
+                message: `Venue with ID ${venueId} not found.`,
+              });
               return;
             }
           }
@@ -230,12 +222,10 @@ export class EventController {
       });
     } catch (err) {
       console.error("Error creating multiple events:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to create events due to a server error.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to create events due to a server error.",
+      });
     }
   }
 
@@ -254,12 +244,10 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: result.message || "Event not found.",
-          });
+        res.status(404).json({
+          success: false,
+          message: result.message || "Event not found.",
+        });
       }
     } catch (err) {
       console.error("Error getting event by ID:", err);
@@ -287,21 +275,17 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: result.message || "No events found for this organizer.",
-          });
+        res.status(404).json({
+          success: false,
+          message: result.message || "No events found for this organizer.",
+        });
       }
     } catch (err) {
       console.error("Error getting events by organizer ID:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to get events by organizer ID.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to get events by organizer ID.",
+      });
     }
   }
 
@@ -320,21 +304,17 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: result.message || "No events found for this organization.",
-          });
+        res.status(404).json({
+          success: false,
+          message: result.message || "No events found for this organization.",
+        });
       }
     } catch (err) {
       console.error("Error getting events by organization ID:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to get events by organization ID.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to get events by organization ID.",
+      });
     }
   }
 
@@ -353,12 +333,10 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: result.message || "No events found for this venue.",
-          });
+        res.status(404).json({
+          success: false,
+          message: result.message || "No events found for this venue.",
+        });
       }
     } catch (err) {
       console.error("Error getting events by venue ID:", err);
@@ -386,12 +364,10 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: result.message || `No events found with status ${status}.`,
-          });
+        res.status(404).json({
+          success: false,
+          message: result.message || `No events found with status ${status}.`,
+        });
       }
     } catch (err) {
       console.error("Error getting events by status:", err);
@@ -430,22 +406,18 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              result.message || "No events found in the specified date range.",
-          });
+        res.status(404).json({
+          success: false,
+          message:
+            result.message || "No events found in the specified date range.",
+        });
       }
     } catch (err) {
       console.error("Error getting events by date range:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to get events by date range.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to get events by date range.",
+      });
     }
   }
 
@@ -456,12 +428,10 @@ export class EventController {
       if (result.success && result.data) {
         res.status(200).json({ success: true, data: result.data });
       } else {
-        res
-          .status(200)
-          .json({
-            success: false,
-            message: result.message || "No events found.",
-          });
+        res.status(200).json({
+          success: false,
+          message: result.message || "No events found.",
+        });
       }
     } catch (err) {
       console.error("Error getting all events:", err);
@@ -514,12 +484,10 @@ export class EventController {
         for (const venueId of venueIds) {
           const venueResult = await VenueRepository.getById(venueId);
           if (!venueResult) {
-            res
-              .status(404)
-              .json({
-                success: false,
-                message: `Venue with ID ${venueId} not found.`,
-              });
+            res.status(404).json({
+              success: false,
+              message: `Venue with ID ${venueId} not found.`,
+            });
             return;
           }
         }
@@ -546,29 +514,23 @@ export class EventController {
 
       const updateResult = await EventRepository.update(id, updateData);
       if (updateResult.success && updateResult.data) {
-        res
-          .status(200)
-          .json({
-            success: true,
-            message: "Event updated successfully.",
-            data: updateResult.data,
-          });
+        res.status(200).json({
+          success: true,
+          message: "Event updated successfully.",
+          data: updateResult.data,
+        });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: updateResult.message || "Event not found.",
-          });
+        res.status(404).json({
+          success: false,
+          message: updateResult.message || "Event not found.",
+        });
       }
     } catch (err) {
       console.error("Error updating event:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to update event due to a server error.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to update event due to a server error.",
+      });
     }
   }
 
@@ -594,19 +556,15 @@ export class EventController {
     try {
       const deleteResult = await EventRepository.delete(id);
       if (deleteResult.success) {
-        res
-          .status(200)
-          .json({
-            success: true,
-            message: deleteResult.message || "Event deleted successfully.",
-          });
+        res.status(200).json({
+          success: true,
+          message: deleteResult.message || "Event deleted successfully.",
+        });
       } else {
-        res
-          .status(404)
-          .json({
-            success: false,
-            message: deleteResult.message || "Event not found.",
-          });
+        res.status(404).json({
+          success: false,
+          message: deleteResult.message || "Event not found.",
+        });
       }
     } catch (err) {
       console.error("Error deleting event:", err);
@@ -638,12 +596,10 @@ export class EventController {
       !Array.isArray(venueIds) ||
       venueIds.length === 0
     ) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "Event ID and an array of venue IDs are required.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "Event ID and an array of venue IDs are required.",
+      });
       return;
     }
 
@@ -652,40 +608,32 @@ export class EventController {
       for (const venueId of venueIds) {
         const venueResult = await VenueRepository.getById(venueId);
         if (!venueResult) {
-          res
-            .status(404)
-            .json({
-              success: false,
-              message: `Venue with ID ${venueId} not found.`,
-            });
+          res.status(404).json({
+            success: false,
+            message: `Venue with ID ${venueId} not found.`,
+          });
           return;
         }
       }
 
       const result = await EventRepository.assignVenues(eventId, venueIds);
       if (result.success) {
-        res
-          .status(200)
-          .json({
-            success: true,
-            message: result.message || "Venues assigned successfully.",
-          });
+        res.status(200).json({
+          success: true,
+          message: result.message || "Venues assigned successfully.",
+        });
       } else {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: result.message || "Failed to assign venues.",
-          });
+        res.status(400).json({
+          success: false,
+          message: result.message || "Failed to assign venues.",
+        });
       }
     } catch (err) {
       console.error("Error assigning venues:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to assign venues due to a server error.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to assign venues due to a server error.",
+      });
     }
   }
 
@@ -711,12 +659,10 @@ export class EventController {
       !Array.isArray(venueIds) ||
       venueIds.length === 0
     ) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "Event ID and an array of venue IDs are required.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "Event ID and an array of venue IDs are required.",
+      });
       return;
     }
 
@@ -725,40 +671,32 @@ export class EventController {
       for (const venueId of venueIds) {
         const venueResult = await VenueRepository.getById(venueId);
         if (!venueResult) {
-          res
-            .status(404)
-            .json({
-              success: false,
-              message: `Venue with ID ${venueId} not found.`,
-            });
+          res.status(404).json({
+            success: false,
+            message: `Venue with ID ${venueId} not found.`,
+          });
           return;
         }
       }
 
       const result = await EventRepository.removeVenues(eventId, venueIds);
       if (result.success) {
-        res
-          .status(200)
-          .json({
-            success: true,
-            message: result.message || "Venues removed successfully.",
-          });
+        res.status(200).json({
+          success: true,
+          message: result.message || "Venues removed successfully.",
+        });
       } else {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: result.message || "Failed to remove venues.",
-          });
+        res.status(400).json({
+          success: false,
+          message: result.message || "Failed to remove venues.",
+        });
       }
     } catch (err) {
       console.error("Error removing venues:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to remove venues due to a server error.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to remove venues due to a server error.",
+      });
     }
   }
 }
