@@ -2,7 +2,7 @@ import { Router } from "express";
 import { VenueController } from "../controller/venueController";
 import { isAdmin } from "../middlewares/IsAdmin"; // Assuming this checks for 'admin' role
 import { authenticate } from "../middlewares/AuthMiddleware"; // Assuming this checks if a user is logged in
-import checkAbsenceRoutes from './CheckAbsenceRoutes'; // <--- ADD THIS IMPORT
+import checkAbsenceRoutes from "./CheckAbsenceRoutes"; // <--- ADD THIS IMPORT
 
 const router = Router();
 
@@ -42,7 +42,6 @@ router.get("/search", VenueController.searchVenues);
  */
 router.get("/count", VenueController.getVenueCount);
 
-
 // --- Authenticated Routes (Requires User Login) ---
 
 /**
@@ -73,6 +72,17 @@ router.put("/update/:id", authenticate, VenueController.update);
  */
 router.delete("/remove/:id", authenticate, VenueController.delete);
 
+/**
+ * @route POST /api/venues/assign-manager
+ * @description Assign a user as manager to a venue.
+ * @access Authenticated
+ * @body { "venueId": "uuid", "userId": "uuid" }
+ */
+router.post(
+  "/assign-manager",
+  authenticate,
+  VenueController.assignManagerToVenue
+);
 
 // --- Admin-Only Routes (Requires Admin Role) ---
 
@@ -90,7 +100,6 @@ router.put("/update-manager/:id", isAdmin, VenueController.updateVenueManager);
  * @access Admin only
  */
 router.put("/remove-manager/:id", isAdmin, VenueController.removeVenueManager);
-router.use('/', checkAbsenceRoutes); // <--- ADD THIS LINE
-
+router.use("/", checkAbsenceRoutes); // <--- ADD THIS LINE
 
 export const venueRoute = router;

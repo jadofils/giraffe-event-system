@@ -1,6 +1,7 @@
 // src/controller/RoleController.ts
 import { Request, Response } from "express";
 import { RoleRepository } from "../repositories/RoleRepository";
+import { Permission } from "../models/Permission";
 
 export class RoleController {
   static async create(req: Request, res: Response): Promise<void> {
@@ -188,4 +189,6 @@ export class RoleController {
       });
     }
   }
+
+  
 }
