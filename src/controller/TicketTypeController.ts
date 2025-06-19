@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { TicketTypeService } from '../services/tickets/TicketTypeService';
 import { TicketTypeRequestInterface } from '../interfaces/TicketTypeInterface';
 import { TicketCategory } from '../interfaces/Index';
+import { EventRepository } from '../repositories/eventRepository';
 
 export class TicketTypeController {
     // No need for service instance since all methods are static
@@ -16,6 +17,14 @@ export class TicketTypeController {
             const ticketTypeData: TicketTypeRequestInterface = req.body;
 
             // --- Basic input validation before hitting the service ---
+            if (!ticketTypeData.eventId) {
+                return res.status(400).json({ message: 'Missing required field: eventId.' });
+            }
+            // Check if event exists
+            const eventResult = await EventRepository.getById(ticketTypeData.eventId);
+            if (!eventResult.success || !eventResult.data) {
+                return res.status(404).json({ message: `Event with ID ${ticketTypeData.eventId} not found.` });
+            }
             if (!ticketTypeData.ticketName || !ticketTypeData.price || !ticketTypeData.ticketCategory) {
                 return res.status(400).json({ message: 'Missing required fields: ticketName, price, and ticketCategory.' });
             }
@@ -93,6 +102,14 @@ export class TicketTypeController {
             const { ticketTypeId } = req.params;
             const updateData: Partial<TicketTypeRequestInterface> = req.body;
 
+            if (!updateData.eventId) {
+                return res.status(400).json({ message: 'Missing required field: eventId.' });
+            }
+            // Check if event exists
+            const eventResult = await EventRepository.getById(updateData.eventId);
+            if (!eventResult.success || !eventResult.data) {
+                return res.status(404).json({ message: `Event with ID ${updateData.eventId} not found.` });
+            }
             // --- Basic input validation for updates ---
             if (updateData.ticketCategory && !Object.values(TicketCategory).includes(updateData.ticketCategory)) {
                 return res.status(400).json({ message: 'Invalid ticket category provided for update.' });

@@ -19,6 +19,7 @@ export class TicketTypeInterface {
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
+  eventId!: string;
 
   constructor(data: Partial<TicketTypeInterface>) {
     Object.assign(this, {
@@ -40,6 +41,7 @@ export class TicketTypeInterface {
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,
+      eventId: data.eventId || '',
     });
   }
 
@@ -70,6 +72,7 @@ export class TicketTypeInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification,
       perks: data.perks,
+      eventId: data.eventId,
     });
   }
 
@@ -93,6 +96,7 @@ export class TicketTypeInterface {
       createdAt: data.createdAt.toISOString(),
       updatedAt: data.updatedAt.toISOString(),
       deletedAt: data.deletedAt?.toISOString(),
+      eventId: data.eventId,
     });
   }
 }
@@ -113,6 +117,7 @@ export class TicketTypeRequestInterface {
   maxQuantity?: number;
   requiresVerification?: boolean;
   perks?: string[];
+  eventId?: string;
 
   constructor(data: Partial<TicketTypeRequestInterface>) {
     Object.assign(this, {
@@ -131,6 +136,7 @@ export class TicketTypeRequestInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification,
       perks: data.perks,
+      eventId: data.eventId,
     });
   }
 
@@ -151,6 +157,7 @@ export class TicketTypeRequestInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification ?? false,
       perks: data.perks,
+      eventId: data.eventId,
     });
   }
 }
@@ -174,6 +181,7 @@ export class TicketTypeResponseInterface {
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string;
+  eventId?: string;
 
   constructor(data: Partial<TicketTypeResponseInterface>) {
     Object.assign(this, {
@@ -195,6 +203,7 @@ export class TicketTypeResponseInterface {
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
       deletedAt: data.deletedAt,
+      eventId: data.eventId,
     });
   }
 
@@ -218,6 +227,7 @@ export class TicketTypeResponseInterface {
       createdAt: data.createdAt.toISOString(),
       updatedAt: data.updatedAt.toISOString(),
       deletedAt: data.deletedAt?.toISOString(),
+      eventId: data.eventId,
     });
   }
 }

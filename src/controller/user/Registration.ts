@@ -485,7 +485,6 @@ export class UserController {
             eventId: registration.event.eventId,
             eventTitle: registration.event.eventTitle,
             description: registration.event.description,
-            eventCategory: registration.event.eventCategoryId,
             eventType: registration.event.eventType,
                   startDate: registration.event.startDate,
                   endDate: registration.event.endDate,

@@ -55,7 +55,6 @@ export class EventRepository {
     event.startTime = data.startTime ? String(data.startTime) : '';
     event.endTime = data.endTime ? String(data.endTime) : '';
     event.description = data.description ?? undefined;
-        event.eventCategoryId = data.eventCategory ?? undefined;
         event.maxAttendees = data.maxAttendees ?? undefined;
         event.status = mappedStatus;
     event.isFeatured = data.isFeatured ?? false;
@@ -293,7 +292,6 @@ export class EventRepository {
         startTime: data.startTime ?? event.startTime,
         endTime: data.endTime ?? event.endTime,
         description: data.description ?? event.description,
-        eventCategoryId: data.eventCategory ?? event.eventCategoryId,
                 maxAttendees: data.maxAttendees ?? event.maxAttendees,
                 status: updatedStatus,
                 isFeatured: data.isFeatured ?? event.isFeatured,

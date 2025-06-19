@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn, CreateDateColumn, UpdateDateColumn, ManyToOne } from 'typeorm';
 import { IsUUID, IsNotEmpty, Length, IsNumber, IsPositive, IsOptional, Min, Max, IsBoolean, IsArray, ArrayMinSize, ArrayMaxSize, IsDate, IsDateString } from 'class-validator';
 import { Registration } from './Registration';
 import { TicketCategory } from '../interfaces/Enums/TicketCategoryEnum'; // Ensure this path is correct
+import { Event } from './Event';
 
 @Entity('ticket_types')
 export class TicketType {
@@ -112,4 +113,10 @@ export class TicketType {
         cascade: false // Prevent cascading deletes to avoid accidental data loss
     })
     registrations!: Registration[];
+
+    @Column({ type: 'uuid', nullable: true })
+    eventId!: string;
+
+    @ManyToOne(() => Event, (event) => event.ticketTypes, { onDelete: 'CASCADE' })
+    event!: Event;
 }

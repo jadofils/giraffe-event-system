@@ -139,7 +139,6 @@ export class TicketService {
                     eventId: registration.event?.eventId, // Add null check
                     eventName: registration.event?.eventTitle, // Add null check
                     eventType: registration.event?.eventType, // Add null check
-                    category: registration.event?.eventCategoryId, // Add null check
                     description: registration.event?.description, // Add null check
                 },
 
@@ -509,7 +508,6 @@ export class TicketService {
             doc.fontSize(12);
             doc.text(`Event Date: ${new Date(registration.event?.createdAt || '').toLocaleDateString()}`);
             doc.text(`Event Type: ${registration.event?.eventType || 'N/A'}`);
-            doc.text(`Category: ${registration.event?.eventCategoryId || 'N/A'}`);
             doc.moveDown();
 
             // Venue Information
