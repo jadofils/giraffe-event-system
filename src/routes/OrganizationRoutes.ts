@@ -1,19 +1,31 @@
 // src/routes/organizationRoutes.ts
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { authenticate } from "../middlewares/AuthMiddleware";
-import { OrganizationController } from "../controller/OrganizationController";
 
 const router = Router();
 
-router.get("/", authenticate, OrganizationController.getAll);
-router.get("/:id", authenticate, OrganizationController.getById);
-router.post("/", authenticate, OrganizationController.create);
-router.post("/bulk", authenticate, OrganizationController.bulkCreate);
-router.put("/:id", authenticate, OrganizationController.update);
-router.put("/bulk", authenticate, OrganizationController.bulkUpdate);
-router.delete("/:id", authenticate, OrganizationController.delete);
-router.post("/:id/users", authenticate, OrganizationController.assignUsers);
-router.delete("/:id/users", authenticate, OrganizationController.removeUsers);
-router.get("/:id/users", authenticate, OrganizationController.getUsers);
+// Middleware to validate request body for user assignment/removal routes
+const validateUserIdsBody = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.method === 'POST' || req.method === 'DELETE') {
+    if (!req.body) {
+      res.status(400).json({
+        success: false,
+        message: "Request body is required. Please ensure you're sending JSON with Content-Type: application/json"
+      });
+      return;
+    }
+    
+    if (!req.body.userIds || !Array.isArray(req.body.userIds)) {
+      res.status(400).json({
+        success: false,
+        message: "userIds array is required in request body"
+      });
+      return;
+    }
+  }
+  next();
+};
+
+
 
 export const organizationRoutes = router;
