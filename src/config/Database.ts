@@ -31,13 +31,25 @@ export const initializeDatabase = async (): Promise<void> => {
 
       // Only run seeding if it hasn't been completed yet
       if (!isSeedingCompleted) {
+        console.log("\n🌱 Starting database seeding process...");
+        
+        // Seed permissions first
+        console.log("🔐 Seeding permissions...");
+        await PermissionSeeder.seed();
+        
+        // Seed admin role (with drop logic)
+        await seedAdminRole();
+        
         await seedDefaultRoles();
         await runSeeders();
         console.log("Seeding admin role with all permissions...");
         await AdminRoleSeeder.seed();
         console.log("Admin role seeding completed!");
         isSeedingCompleted = true;
-        console.log("Initial database seeding completed!");
+        console.log("\n✅ Database seeding completed successfully!");
+        console.log("📊 Database is ready for use with all required roles and organizations.");
+      } else {
+        console.log("\n✅ Database already seeded - skipping seeding process.");
       }
     }
   } catch (error) {
@@ -103,3 +115,23 @@ export const isDatabaseSeeded = (): boolean => {
 //     await queryRunner.release();
 //   }
 // }
+
+async function seedAdminRole() {
+  const roleRepository = AppDataSource.getRepository('Role');
+  // Check if ADMIN role exists
+  const adminExists = await roleRepository.findOne({ where: { roleName: 'ADMIN' } });
+  if (adminExists) {
+    console.log("✅ 'ADMIN' role already exists. No deletion performed.");
+    console.log("ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint.");
+    return;
+  }
+
+  // Create the ADMIN role
+  const adminRole = roleRepository.create({
+    roleName: "ADMIN",
+    permissions: ["read:all", "write:all", "delete:all"],
+    description: "Administrator role"
+  });
+  await roleRepository.save(adminRole);
+  console.log("🎉 'ADMIN' role created successfully!");
+}

@@ -3,7 +3,6 @@ import { UserInterface } from './UserInterface';
 export class OrganizationInterface {
   organizationId!: string;
   organizationName!: string;
-  description!: string;
   contactEmail!: string;
   contactPhone?: string;
   address!: string;
@@ -15,6 +14,8 @@ export class OrganizationInterface {
   postalCode?: string;
   stateProvince?: string;
   organizationType?: string;
+  organizationProfile?: string;
+  description?: string;
       
 
 

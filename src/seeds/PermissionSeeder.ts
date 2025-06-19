@@ -113,15 +113,40 @@ export class PermissionSeeder {
       { name: "event:delete", description: "Delete event" },
     ];
 
+    const createdPermissions = [];
+    const skippedPermissions = [];
+
     for (const perm of permissions) {
-      const exists = await permissionRepository.findOne({
-        where: { name: perm.name },
-      });
-      if (!exists) {
-        const permission = permissionRepository.create(perm);
-        await permissionRepository.save(permission);
+      try {
+        const exists = await permissionRepository.findOne({
+          where: { name: perm.name },
+        });
+        
+        if (!exists) {
+          const permission = permissionRepository.create(perm);
+          const savedPermission = await permissionRepository.save(permission);
+          console.log(`✅ Created permission: ${perm.name}`);
+          createdPermissions.push(perm.name);
+        } else {
+          console.log(`✓ Permission '${perm.name}' already exists, skipping...`);
+          skippedPermissions.push(perm.name);
+        }
+      } catch (error) {
+        console.error(`❌ Error creating permission '${perm.name}':`, error);
       }
     }
-    console.log("Permissions seeded successfully");
+
+    // Summary message
+    if (createdPermissions.length > 0) {
+      console.log(`\n🎉 Successfully created ${createdPermissions.length} new permission(s): ${createdPermissions.join(', ')}`);
+    }
+    if (skippedPermissions.length > 0) {
+      console.log(`📋 Skipped ${skippedPermissions.length} existing permission(s): ${skippedPermissions.join(', ')}`);
+    }
+    if (createdPermissions.length === 0 && skippedPermissions.length > 0) {
+      console.log(`\n✅ All permissions already exist in the database!`);
+    }
+    
+    console.log(`\n📊 Total permissions in database: ${createdPermissions.length + skippedPermissions.length}`);
   }
 }

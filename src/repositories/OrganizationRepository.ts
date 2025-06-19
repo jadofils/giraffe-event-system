@@ -8,7 +8,7 @@ import { CacheService } from "../services/CacheService";
 const CACHE_TTL = 3600; // 1 hour
 
 export class OrganizationRepository {
-  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  public static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   /**
    * Get all organizations
@@ -562,6 +562,38 @@ export class OrganizationRepository {
     } catch (error) {
       console.error(`[Organization Fetch Users Error] Org ID: ${organizationId}:`, error);
       return { success: false, message: "Failed to fetch users for organization" };
+    }
+  }
+
+  static async getOrganizationsByUserId(userId: string) {
+    if (!userId) return { success: false, message: "User ID is required" };
+
+    try {
+      const organizations = await AppDataSource.getRepository(Organization).find({
+        relations: [
+          "users",
+          "users.role",
+          "events",
+          "venues",
+          "venues.manager",
+          "venues.bookings",
+          "venues.invoices",
+          "venues.payments",
+        ],
+        where: {
+          users: {
+            userId: userId
+          }
+        },
+        order: { organizationName: "ASC" }
+      });
+
+      if (!organizations.length) {
+        return { success: false, message: "No organizations found for this user" };
+      }
+      return { success: true, data: organizations };
+    } catch (error) {
+      return { success: false, message: "Failed to fetch organizations", error };
     }
   }
 }

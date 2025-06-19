@@ -15,5 +15,6 @@ router.delete("/:id", authenticate, OrganizationController.delete);
 router.post("/:id/users", authenticate, OrganizationController.assignUsers);
 router.delete("/:id/users", authenticate, OrganizationController.removeUsers);
 router.get("/:id/users", authenticate, OrganizationController.getUsers);
+router.get("/my", authenticate, OrganizationController.getMyOrganizations);
 
 export const organizationRoutes = router;

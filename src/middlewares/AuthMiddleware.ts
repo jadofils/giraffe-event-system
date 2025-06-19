@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { AppDataSource } from "../config/Database"; // Adjust path to your data-source
 import { User } from "../models/User"; // Adjust path to your User entity
 import { Role } from "../models/Role"; // Adjust path to your Role entity (assuming you have one)
+import { UserController } from "../controller/user/Registration";
 
 const SECRET_KEY = process.env.JWT_SECRET || "your_jwt_secret"; // Use env variable in production
 
@@ -60,12 +61,7 @@ export const authenticate = async (
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
       where: { userId: decoded.userId },
-      // Assuming User has a one-to-one or many-to-one relation named 'role' to the Role entity.
-      // And Role entity has a property like 'permissions' which is an array of strings.
-      relations: ["role", "organizations"], // Load the 'role' relation and 'organizations' again if needed for current data
-      // Although organizations are already in the JWT payload from login.
-      // Re-fetching user.organizations here ensures fresh data, but increases DB calls.
-      // If organizations in token are sufficient, remove it from relations.
+      relations: ["role", "role.permissions", "organizations"],
     });
 
     if (!user) {
@@ -79,30 +75,36 @@ export const authenticate = async (
       return;
     }
 
-    // 3. Extract role names and permissions from the *fetched* user object
-    let userRoles: { roleName: string; permissions: string[] }[] = [];
+    // Build organizations array for req.user
+    const organizations = (user.organizations || []).map(org => ({
+      organizationId: org.organizationId,
+      organizationName: org.organizationName,
+      description: org.description,
+      contactEmail: org.contactEmail,
+      contactPhone: org.contactPhone,
+      address: org.address,
+      organizationType: org.organizationType,
+      city: org.city,
+      country: org.country,
+      postalCode: org.postalCode,
+      stateProvince: org.stateProvince,
+    }));
 
-    // Assuming a single role relationship (one-to-one or many-to-one)
+    // Build roles array with permissions
+    let userRoles: { roleName: string; permissions: string[] }[] = [];
     if (user.role) {
-      // Check if user.role exists
       userRoles.push({
         roleName: user.role.roleName,
         permissions: Array.isArray(user.role.permissions)
-          ? user.role.permissions.map((p) => p.name)
+          ? user.role.permissions.map((p: any) => p.name)
           : [],
       });
     }
-    // If a user can have MULTIPLE roles via a many-to-many 'userRoles' table, uncomment this:
-    /*
-        // Make sure your User entity has a property like `userRoles: UserRole[]`
-        // and UserRole entity relates to Role: `role: Role`
-        if (user.userRoles && Array.isArray(user.userRoles)) {
-            userRoles = user.userRoles.map(userRole => ({
-                roleName: userRole.role.roleName,
-                permissions: userRole.role.permissions || []
-            }));
-        }
-        */
+
+    // If user is ADMIN, log all permissions
+    if (user.role && user.role.roleName === "ADMIN") {
+      console.log("[AuthMiddleware] ADMIN role permissions:", userRoles[0].permissions);
+    }
 
     // 4. Populate req.user with combined data
     // Use data from JWT for userId, email, username, organizations, organizationId
@@ -111,9 +113,9 @@ export const authenticate = async (
       userId: decoded.userId,
       email: decoded.email,
       username: decoded.username,
-      organizations: decoded.organizations, // Take from JWT payload as it's already there
-      organizationId: decoded.organizationId, // Take from JWT payload
-      roles: userRoles, // This now contains the detailed role name and permissions from DB
+      organizations,
+      organizationId: decoded.organizationId,
+      roles: userRoles,
     };
 
     console.log("AuthMiddleware: req.user populated with:", req.user); // Log final req.user for debugging
