@@ -2,6 +2,7 @@ import { DataSource } from "typeorm";
 import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
 import { SeederFactoryManager } from "typeorm-extension";
 import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
+import { PermissionSeeder } from "../seeds/PermissionSeeder";
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DB_URL,
