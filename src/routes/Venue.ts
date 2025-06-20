@@ -20,7 +20,7 @@ router.delete("/:venueId/resources/:resourceId", authenticate, VenueController.r
 router.get(":venueId/resources", authenticate, VenueController.getVenueResources);
 router.post('/add-with-resources', authenticate, VenueController.createVenueWithResources);
 router.put("/update-manager/:id", authenticate, VenueController.updateVenueManager);
-router.put("/remove-manager/:id", isAdmin, VenueController.removeVenueManager);
+router.put("/remove-manager/:id",authenticate, isAdmin, VenueController.removeVenueManager);
 router.use("/", checkAbsenceRoutes);
 
 export const venueRoute = router;

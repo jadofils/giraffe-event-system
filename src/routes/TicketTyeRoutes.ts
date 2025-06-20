@@ -1,15 +1,26 @@
-// src/routes/ticketTypeRoutes.ts
 import { Router } from "express";
 import { TicketTypeController } from "../controller/TicketTypeController";
+import { authenticate } from "../middlewares/AuthMiddleware"; // make sure this is imported
 
 const router = Router();
+
+// =======================
+// 📂 Public Ticket Type Routes
+// =======================
+// (If you want any public routes like viewing ticket types, put them here)
+
+
+// =======================
+// 🔒 Protected Ticket Type Routes
+// =======================
+router.use(authenticate);
 
 // POST /api/ticket-types
 router.post("/", async (req, res, next) => {
   try {
-	await TicketTypeController.createTicketType(req, res);
+    await TicketTypeController.createTicketType(req, res);
   } catch (err) {
-	next(err);
+    next(err);
   }
 });
 
