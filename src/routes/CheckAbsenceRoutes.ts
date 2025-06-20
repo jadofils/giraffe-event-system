@@ -1,17 +1,16 @@
 import { Router, Request, Response, RequestHandler } from "express";
 import { CheckAbsenceService } from "../services/bookings/CheckAbsenceService";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 
 const router = Router();
 
 /**
  * @route GET /api/v1/venues/:venueId/available-slots
  * @description Check available days and hours for a specific venue within a date range.
- * @access Private (Authenticated Users)
+ * @access Private (d Users)
  */
 router.get(
     "/:venueId/available-slots",
-    (async (req: AuthenticatedRequest, res: Response) => {
+    (async (req: Request, res: Response) => {
         try {
             const { venueId } = req.params;
             const { startDate, endDate } = req.query;

@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { VenueBookingRepository } from "../repositories/VenueBookingRepository";
 import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
 
@@ -9,16 +8,16 @@ export class VenueBookingController {
   /**
    * Create a new event booking
    * @route POST /api/bookings
-   * @access Private (Authenticated Users)
+   * @access Private (d Users)
    */
-  static async createVenueBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async createVenueBooking(req: Request, res: Response): Promise<void> {
     try {
       const bookingData: VenueBookingInterface = req.body;
 
       // Validate authentication
       if (!req.user || !req.user.userId || !req.user.organizationId) {
         console.log("User token data:", req.user);
-        res.status(401).json({ success: false, message: "Unauthorized: User is not properly authenticated." });
+        res.status(401).json({ success: false, message: "Unauthorized: User is not properly d." });
         return;
       }
 
@@ -136,15 +135,15 @@ export class VenueBookingController {
   /**
    * Create multiple event bookings
    * @route POST /api/bookings/bulk
-   * @access Private (Authenticated Users)
+   * @access Private (d Users)
    */
-  static async createMultipleVenueBookings(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async createMultipleVenueBookings(req: Request, res: Response): Promise<void> {
     try {
       const bookingsData: VenueBookingInterface[] = req.body.bookings;
 
       // Validate authentication
       if (!req.user || !req.user.userId || !req.user.organizationId) {
-        res.status(401).json({ success: false, message: "Unauthorized: User is not properly authenticated." });
+        res.status(401).json({ success: false, message: "Unauthorized: User is not properly d." });
         return;
       }
 
@@ -203,7 +202,7 @@ export class VenueBookingController {
    * @route GET /api/bookings
    * @access Private (Admins)
    */
-  static async getAllVenueBookings(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getAllVenueBookings(req: Request, res: Response): Promise<void> {
     try {
       if (!req.user || !req.user.userId) {
         res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
@@ -259,7 +258,7 @@ export class VenueBookingController {
    * @route PUT /api/bookings/:id
    * @access Private (Booking Owner, Event Organizer, Admins)
    */
-  static async updateVenueBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async updateVenueBooking(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const updates: Partial<VenueBookingInterface> = req.body;
@@ -330,7 +329,7 @@ export class VenueBookingController {
    * @route PATCH /api/bookings/:id/status
    * @access Private (Event Organizer, Admins)
    */
-  static async updateVenueBookingStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async updateVenueBookingStatus(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const { approvalStatus } = req.body;
@@ -368,7 +367,7 @@ export class VenueBookingController {
    * @route DELETE /api/bookings/:id
    * @access Private (Booking Owner, Event Organizer, Admins)
    */
-  static async deleteVenueBooking(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async deleteVenueBooking(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
 
@@ -400,7 +399,7 @@ export class VenueBookingController {
    * @route GET /api/events/:eventId/bookings
    * @access Private (Event Organizer, Admins)
    */
-  static async getBookingsByEventId(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByEventId(req: Request, res: Response): Promise<void> {
     try {
       const { eventId } = req.params;
 
@@ -436,7 +435,7 @@ export class VenueBookingController {
    * @route GET /api/venues/:venueId/bookings
    * @access Private (Venue Owner, Admins)
    */
-  static async getBookingsByVenueId(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByVenueId(req: Request, res: Response): Promise<void> {
     try {
       const { venueId } = req.params;
 
@@ -470,9 +469,9 @@ export class VenueBookingController {
   /**
    * Get bookings by organizer ID
    * @route GET /api/bookings/organizer
-   * @access Private (Authenticated Organizer)
+   * @access Private (d Organizer)
    */
-  static async getBookingsByOrganizerId(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByOrganizerId(req: Request, res: Response): Promise<void> {
     try {
       if (!req.user || !req.user.userId) {
         res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
@@ -508,7 +507,7 @@ export class VenueBookingController {
    * @route GET /api/organizations/:organizationId/bookings
    * @access Private (Organization Members, Admins)
    */
-  static async getBookingsByOrganizationId(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByOrganizationId(req: Request, res: Response): Promise<void> {
     try {
       const { organizationId } = req.params;
 
@@ -554,7 +553,7 @@ export class VenueBookingController {
    * @route GET /api/bookings/status/:status
    * @access Private (Admins)
    */
-  static async getBookingsByStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByStatus(req: Request, res: Response): Promise<void> {
     try {
       const { status } = req.params;
 
@@ -590,7 +589,7 @@ export class VenueBookingController {
    * @route GET /api/bookings/date-range
    * @access Private (Admins)
    */
-  static async getBookingsByDateRange(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async getBookingsByDateRange(req: Request, res: Response): Promise<void> {
     try {
       const { startDate, endDate, filterOptions } = req.query;
 
@@ -648,9 +647,9 @@ export class VenueBookingController {
   /**
    * Check for duplicate bookings in a specific time range
    * @route GET /api/bookings/check-duplicates
-   * @access Private (Authenticated Users)
+   * @access Private (d Users)
    */
-  static async checkDuplicateBookings(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async checkDuplicateBookings(req: Request, res: Response): Promise<void> {
     try {
       const { venueId, startDate, endDate, startTime, endTime } = req.query;
 
@@ -726,7 +725,7 @@ export class VenueBookingController {
   /**
    * Handle Forbidden
    * @route Any route requiring specific permissions
-   * @access Private (Authenticated Users)
+   * @access Private (d Users)
    */
   static async forbidden(req: Request, res: Response): Promise<void> {
     res.status(403).json({ success: false, message: "Forbidden: You do not have permission to perform this action." });

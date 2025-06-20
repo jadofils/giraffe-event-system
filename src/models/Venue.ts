@@ -27,6 +27,12 @@ import { Event } from "./Event";
 import { Registration } from "./Registration";
 import { VenueResource } from "./VenueResource";
 
+export enum VenueStatus {
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED"
+}
+
 @Entity("venues")
 export class Venue {
   @PrimaryGeneratedColumn("uuid")
@@ -93,6 +99,14 @@ export class Venue {
   @JoinColumn({ name: "organizationId" })
   organization?: Organization;
 
+  @ManyToMany(() => User, user => user.venues)
+  @JoinTable({
+    name: "venue_users",
+    joinColumn: { name: "venueId", referencedColumnName: "venueId" },
+    inverseJoinColumn: { name: "userId", referencedColumnName: "userId" }
+  })
+  users!: User[];
+
   @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
   bookings!: VenueBooking[];
 
@@ -134,6 +148,13 @@ export class Venue {
 
   @OneToMany(() => VenueResource, (venueResource) => venueResource.venue)
   venueResources!: VenueResource[];
+
+  @Column({
+    type: "enum",
+    enum: VenueStatus,
+    default: VenueStatus.PENDING,
+  })
+  status!: VenueStatus;
 
   @CreateDateColumn()
   createdAt!: Date;

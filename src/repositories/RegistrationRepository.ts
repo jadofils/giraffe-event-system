@@ -8,8 +8,7 @@ import { TicketType } from '../models/TicketType';
 import { Venue } from '../models/Venue';
 import { RegistrationRequestInterface } from '../interfaces/RegistrationInterface'; // Use the request interface for data incoming
 import { QrCodeService } from '../services/registrations/QrCodeService';
-import { AuthenticatedRequest } from '../middlewares/AuthMiddleware';
-import { RequestHandler, Response } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -190,7 +189,7 @@ export class RegistrationRepository {
      * Handles the creation of a new registration.
      * This method also generates a unique QR code for the registration.
      */
-    static async createRegistration(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async createRegistration(req: Request, res: Response): Promise<void> {
         try {
             const registrationData: RegistrationRequestInterface = req.body;
 
@@ -365,7 +364,7 @@ export class RegistrationRepository {
      * Gets the QR code path (filename) stored for a specific registration.
      * This method retrieves the path from the database, not the image itself.
      */
-    static async getRegistrationQrCode(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async getRegistrationQrCode(req: Request, res: Response): Promise<void> {
         try {
             const { id } = req.params;
             const registration = await RegistrationRepository.findById(id);
@@ -396,7 +395,7 @@ export class RegistrationRepository {
     /**
      * Serves the actual QR code image file for a given registration ID.
      */
-    static async getRegistrationQrCodeImage(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async getRegistrationQrCodeImage(req: Request, res: Response): Promise<void> {
         try {
             const { id } = req.params;
             const registration = await RegistrationRepository.findById(id);

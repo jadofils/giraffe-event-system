@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from './AuthMiddleware';
 import { AppDataSource } from '../config/Database';
 import { User } from '../models/User';
 
-export const isAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const isAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const userId = req.user?.userId;
 

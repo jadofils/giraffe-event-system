@@ -142,6 +142,18 @@ export class LoginController {
 
       console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
 
+      user.role.permissions.forEach(permission => {
+        console.log({
+          userId: user.userId,
+          username: user.username,
+          roleId: user.role.roleId,
+          roleName: user.role.roleName,
+          permissionId: permission.id,
+          permissionName: permission.name,
+          permissionDescription: permission.description,
+        });
+      });
+
       res.status(200).json({
         success: true,
         message: isSessionPasswordLogin ? "Login successful! Please create a new password." : "Login successful!",
@@ -183,7 +195,7 @@ export class LoginController {
         async () => {
           return await userRepository.findOne({
             where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-            relations: ["organizations", "role"],
+            relations: ["organizations", "role","role.permissions"],
           });
         },
         CACHE_TTL
@@ -260,6 +272,18 @@ export class LoginController {
       });
 
       console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+
+      user.role.permissions.forEach(permission => {
+        console.log({
+          userId: user.userId,
+          username: user.username,
+          roleId: user.role.roleId,
+          roleName: user.role.roleName,
+          permissionId: permission.id,
+          permissionName: permission.name,
+          permissionDescription: permission.description,
+        });
+      });
 
       res.status(200).json({
         success: true,

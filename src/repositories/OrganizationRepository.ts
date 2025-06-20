@@ -4,6 +4,7 @@ import { OrganizationInterface } from "../interfaces/OrganizationInterface";
 import { User } from "../models/User";
 import { In } from "typeorm";
 import { CacheService } from "../services/CacheService";
+import { Venue, VenueStatus } from "../models/Venue";
 
 const CACHE_TTL = 3600; // 1 hour
 
@@ -594,6 +595,217 @@ export class OrganizationRepository {
       return { success: true, data: organizations };
     } catch (error) {
       return { success: false, message: "Failed to fetch organizations", error };
+    }
+  }
+
+   /**
+   * Add one or more venues to an organization.
+   * @param organizationId Organization UUID
+   * @param venueIds Array of Venue UUIDs to add
+   * @returns Assignment result
+   */
+  static async addVenuesToOrganization(
+    organizationId: string,
+    venueIds: string[]
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: Organization;
+    missingVenues?: Array<{
+      venueId: string;
+      venueName: string;
+      status?: string;
+      users: Array<{ userId: string; username: string; email: string }>;
+    }>;
+  }> {
+    if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    if (!venueIds?.length || venueIds.some((id) => !this.UUID_REGEX.test(id))) {
+      return { success: false, message: "Valid venue IDs are required" };
+    }
+
+    try {
+      const organizationRepo = AppDataSource.getRepository(Organization);
+      const venueRepo = AppDataSource.getRepository(Venue);
+
+      // Fetch the organization with its current venues
+      const organization = await organizationRepo.findOne({
+        where: { organizationId },
+        relations: ["venues"], // Eagerly load venues
+      });
+
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+
+      // Fetch the venues to be added
+      const venuesToAdd = await venueRepo.find({
+        where: { venueId: In(venueIds) },
+        relations: ["organization", "users"], // Load existing organization relation and users
+      });
+
+      const foundVenueIds = venuesToAdd.map(v => v.venueId);
+      const missingVenueIds = venueIds.filter(id => !foundVenueIds.includes(id));
+
+      if (missingVenueIds.length > 0) {
+        // Try to fetch details for missing venues (if soft-deleted or in another org)
+        const missingVenues = await venueRepo.find({
+          where: { venueId: In(missingVenueIds) },
+          relations: ["users"],
+          withDeleted: true // if using soft deletes
+        });
+
+        // Format missing venues with users and status in uppercase
+        const missingVenueDetails = missingVenues.map(venue => ({
+          venueId: venue.venueId,
+          venueName: venue.venueName,
+          status: venue.status ? String(venue.status).toUpperCase() : undefined,
+          users: venue.users?.map((user: User) => ({
+            userId: user.userId,
+            username: user.username,
+            email: user.email,
+          })) || []
+        }));
+
+        return {
+          success: false,
+          message: "One or more venues not found",
+          missingVenues: missingVenueDetails
+        };
+      }
+
+      const assignedVenuesCount = { added: 0, alreadyAssigned: 0 };
+      const invalidateKeys: string[] = ["org:all", `org:id:${organizationId}`];
+
+      for (const venue of venuesToAdd) {
+        // Check if the venue is already assigned to this organization
+        if (venue.organization && venue.organization.organizationId === organizationId) {
+          assignedVenuesCount.alreadyAssigned++;
+        } else if (venue.organization && venue.organization.organizationId !== organizationId) {
+          // Venue is already assigned to a different organization
+          return {
+            success: false,
+            message: `Venue '${venue.venueName}' (ID: ${venue.venueId}) is already assigned to another organization`,
+          };
+        } else {
+          // Assign the venue to the organization and set status to PENDING
+          venue.organization = organization;
+          venue.status = VenueStatus.PENDING;
+          await venueRepo.save(venue); // Save the venue to update its organizationId foreign key
+          assignedVenuesCount.added++;
+          invalidateKeys.push(`venue:id:${venue.venueId}`); // Invalidate venue cache too
+        }
+      }
+
+      if (assignedVenuesCount.added === 0 && assignedVenuesCount.alreadyAssigned > 0) {
+        return {
+          success: true,
+          message: "All specified venues are already assigned to this organization",
+          data: organization,
+        };
+      } else if (assignedVenuesCount.added === 0) {
+        return { success: false, message: "No venues were added" };
+      }
+
+      // After saving venues, refetch organization if its 'venues' relation isn't automatically updated by TypeORM
+      // For OneToMany/ManyToOne, the update happens on the 'Many' side (Venue), so we might need to refresh the Organization
+      const updatedOrganization = await organizationRepo.findOne({
+        where: { organizationId },
+        relations: ["venues"],
+      });
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple(invalidateKeys);
+
+      return {
+        success: true,
+        message: `${assignedVenuesCount.added} venue(s) added successfully to organization`,
+        data: updatedOrganization ?? undefined,
+      };
+    } catch (error) {
+      console.error(
+        `[Organization Add Venues Error] Org ID: ${organizationId}:`,
+        error
+      );
+      return { success: false, message: "Failed to add venues to organization" };
+    }
+  }
+
+  /**
+   * Remove one or more venues from an organization.
+   * @param organizationId Organization UUID
+   * @param venueIds Array of Venue UUIDs to remove
+   * @returns Removal result
+   */
+  static async removeVenuesFromOrganization(
+    organizationId: string,
+    venueIds: string[]
+  ): Promise<{ success: boolean; message: string; data?: Organization }> {
+    if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    if (!venueIds?.length || venueIds.some((id) => !this.UUID_REGEX.test(id))) {
+      return { success: false, message: "Valid venue IDs are required" };
+    }
+
+    try {
+      const organizationRepo = AppDataSource.getRepository(Organization);
+      const venueRepo = AppDataSource.getRepository(Venue);
+
+      const organization = await organizationRepo.findOne({
+        where: { organizationId },
+        relations: ["venues"],
+      });
+
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+
+      const venuesToRemove = await venueRepo.find({
+        where: {
+          venueId: In(venueIds),
+          organization: { organizationId: organizationId }, // Ensure we only target venues already linked to this org
+        },
+      });
+
+      if (!venuesToRemove.length) {
+        return {
+          success: true,
+          message: "No specified venues found linked to this organization to remove",
+          data: organization,
+        };
+      }
+
+      const invalidateKeys: string[] = ["org:all", `org:id:${organizationId}`];
+      let removedCount = 0;
+
+      for (const venue of venuesToRemove) {
+        venue.organization = undefined; // Set the foreign key to undefined
+        await venueRepo.save(venue);
+        removedCount++;
+        invalidateKeys.push(`venue:id:${venue.venueId}`); // Invalidate venue cache
+      }
+
+      const updatedOrganization = await organizationRepo.findOne({
+        where: { organizationId },
+        relations: ["venues"], // Refetch to get updated list
+      });
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple(invalidateKeys);
+
+      return {
+        success: true,
+        message: `${removedCount} venue(s) removed from organization`,
+        data: updatedOrganization ?? undefined,
+      };
+    } catch (error) {
+      console.error(
+        `[Organization Remove Venues Error] Org ID: ${organizationId}:`,
+        error
+      );
+      return { success: false, message: "Failed to remove venues from organization" };
     }
   }
 }

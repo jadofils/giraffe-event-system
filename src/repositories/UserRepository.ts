@@ -7,15 +7,18 @@ import { Organization } from "../models/Organization";
 import { CacheService } from "../services/CacheService";
 
 export class UserRepository {
-  private static readonly CACHE_PREFIX = 'user:';
+  private static readonly CACHE_PREFIX = "user:";
   private static readonly CACHE_TTL = 3600; // 1 hour
 
   /**
    * Find existing user by email or username
    */
-  static async findExistingUser(email: string, username: string): Promise<User | null> {
+  static async findExistingUser(
+    email: string,
+    username: string
+  ): Promise<User | null> {
     const cacheKey = `${this.CACHE_PREFIX}find:${email}:${username}`;
-    
+
     return await CacheService.getOrSetSingle(
       cacheKey,
       AppDataSource.getRepository(User),
@@ -31,8 +34,9 @@ export class UserRepository {
             relations: ["role"],
           });
         } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          throw new Error('Error finding existing user: ' + errorMessage);
+          const errorMessage =
+            err instanceof Error ? err.message : "Unknown error";
+          throw new Error("Error finding existing user: " + errorMessage);
         }
       },
       this.CACHE_TTL
@@ -44,10 +48,10 @@ export class UserRepository {
    */
   static createUser(data: Partial<UserInterface>): User {
     const user = new User();
-    user.username = data.username ?? '';
-    user.firstName = data.firstName ?? '';
-    user.lastName = data.lastName ?? '';
-    user.email = data.email ?? '';
+    user.username = data.username ?? "";
+    user.firstName = data.firstName ?? "";
+    user.lastName = data.lastName ?? "";
+    user.email = data.email ?? "";
     user.password = data.password;
     user.phoneNumber = data.phoneNumber;
     user.bio = data.bio;
@@ -65,7 +69,7 @@ export class UserRepository {
     user.stateProvince = data.stateProvince;
     user.postalCode = data.postalCode;
     user.country = data.country;
-    user.roleId = data.roleId ?? '';
+    user.roleId = data.roleId ?? "";
 
     return user;
   }
@@ -83,25 +87,38 @@ export class UserRepository {
 
     try {
       if (!user.roleId && !user.role) {
-        const guestRole = await roleRepository.findOne({ where: { roleName: 'GUEST' } });
+        const guestRole = await roleRepository.findOne({
+          where: { roleName: "GUEST" },
+        });
         if (!guestRole) {
           console.warn('"GUEST" role not found. Please seed the roles first.');
-          return { message: 'System configuration error: Default role not found' };
+          return {
+            message: "System configuration error: Default role not found",
+          };
         }
         user.role = guestRole;
         user.roleId = guestRole.roleId;
       } else if (user.roleId && !user.role) {
-        const existingRole = await roleRepository.findOne({ where: { roleId: user.roleId } });
+        const existingRole = await roleRepository.findOne({
+          where: { roleId: user.roleId },
+        });
         if (existingRole) {
           user.role = existingRole;
         } else {
-          console.warn(`Role with ID ${user.roleId} not found. Assigning GUEST role.`);
-          const guestRole = await roleRepository.findOne({ where: { roleName: 'GUEST' } });
+          console.warn(
+            `Role with ID ${user.roleId} not found. Assigning GUEST role.`
+          );
+          const guestRole = await roleRepository.findOne({
+            where: { roleName: "GUEST" },
+          });
           if (guestRole) {
             user.role = guestRole;
             user.roleId = guestRole.roleId;
           } else {
-            return { message: 'System configuration error: Default role not found and provided roleId is invalid.' };
+            return {
+              message:
+                "System configuration error: Default role not found and provided roleId is invalid.",
+            };
           }
         }
       }
@@ -117,13 +134,13 @@ export class UserRepository {
       ]);
 
       return {
-        message: 'User saved successfully',
+        message: "User saved successfully",
         user: savedUser,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Error saving user:', errorMessage);
-      return { message: 'Database error: ' + errorMessage };
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("Error saving user:", errorMessage);
+      return { message: "Database error: " + errorMessage };
     }
   }
 
@@ -132,7 +149,7 @@ export class UserRepository {
    */
   static async getAllUsers(): Promise<Partial<User[]> | null> {
     const cacheKey = `${this.CACHE_PREFIX}all`;
-    
+
     const users = await CacheService.getOrSetMultiple(
       cacheKey,
       AppDataSource.getRepository(User),
@@ -140,12 +157,30 @@ export class UserRepository {
         const userRepository = AppDataSource.getRepository(User);
         return await userRepository.find({
           select: [
-            "userId", "username", "firstName", "lastName", "email", "phoneNumber",
-            "bio", "profilePictureURL", "preferredLanguage", "timezone",
-            "emailNotificationsEnabled", "smsNotificationsEnabled", "socialMediaLinks",
-            "dateOfBirth", "gender", "addressLine1", "addressLine2", "city",
-            "stateProvince", "postalCode", "country",
-            "createdAt", "updatedAt", "deletedAt"
+            "userId",
+            "username",
+            "firstName",
+            "lastName",
+            "email",
+            "phoneNumber",
+            "bio",
+            "profilePictureURL",
+            "preferredLanguage",
+            "timezone",
+            "emailNotificationsEnabled",
+            "smsNotificationsEnabled",
+            "socialMediaLinks",
+            "dateOfBirth",
+            "gender",
+            "addressLine1",
+            "addressLine2",
+            "city",
+            "stateProvince",
+            "postalCode",
+            "country",
+            "createdAt",
+            "updatedAt",
+            "deletedAt",
           ],
           relations: ["role", "organizations"],
           order: { username: "DESC" },
@@ -160,9 +195,11 @@ export class UserRepository {
   /**
    * Retrieves a user by ID with specified relations.
    */
-  static async getUserById(id: UserInterface["userId"]): Promise<Partial<User> | null> {
+  static async getUserById(
+    id: UserInterface["userId"]
+  ): Promise<Partial<User> | null> {
     const cacheKey = `${this.CACHE_PREFIX}${id}`;
-    
+
     return await CacheService.getOrSetSingle(
       cacheKey,
       AppDataSource.getRepository(User),
@@ -171,20 +208,55 @@ export class UserRepository {
         const user = await userRepository.findOne({
           where: { userId: id },
           select: [
-            "userId", "username", "firstName", "lastName", "email", "phoneNumber",
-            "bio", "profilePictureURL", "preferredLanguage", "timezone",
-            "emailNotificationsEnabled", "smsNotificationsEnabled", "socialMediaLinks",
-            "dateOfBirth", "gender", "addressLine1", "addressLine2", "city",
-            "stateProvince", "postalCode", "country",
-            "createdAt", "updatedAt", "deletedAt"
+            "userId",
+            "username",
+            "firstName",
+            "lastName",
+            "email",
+            "phoneNumber",
+            "bio",
+            "profilePictureURL",
+            "preferredLanguage",
+            "timezone",
+            "emailNotificationsEnabled",
+            "smsNotificationsEnabled",
+            "socialMediaLinks",
+            "dateOfBirth",
+            "gender",
+            "addressLine1",
+            "addressLine2",
+            "city",
+            "stateProvince",
+            "postalCode",
+            "country",
+            "createdAt",
+            "updatedAt",
+            "deletedAt",
           ],
           relations: [
             "role",
+            "role.permissions",
             "organizations",
+            "venues",
+            "venues.bookings",
+            "venues.invoices",
+            "venues.payments",
+            "venues.resources",
+            "venues.feedbacks",
+            "venues.notifications",
+            "venues.eventVenueBookings",
+            "events",
+            "eventVenues",
+            "eventVenues.organizations",
+            "eventVenueBookings",
             "registrationsAsAttendee",
             "registrationsAsAttendee.event",
             "registrationsAsAttendee.ticketType",
             "registrationsAsAttendee.venue",
+            "feedbacks",
+            "notifications",
+            "invoices",
+            "payments",
           ],
         });
 
@@ -194,9 +266,9 @@ export class UserRepository {
 
         const allBoughtForUserIds: string[] = [];
         if (user.registrationsAsAttendee) {
-          user.registrationsAsAttendee.forEach(reg => {
+          user.registrationsAsAttendee.forEach((reg) => {
             if (reg.boughtForIds) {
-              reg.boughtForIds.forEach(boughtForId => {
+              reg.boughtForIds.forEach((boughtForId) => {
                 if (!allBoughtForUserIds.includes(boughtForId)) {
                   allBoughtForUserIds.push(boughtForId);
                 }
@@ -209,9 +281,18 @@ export class UserRepository {
         if (allBoughtForUserIds.length > 0) {
           const boughtUsers = await userRepository.find({
             where: { userId: In(allBoughtForUserIds) },
-            select: ["userId", "username", "firstName", "lastName", "email", "phoneNumber"],
+            select: [
+              "userId",
+              "username",
+              "firstName",
+              "lastName",
+              "email",
+              "phoneNumber",
+            ],
           });
-          boughtUsers.forEach(bUser => boughtForUsersMap.set(bUser.userId, bUser));
+          boughtUsers.forEach((bUser) =>
+            boughtForUsersMap.set(bUser.userId, bUser)
+          );
         }
 
         (user as any)._fetchedBoughtForUsersMap = boughtForUsersMap;
@@ -224,7 +305,9 @@ export class UserRepository {
   /**
    * Deletes a user by ID.
    */
-  static async deleteUser(id: UserInterface["userId"]): Promise<{ success: boolean; message: string }> {
+  static async deleteUser(
+    id: UserInterface["userId"]
+  ): Promise<{ success: boolean; message: string }> {
     const userRepository = AppDataSource.getRepository(User);
 
     try {
@@ -247,26 +330,33 @@ export class UserRepository {
       return { success: true, message: "User deleted successfully" };
     } catch (error) {
       console.error("Error deleting user:", error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, message: "Failed to delete user: " + errorMessage };
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      return {
+        success: false,
+        message: "Failed to delete user: " + errorMessage,
+      };
     }
   }
 
   /**
    * Assigns a role to a user, typically when they are a new user or a 'GUEST'.
    */
-  static async assignUserRole(userId: string, newRoleId: string): Promise<{ success: boolean; message: string }> {
+  static async assignUserRole(
+    userId: string,
+    newRoleId: string
+  ): Promise<{ success: boolean; message: string }> {
     const userRepository = AppDataSource.getRepository(User);
     const roleRepository = AppDataSource.getRepository(Role);
 
     try {
       const user = await userRepository.findOne({
         where: { userId },
-        relations: ['role'],
+        relations: ["role"],
       });
 
       if (!user) {
-        return { success: false, message: 'User not found' };
+        return { success: false, message: "User not found" };
       }
 
       const newRole = await roleRepository.findOne({
@@ -274,11 +364,11 @@ export class UserRepository {
       });
 
       if (!newRole) {
-        return { success: false, message: 'Role not found' };
+        return { success: false, message: "Role not found" };
       }
 
-      const currentRoleName = user.role?.roleName?.toLowerCase() || '';
-      if (!user.role || currentRoleName === '' || currentRoleName === 'guest') {
+      const currentRoleName = user.role?.roleName?.toLowerCase() || "";
+      if (!user.role || currentRoleName === "" || currentRoleName === "guest") {
         user.role = newRole;
         user.roleId = newRole.roleId;
         await userRepository.save(user);
@@ -290,21 +380,32 @@ export class UserRepository {
           `${this.CACHE_PREFIX}find:${user.email}:${user.username}`,
         ]);
 
-        return { success: true, message: 'User role updated successfully' };
+        return { success: true, message: "User role updated successfully" };
       } else {
-        return { success: false, message: 'User is not currently assigned the GUEST role or has no role assigned. Use updateUserRole for general updates.' };
+        return {
+          success: false,
+          message:
+            "User is not currently assigned the GUEST role or has no role assigned. Use updateUserRole for general updates.",
+        };
       }
     } catch (error) {
-      console.error('Error assigning user role:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, message: 'Failed to assign user role: ' + errorMessage };
+      console.error("Error assigning user role:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      return {
+        success: false,
+        message: "Failed to assign user role: " + errorMessage,
+      };
     }
   }
 
   /**
    * Updates a user's role to any new valid role.
    */
-  static async updateUserRole(userId: string, newRoleId: string): Promise<{
+  static async updateUserRole(
+    userId: string,
+    newRoleId: string
+  ): Promise<{
     success: boolean;
     message: string;
     user?: User;
@@ -316,11 +417,11 @@ export class UserRepository {
     try {
       const user = await userRepository.findOne({
         where: { userId },
-        relations: ['role'],
+        relations: ["role"],
       });
 
       if (!user) {
-        return { success: false, message: 'User not found' };
+        return { success: false, message: "User not found" };
       }
 
       const newRole = await roleRepository.findOne({
@@ -328,10 +429,10 @@ export class UserRepository {
       });
 
       if (!newRole) {
-        return { success: false, message: 'Role not found' };
+        return { success: false, message: "Role not found" };
       }
 
-      const oldRoleName = user.role?.roleName || 'none';
+      const oldRoleName = user.role?.roleName || "none";
       user.role = newRole;
       user.roleId = newRole.roleId;
 
@@ -348,19 +449,25 @@ export class UserRepository {
         success: true,
         message: `User role updated successfully from ${oldRoleName} to ${newRole.roleName}`,
         user,
-        newRole
+        newRole,
       };
     } catch (error) {
-      console.error('Error updating user role:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, message: 'Failed to update user role: ' + errorMessage };
+      console.error("Error updating user role:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      return {
+        success: false,
+        message: "Failed to update user role: " + errorMessage,
+      };
     }
   }
 
   /**
    * Create multiple users from an array of user data
    */
-  static async createUsers(usersData: Partial<UserInterface>[]): Promise<{ success: boolean; users: User[]; errors: any[] }> {
+  static async createUsers(
+    usersData: Partial<UserInterface>[]
+  ): Promise<{ success: boolean; users: User[]; errors: any[] }> {
     if (!AppDataSource.isInitialized) {
       throw new Error("Database not initialized");
     }
@@ -384,7 +491,7 @@ export class UserRepository {
       } catch (error) {
         errors.push({
           data,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
@@ -402,43 +509,47 @@ export class UserRepository {
   /**
    * Find multiple existing users by email or username
    */
-  static async findExistingUsers(usersData: { email: string; username: string }[]): Promise<Map<string, User>> {
-    const cacheKey = `${this.CACHE_PREFIX}findMultiple:${JSON.stringify(usersData.map(u => `${u.email}:${u.username}`).sort())}`;
-    
-    return await CacheService.getOrSetMap(
-      cacheKey,
-      async () => {
-        if (!AppDataSource.isInitialized) {
-          throw new Error("Database not initialized");
-        }
+  static async findExistingUsers(
+    usersData: { email: string; username: string }[]
+  ): Promise<Map<string, User>> {
+    const cacheKey = `${this.CACHE_PREFIX}findMultiple:${JSON.stringify(
+      usersData.map((u) => `${u.email}:${u.username}`).sort()
+    )}`;
 
-        const userRepository = AppDataSource.getRepository(User);
-        const existingUsers = new Map<string, User>();
+    return (
+      (await CacheService.getOrSetMap(
+        cacheKey,
+        async () => {
+          if (!AppDataSource.isInitialized) {
+            throw new Error("Database not initialized");
+          }
 
-        try {
-          const emails = usersData.map(u => u.email);
-          const usernames = usersData.map(u => u.username);
+          const userRepository = AppDataSource.getRepository(User);
+          const existingUsers = new Map<string, User>();
 
-          const users = await userRepository.find({
-            where: [
-              { email: In(emails) },
-              { username: In(usernames) },
-            ],
-            relations: ["role"],
-          });
+          try {
+            const emails = usersData.map((u) => u.email);
+            const usernames = usersData.map((u) => u.username);
 
-          users.forEach(user => {
-            existingUsers.set(user.email, user);
-            existingUsers.set(user.username, user);
-          });
+            const users = await userRepository.find({
+              where: [{ email: In(emails) }, { username: In(usernames) }],
+              relations: ["role"],
+            });
 
-          return existingUsers;
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          throw new Error('Error finding existing users: ' + errorMessage);
-        }
-      },
-      this.CACHE_TTL
-    ) || new Map<string, User>();
+            users.forEach((user) => {
+              existingUsers.set(user.email, user);
+              existingUsers.set(user.username, user);
+            });
+
+            return existingUsers;
+          } catch (err) {
+            const errorMessage =
+              err instanceof Error ? err.message : "Unknown error";
+            throw new Error("Error finding existing users: " + errorMessage);
+          }
+        },
+        this.CACHE_TTL
+      )) || new Map<string, User>()
+    );
   }
 }

@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
@@ -8,7 +7,7 @@ import { VenueResourceRepository } from "../repositories/VenueResourceRepository
 
 export class VenueController {
   // Create a single venue
-  static async create(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async create(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const {
       venueName,
@@ -77,10 +76,7 @@ export class VenueController {
   }
 
   // Create multiple venues
-  static async createMultiple(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async createMultiple(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const venuesData: Partial<VenueInterface>[] = req.body.venues;
 
@@ -147,10 +143,7 @@ export class VenueController {
   }
 
   // Get venues by manager ID
-  static async getByManagerId(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async getByManagerId(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     if (!userId) {
       res
@@ -199,7 +192,7 @@ export class VenueController {
   }
 
   // Update venue
-  static async update(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async update(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const userId = req.user?.userId;
     const {
@@ -262,10 +255,7 @@ export class VenueController {
   }
 
   // Update venue manager
-  static async updateVenueManager(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async updateVenueManager(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const { venueId, managerId } = req.body;
 
@@ -311,10 +301,7 @@ export class VenueController {
   }
 
   // Remove venue manager
-  static async removeVenueManager(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async removeVenueManager(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const { venueId } = req.params;
 
@@ -356,7 +343,7 @@ export class VenueController {
   }
 
   // Delete venue (soft delete)
-  static async delete(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async delete(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const userId = req.user?.userId;
 
@@ -396,10 +383,7 @@ export class VenueController {
   }
 
   // Restore soft-deleted venue
-  static async restore(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async restore(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const userId = req.user?.userId;
 
@@ -440,10 +424,7 @@ export class VenueController {
   }
 
   // Get soft-deleted venues
-  static async getDeleted(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async getDeleted(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
 
     if (!userId) {
@@ -472,10 +453,7 @@ export class VenueController {
   }
 
   // Check venue event conflicts
-  static async checkVenueEventConflicts(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async checkVenueEventConflicts(req: Request, res: Response): Promise<void> {
     const { venueId, startDate, endDate, startTime, endTime } = req.query;
 
     if (
@@ -644,10 +622,7 @@ export class VenueController {
   }
 
   // Get venues by proximity
-  static async getVenuesByProximity(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async getVenuesByProximity(req: Request, res: Response): Promise<void> {
     const { latitude, longitude, radius } = req.query;
 
     if (
@@ -697,10 +672,7 @@ export class VenueController {
   }
 
   // Assign a user as manager to a venue (simple version)
-  static async assignManagerToVenue(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async assignManagerToVenue(req: Request, res: Response): Promise<void> {
     const { venueId, userId } = req.body;
 
     if (!venueId || !userId) {
@@ -753,10 +725,7 @@ export class VenueController {
   }
 
   // Get resources for a venue by ID
-  static async getResourcesByVenueId(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async getResourcesByVenueId(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     if (!id) {
       res
@@ -808,10 +777,7 @@ export class VenueController {
   }
 
   // Remove a resource from a venue
-  static async removeResourceFromVenue(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async removeResourceFromVenue(req: Request, res: Response): Promise<void> {
     const { venueId, resourceId } = req.params;
     if (!venueId || !resourceId) {
       res.status(400).json({
@@ -863,10 +829,7 @@ export class VenueController {
   }
 
   // Create a venue and assign resources in one request
-  static async createVenueWithResources(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
+  static async createVenueWithResources(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const { resources, ...venueData } = req.body;
     if (!userId) {

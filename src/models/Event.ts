@@ -4,12 +4,12 @@ import {
   Column,
   OneToMany,
   ManyToOne,
-  OneToOne,
   ManyToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
+  JoinTable,
 } from 'typeorm';
 import {
   IsUUID,
@@ -80,7 +80,7 @@ export class Event {
   @Min(1, { message: 'Max attendees must be at least 1' })
   maxAttendees?: number;
 
-  @Column({ type: 'enum', enum: EventStatus, default: EventStatus.DRAFT })
+  @Column({ type: 'enum', enum: EventStatus, default: EventStatus.PENDING })
   @IsEnum(EventStatus, { message: 'Invalid event status' })
   status!: EventStatus;
 
@@ -107,11 +107,6 @@ export class Event {
   @IsNotEmpty({ message: 'Organizer ID is required' })
   @IsUUID('4', { message: 'Organizer ID must be a valid UUID' })
   organizerId!: string;
-
-  @Column({ type: 'uuid', nullable: true })
-  @IsOptional()
-  @IsUUID('4', { message: 'venueBookingId must be a valid UUID' })
-  venueBookingId?: string;
 
   @Column({ type: 'uuid', nullable: true })
   @IsOptional()
@@ -142,12 +137,13 @@ export class Event {
   @Length(0, 100, { message: 'Event category must be at most 100 characters' })
   eventCategory?: string;
 
-  @OneToOne(() => VenueBooking, (venueBooking) => venueBooking.event, { cascade: ['insert', 'update'], onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'venueBookingId' })
-  venueBooking?: VenueBooking;
-
-  @OneToMany(() => VenueBooking, (booking) => booking.event)
-  bookings!: VenueBooking[];
+  @ManyToMany(() => VenueBooking, (venueBooking) => venueBooking.events)
+  @JoinTable({
+    name: 'event_venue_bookings',
+    joinColumn: { name: 'eventId', referencedColumnName: 'eventId' },
+    inverseJoinColumn: { name: 'bookingId', referencedColumnName: 'bookingId' },
+  })
+  venueBookings!: VenueBooking[];
 
   @OneToMany(() => Registration, (registration) => registration.event, { cascade: false })
   registrations!: Registration[];

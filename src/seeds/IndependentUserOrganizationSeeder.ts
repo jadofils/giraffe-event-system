@@ -59,14 +59,14 @@ export default class IndependentOrganizationSeeder implements Seeder {
       } catch (error: any) {
         if (error.code === "23505") {
           // PostgreSQL unique violation
-          console.log("Test user already exists, skipping creation");
+         // console.log("Test user already exists, skipping creation");
           testUser = await userRepository.findOneBy({ username: "testuser" });
         } else {
           throw error;
         }
       }
     } else {
-      console.log("Test user already exists, skipping creation");
+     // console.log("Test user already exists, skipping creation");
     }
 
     if (testUser) {
@@ -93,9 +93,9 @@ export default class IndependentOrganizationSeeder implements Seeder {
           })
           .orIgnore()
           .execute();
-        console.log("Test user linked to Independent organization");
+      //  console.log("Test user linked to Independent organization");
       } else {
-        console.log("Test user already linked to Independent organization");
+       // console.log("Test user already linked to Independent organization");
       }
     }
 

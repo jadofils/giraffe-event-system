@@ -28,7 +28,7 @@ export class EventInterface {
   organizer?: UserInterface;
   venue?: VenueInterface;
   venues?: VenueInterface[];
-  bookings?: VenueBookingInterface[];
+  venueBookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
   payments?: PaymentInterface[];
   invoices?: InvoiceInterface[];
@@ -48,7 +48,7 @@ export class EventInterface {
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFT,
+      status: data.status || EventStatus.DRAFTED,
       isFeatured: data.isFeatured ?? false,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
@@ -58,7 +58,7 @@ export class EventInterface {
       organizer: data.organizer,
       venue: data.venue,
       venues: data.venues || [],
-      bookings: data.bookings || [],
+      venueBookings: data.venueBookings || [],
       registrations: data.registrations || [],
       payments: data.payments || [],
       invoices: data.invoices || [],
@@ -142,7 +142,7 @@ export class EventInterface {
       imageURL: data.imageURL,
       organizer: data.organizer,
       venue: data.venue,
-      bookings: data.bookings,
+      venueBookings: data.venueBookings,
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
@@ -183,7 +183,7 @@ export class EventRequestInterface {
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFT,
+      status: data.status || EventStatus.DRAFTED,
       isFeatured: data.isFeatured,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
@@ -231,7 +231,7 @@ export class EventResponseInterface {
   imageURL?: string;
   organizer?: UserInterface;
   venue?: VenueInterface;
-  bookings?: VenueBookingInterface[];
+  venueBookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
   payments?: PaymentInterface[];
   invoices?: InvoiceInterface[];
@@ -251,13 +251,13 @@ export class EventResponseInterface {
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFT,
+      status: data.status || EventStatus.DRAFTED,
       isFeatured: data.isFeatured ?? false,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
       organizer: data.organizer,
       venue: data.venue,
-      bookings: data.bookings,
+      venueBookings: data.venueBookings,
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
@@ -285,7 +285,7 @@ export class EventResponseInterface {
       imageURL: data.imageURL,
       organizer: data.organizer,
       venue: data.venue,
-      bookings: data.bookings,
+      venueBookings: data.venueBookings,
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,

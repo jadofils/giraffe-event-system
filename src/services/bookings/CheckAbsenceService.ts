@@ -1,7 +1,7 @@
 import { AppDataSource } from '../../config/Database';
 import { VenueBooking } from '../../models/VenueBooking';
 import { Event } from '../../models/Event';
-import { AuthenticatedRequest } from '../../middlewares/AuthMiddleware';
+import { Request } from 'express';
 import { VenueBookingInterface } from '../../interfaces/VenueBookingInterface';
 import { checkConflict } from './BookingService';
 
@@ -11,14 +11,14 @@ import { checkConflict } from './BookingService';
 export class CheckAbsenceService {
   /**
    * Checks available days, hours, and minutes for a specific venue using the associated event's dates and times.
-   * @param req - Authenticated request containing user token.
+   * @param req - d request containing user token.
    * @param venueId - The venue ID to check availability for.
    * @param queryStartDate - The start date range for the availability check.
    * @param queryEndDate - The end date range for the availability check.
    * @returns Object containing available days, hours, and minutes, or an error response.
    */
   static async getAvailableSlots(
-    req: AuthenticatedRequest,
+    req: Request,
     venueId: string,
     queryStartDate: Date,
     queryEndDate: Date
@@ -65,7 +65,7 @@ export class CheckAbsenceService {
         const currentDateStr = currentDate.toISOString().slice(0, 10);
         const dailyBookings = bookedSlots.filter(
           (booking) =>
-            booking.event && booking.event.startDate?.toISOString().slice(0, 10) === currentDateStr
+            booking.events && booking.events[0]?.startDate?.toISOString().slice(0, 10) === currentDateStr
         );
 
         if (dailyBookings.length === 0) {
@@ -75,18 +75,18 @@ export class CheckAbsenceService {
 
           // Sort bookings by event start time
         dailyBookings.sort((a, b) => {
-    const startA = a.event?.startTime ?? ""; // Default to empty string if undefined
-    const startB = b.event?.startTime ?? ""; 
+    const startA = a.events[0]?.startTime ?? ""; // Default to empty string if undefined
+    const startB = b.events[0]?.startTime ?? ""; 
 
     return startA.localeCompare(startB);
 });
 
           for (const booking of dailyBookings) {
-            if (!booking.event || !booking.event.startTime || !booking.event.endTime) {
+            if (!booking.events || !booking.events[0] || !booking.events[0].endTime) {
               continue; // Skip bookings with incomplete event data
             }
 
-            const { startTime, endTime } = booking.event;
+            const { startTime, endTime } = booking.events[0];
 
             // Identify gaps before the current booking
             if (previousEndTime < startTime) {
@@ -117,12 +117,12 @@ export class CheckAbsenceService {
 
 /**
  * Checks if the requested booking time is within available slots using the event's dates and times.
- * @param req - Authenticated request containing user token.
+ * @param req - d request containing user token.
  * @param bookingData - The booking data including the associated event.
  * @returns Object indicating success and an optional message.
  */
 export async function checkAvailability(
-  req: AuthenticatedRequest,
+  req: Request,
   bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {
@@ -210,12 +210,12 @@ export async function checkAvailability(
 /**
  * Validates a booking by checking both availability and conflicts.
  * Ensures event details are populated before validation.
- * @param req - Authenticated request containing user token.
+ * @param req - d request containing user token.
  * @param bookingData - The booking data including the associated event.
  * @returns Object indicating success and an optional message.
  */
 export async function validateBooking(
-  req: AuthenticatedRequest,
+  req: Request,
   bookingData: VenueBookingInterface
 ): Promise<{ success: boolean; message?: string }> {
   try {

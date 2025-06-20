@@ -1,21 +1,22 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/AuthMiddleware';
 import { EventController } from '../controller/eventController';
+import { authenticate } from '../middlewares/AuthMiddleware';
 
 const router = Router();
 
-router.post('/', authenticate, EventController.create);
-router.post('/bulk', authenticate, EventController.createMultiple);
-router.get('/', EventController.getAll);
-router.get('/:id', EventController.getById);
-router.get('/organizer', authenticate, EventController.getByOrganizerId);
-router.get('/', EventController.getByOrganizationId); // Query: ?organizationId=...
-router.get('/', EventController.getByVenueId); // Query: ?venueId=...
-router.get('/', EventController.getByStatus); // Query: ?status=...
-router.get('/', EventController.getByDateRange); // Query: ?startDate=...&endDate=...
-router.put('/:id', authenticate, EventController.update);
-router.delete('/:id', authenticate, EventController.delete);
-router.post('/:id/venues', authenticate, EventController.assignVenues);
-router.delete('/:id/venues', authenticate, EventController.removeVenues);
+// Event Routes
+router.post('/', EventController.createEvent);
+router.put('/:id/approve', EventController.approveEvent);
+router.get('/:id', EventController.getEventById);
+router.get('/', EventController.getAllEvents);
+router.put('/:id', EventController.updateEvent);
+router.delete('/:id', EventController.deleteEvent);
+
+// Venue Booking Routes
+router.post('/:eventId/venue-bookings',authenticate, EventController.bulkCreateVenueBookings);
+router.put('/venue-bookings/:bookingId/approve', EventController.approveVenueBooking);
+router.get('/:eventId/venue-bookings', EventController.getVenueBookings);
+router.put('/:eventId/venue-bookings/:bookingId', EventController.updateVenueBooking);
+router.delete('/:eventId/venue-bookings/:bookingId', EventController.deleteVenueBooking);
 
 export default router;

@@ -11,10 +11,14 @@ export class VenueBookingInterface {
   organizerId!: string;
   organizationId!: string;
   approvalStatus!: ApprovalStatus;
- event?: EventInterface | null;
-venue?: VenueInterface | null;
-organizer?: UserInterface | null;
-organization?: OrganizationInterface | null;
+  event?: EventInterface | null;
+  venue?: VenueInterface | null;
+  organizer?: UserInterface | null;
+  organization?: OrganizationInterface | null;
+  userId?: string;
+  totalAmountDue?: number;
+  venueInvoiceId?: string;
+  notes?: string;
 
   createdAt!: Date;
   updatedAt!: Date;

@@ -98,12 +98,12 @@ export async function checkConflict(
     const bufferTimeMinutes = 30; // Buffer time between bookings
 
     for (const booking of conflictingBookings) {
-      if (!booking.event || !booking.event.startTime || !booking.event.endTime) {
+      if (!booking.events || !booking.events[0] || !booking.events[0].startTime || !booking.events[0].endTime) {
         continue; // Skip bookings with incomplete event data
       }
 
-      const existingStartTimeParts = booking.event.startTime.split(':');
-      const existingEndTimeParts = booking.event.endTime.split(':');
+      const existingStartTimeParts = booking.events[0].startTime.split(':');
+      const existingEndTimeParts = booking.events[0].endTime.split(':');
 
       const existingStartHour = parseInt(existingStartTimeParts[0], 10);
       const existingStartMinute = parseInt(existingStartTimeParts[1], 10);
@@ -129,7 +129,7 @@ export async function checkConflict(
       ) {
         return {
           success: false,
-          message: `Time conflict detected with existing booking from ${booking.event.startTime} to ${booking.event.endTime}. Please choose another time slot.`,
+          message: `Time conflict detected with existing booking from ${booking.events[0].startTime} to ${booking.events[0].endTime}. Please choose another time slot.`,
         };
       }
 
@@ -140,7 +140,7 @@ export async function checkConflict(
       ) {
         return {
           success: false,
-          message: `Your booking starts too soon after an existing booking that ends at ${booking.event.endTime}. Please allow at least 30 minutes between bookings.`,
+          message: `Your booking starts too soon after an existing booking that ends at ${booking.events[0].endTime}. Please allow at least 30 minutes between bookings.`,
         };
       }
 
@@ -151,7 +151,7 @@ export async function checkConflict(
       ) {
         return {
           success: false,
-          message: `Your booking ends too close to another booking that starts at ${booking.event.startTime}. Please allow at least 30 minutes between bookings.`,
+          message: `Your booking ends too close to another booking that starts at ${booking.events[0].startTime}. Please allow at least 30 minutes between bookings.`,
         };
       }
     }

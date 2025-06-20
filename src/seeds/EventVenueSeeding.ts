@@ -85,7 +85,7 @@ export default class EventVenueSeeding implements Seeder {
         event = eventRepository.create({
           eventTitle: `Test Event ${i}`,
           eventType: EventType.PUBLIC,
-          status: EventStatus.DRAFT,
+          status: EventStatus.DRAFTED,
           organizationId: independentOrg.organizationId,
           organizerId: testUser.userId,
           createdByUserId: testUser.userId,

@@ -1,150 +1,26 @@
 import { Router } from "express";
 import { VenueController } from "../controller/venueController";
-import { isAdmin } from "../middlewares/IsAdmin"; // Assuming this checks for 'admin' role
-import { authenticate } from "../middlewares/AuthMiddleware"; // Assuming this checks if a user is logged in
-import checkAbsenceRoutes from "./CheckAbsenceRoutes"; // <--- ADD THIS IMPORT
+import { isAdmin } from "../middlewares/IsAdmin";
+import checkAbsenceRoutes from "./CheckAbsenceRoutes";
+import { authenticate } from "../middlewares/AuthMiddleware";
 
 const router = Router();
 
-// --- Public Routes (No Authentication Required) ---
-
-/**
- * @route GET /api/venues/all
- * @description Get all venues.
- * @access Public
- */
-router.get("/all", VenueController.getAll);
-
-/**
- * @route GET /api/venues/get/:id
- * @description Get a single venue by its ID.
- * @access Public
- */
-router.get("/get/:id", VenueController.getById);
-
-/**
- * @route GET /api/venues/search
- * @description Search for venues based on various criteria (name, location, capacity, availability).
- * @access Public
- * @queryParam name (string, optional)
- * @queryParam location (string, optional)
- * @queryParam minCapacity (number, optional)
- * @queryParam maxCapacity (number, optional)
- * @queryParam isAvailable (boolean, optional, 'true' or 'false')
- * @queryParam hasManager (boolean, optional, 'true' or 'false')
- */
-router.get("/search", VenueController.searchVenues);
-
-/**
- * @route GET /api/venues/count
- * @description Get the total count of active venues.
- * @access Public
- */
-router.get("/count", VenueController.getVenueCount);
-
-/**
- * @route GET /api/venues/:id/resources
- * @description Get all resources for a venue by its ID.
- * @access Public
- */
-// router.get('/:id/resources', VenueController.getResourcesByVenueId); // Removed to avoid conflict
-
-// --- Authenticated Routes (Requires User Login) ---
-
-/**
- * @route POST /api/venues/add
- * @description Create a new venue.
- * @access Authenticated (e.g., Admin, Venue Manager) - Consider adding specific role check if needed
- */
-router.post("/add", authenticate, VenueController.create); // Assuming authenticate handles `req.user`
-
-/**
- * @route GET /api/venues/manager-venues
- * @description Get venues managed by the authenticated user.
- * @access Authenticated (Venue Manager)
- */
+router.get("/all", authenticate, VenueController.getAll);
+router.get("/get/:id", authenticate, VenueController.getById);
+router.get("/search", authenticate, VenueController.searchVenues);
+router.get("/count", authenticate, VenueController.getVenueCount);
+router.post("/add", authenticate, VenueController.create);
 router.get("/manager-venues", authenticate, VenueController.getByManagerId);
-
-/**
- * @route PUT /api/venues/update/:id
- * @description Update an existing venue by its ID.
- * @access Authenticated (Admin or Venue Manager who owns the venue) - Requires careful authorization logic in controller.
- */
 router.put("/update/:id", authenticate, VenueController.update);
-
-/**
- * @route DELETE /api/venues/remove/:id
- * @description Soft-delete a venue by its ID.
- * @access Authenticated (Admin or authorized Venue Manager)
- */
 router.delete("/remove/:id", authenticate, VenueController.delete);
-
-/**
- * @route POST /api/venues/assign-manager
- * @description Assign a user as manager to a venue.
- * @access Authenticated
- * @body { "venueId": "uuid", "userId": "uuid" }
- */
-router.post(
-  "/assign-manager",
-  authenticate,
-  VenueController.assignManagerToVenue
-);
-
-/**
- * @route POST /api/venues/:venueId/resources
- * @description Bulk add resources to a venue.
- * @access Authenticated
- * @body { resources: [{ resourceId: string, quantity: number }] }
- */
-router.post(
-  "/:venueId/resources",
-  authenticate,
-  VenueController.addResourcesToVenue
-);
-
-/**
- * @route DELETE /api/venues/:venueId/resources/:resourceId
- * @description Remove a resource from a venue.
- * @access Authenticated
- */
-router.delete(
-  "/:venueId/resources/:resourceId",
-  authenticate,
-  VenueController.removeResourceFromVenue
-);
-
-/**
- * @route GET /api/venues/:venueId/resources
- * @description Get all resources assigned to a venue.
- * @access Public
- */
-router.get("/:venueId/resources", VenueController.getVenueResources);
-
-/**
- * @route POST /api/venues/add-with-resources
- * @description Create a new venue and assign resources in one request.
- * @access Authenticated
- * @body { venueName, capacity, location, amount, ...otherVenueFields, resources: [{ resourceId, quantity }] }
- */
+router.post("/assign-manager", authenticate, VenueController.assignManagerToVenue);
+router.post("/:venueId/resources", authenticate, VenueController.addResourcesToVenue);
+router.delete("/:venueId/resources/:resourceId", authenticate, VenueController.removeResourceFromVenue);
+router.get(":venueId/resources", authenticate, VenueController.getVenueResources);
 router.post('/add-with-resources', authenticate, VenueController.createVenueWithResources);
-
-// --- Admin-Only Routes (Requires Admin Role) ---
-
-/**
- * @route PUT /api/venues/update-manager/:id
- * @description Update the manager of a specific venue.
- * @access Admin only
- * @body { "managerId": "uuid" }
- */
-router.put("/update-manager/:id", isAdmin, VenueController.updateVenueManager);
-
-/**
- * @route PUT /api/venues/remove-manager/:id
- * @description Remove the manager from a specific venue.
- * @access Admin only
- */
+router.put("/update-manager/:id", authenticate, VenueController.updateVenueManager);
 router.put("/remove-manager/:id", isAdmin, VenueController.removeVenueManager);
-router.use("/", checkAbsenceRoutes); // <--- ADD THIS LINE
+router.use("/", checkAbsenceRoutes);
 
 export const venueRoute = router;

@@ -1,7 +1,9 @@
-import { Router } from "express";
-import { PermissionController } from "../controller/PermissionController";
+// src/routes/PermissionRoutes.ts
+import { Router } from 'express';
+import { PermissionController } from '../controller/PermissionController';
+
 const router = Router();
 
-router.get("/", PermissionController.getAll);
+router.get('/', PermissionController.getAll);
 
 export default router;

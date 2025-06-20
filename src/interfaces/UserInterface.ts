@@ -88,3 +88,11 @@ export class UserInterface {
     return errors;
   }
 }
+
+declare global {
+  namespace Express {
+    interface Request {
+      user: UserInterface & { id: string; isAdmin?: boolean };
+    }
+  }
+}

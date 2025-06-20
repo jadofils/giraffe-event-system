@@ -125,28 +125,28 @@ export class PermissionSeeder {
         if (!exists) {
           const permission = permissionRepository.create(perm);
           const savedPermission = await permissionRepository.save(permission);
-          console.log(`✅ Created permission: ${perm.name}`);
+         // console.log(`✅ Created permission: ${perm.name}`);
           createdPermissions.push(perm.name);
         } else {
-          console.log(`✓ Permission '${perm.name}' already exists, skipping...`);
+         // console.log(`✓ Permission '${perm.name}' already exists, skipping...`);
           skippedPermissions.push(perm.name);
         }
       } catch (error) {
-        console.error(`❌ Error creating permission '${perm.name}':`, error);
+       // console.error(`❌ Error creating permission '${perm.name}':`, error);
       }
     }
 
     // Summary message
     if (createdPermissions.length > 0) {
-      console.log(`\n🎉 Successfully created ${createdPermissions.length} new permission(s): ${createdPermissions.join(', ')}`);
+     // console.log(`\n🎉 Successfully created ${createdPermissions.length} new permission(s): ${createdPermissions.join(', ')}`);
     }
     if (skippedPermissions.length > 0) {
-      console.log(`📋 Skipped ${skippedPermissions.length} existing permission(s): ${skippedPermissions.join(', ')}`);
+      //console.log(`📋 Skipped ${skippedPermissions.length} existing permission(s): ${skippedPermissions.join(', ')}`);
     }
     if (createdPermissions.length === 0 && skippedPermissions.length > 0) {
-      console.log(`\n✅ All permissions already exist in the database!`);
+     // console.log(`\n✅ All permissions already exist in the database!`);
     }
     
-    console.log(`\n📊 Total permissions in database: ${createdPermissions.length + skippedPermissions.length}`);
+   // console.log(`\n📊 Total permissions in database: ${createdPermissions.length + skippedPermissions.length}`);
   }
 }

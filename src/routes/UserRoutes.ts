@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { UserController } from "../controller/user/Registration";
 import { LoginController } from "../controller/user/Login";
-import { authenticate } from "../middlewares/AuthMiddleware";
+import {  } from "../middlewares/AuthMiddleware";
 import { ResetPasswordController } from "../controller/user/ResetDefaultPassword";
 
 const router = Router();
@@ -19,7 +19,7 @@ router.post("/auth/reset/resend", ResetPasswordController.resendPasswordResetEma
 
 // Protected Routes (require authentication)
 // Apply authentication middleware
-router.use(authenticate);
+//router.use();
 
 // User Profile Routes (individual user actions)
 router.get("/profile", UserController.getProfile); // Get current user's profile

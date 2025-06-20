@@ -29,11 +29,11 @@ export const initializeDatabase = async (): Promise<void> => {
   try {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
-      console.log("Database connection established!");
+     // console.log("Database connection established!");
 
       // Only run seeding if it hasn't been completed yet
       if (!isSeedingCompleted) {
-        console.log("\n🌱 Starting database seeding process...");
+      //  console.log("\n🌱 Starting database seeding process...");
 
         // Seed permissions first
         console.log("🔐 Seeding permissions...");
@@ -44,20 +44,20 @@ export const initializeDatabase = async (): Promise<void> => {
 
         await seedDefaultRoles();
         await runSeeders();
-        console.log("Seeding admin role with all permissions...");
+       // console.log("Seeding admin role with all permissions...");
         await AdminRoleSeeder.seed();
-        console.log("Admin role seeding completed!");
+        //console.log("Admin role seeding completed!");
         isSeedingCompleted = true;
-        console.log("\n✅ Database seeding completed successfully!");
-        console.log(
-          "📊 Database is ready for use with all required roles and organizations."
-        );
+        // console.log("\n✅ Database seeding completed successfully!");
+        // console.log(
+        //   "📊 Database is ready for use with all required roles and organizations."
+        // );
       } else {
-        console.log("\n✅ Database already seeded - skipping seeding process.");
+        //console.log("\n✅ Database already seeded - skipping seeding process.");
       }
     }
   } catch (error) {
-    console.error("Error during database initialization:", error);
+    //console.error("Error during database initialization:", error);
     throw error; // Re-throw to handle it in the application
   }
 };
@@ -71,9 +71,9 @@ async function runSeeders() {
     // Run the independent organization seeder
     await seeder.run(AppDataSource, factoryManager);
 
-    console.log("Database seeding completed!");
+   // console.log("Database seeding completed!");
   } catch (error) {
-    console.error("Error during database seeding:", error);
+   // console.error("Error during database seeding:", error);
     throw error; // Re-throw to handle it in the application
   }
 }
@@ -84,7 +84,7 @@ async function seedDefaultRoles() {
     const roleRepository = AppDataSource.getRepository("Role");
     // No default roles to seed
   } catch (error) {
-    console.error("Error seeding default roles:", error);
+    //console.error("Error seeding default roles:", error);
     throw error;
   }
 }
@@ -94,31 +94,6 @@ export const isDatabaseSeeded = (): boolean => {
   return isSeedingCompleted;
 };
 
-// Function to update all enum columns to uppercase
-// async function updateEnumColumnsToUppercase() {
-//   const queryRunner = AppDataSource.createQueryRunner();
-//   try {
-//     await queryRunner.connect();
-
-//     // List of [table, column] pairs that use enums
-//     const enumColumns: [string, string][] = [
-//       ['ticket_types', 'ticketCategory'],
-//       // Add more as needed: ['table_name', 'enum_column_name']
-//     ];
-
-//     for (const [table, column] of enumColumns) {
-//       await queryRunner.query(
-//         `UPDATE "${table}" SET "${column}" = UPPER("${column}") WHERE "${column}" IS NOT NULL;`
-//       );
-//     }
-
-//     console.log('All enum columns updated to uppercase.');
-//   } catch (error) {
-//     console.error('Error updating enum columns to uppercase:', error);
-//   } finally {
-//     await queryRunner.release();
-//   }
-// }
 
 async function seedAdminRole() {
   const roleRepository = AppDataSource.getRepository("Role");
@@ -127,10 +102,10 @@ async function seedAdminRole() {
     where: { roleName: "ADMIN" },
   });
   if (adminExists) {
-    console.log("✅ 'ADMIN' role already exists. No deletion performed.");
-    console.log(
-      "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
-    );
+  //  console.log("✅ 'ADMIN' role already exists. No deletion performed.");
+  //  console.log(
+  //     "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
+  //   );
     return;
   }
 

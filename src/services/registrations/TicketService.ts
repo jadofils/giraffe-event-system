@@ -1,8 +1,7 @@
 // src/services/registrations/TicketService.ts
 
-import { AuthenticatedRequest } from '../../middlewares/AuthMiddleware';
 import { TicketType } from '../../models/TicketType';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { RegistrationRepository } from '../../repositories/RegistrationRepository';
 import { User } from '../../models/User';
 import { AppDataSource } from '../../config/Database';
@@ -52,10 +51,10 @@ export class TicketService {
     /**
      * Get ticket details for a registration
      */
-    static async getTicketDetails(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async getTicketDetails(req: Request, res: Response): Promise<void> {
         const loggedInUserId = req.user?.userId;
         // Ensure roles are mapped to an array of strings containing just the role names
-        const loggedInUserRoles = req.user?.roles?.map((role: any) => typeof role === 'string' ? role : role.roleName) || [];
+        const loggedInUserRoles = req.user?.role?.roleName ? [req.user.role.roleName] : [];
 
         console.log(`[TicketService:getTicketDetails] User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}`);
 
@@ -168,9 +167,9 @@ export class TicketService {
     /**
      * Transfer a ticket to a new user
      */
-    static async transferTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async transferTicket(req: Request, res: Response): Promise<void> {
         const loggedInUserId = req.user?.userId;
-        const loggedInUserRoles = req.user?.roles?.map((role: any) => typeof role === 'string' ? role : role.roleName) || [];
+        const loggedInUserRoles = req.user?.role?.roleName ? [req.user.role.roleName] : [];
 
         console.log(`[TicketService:transferTicket] User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}`);
 
@@ -292,9 +291,9 @@ export class TicketService {
     /**
      * Cancel specific tickets from a registration
      */
-    static async cancelRegistration(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async cancelRegistration(req: Request, res: Response): Promise<void> {
         const loggedInUserId = req.user?.userId;
-        const loggedInUserRoles = req.user?.roles?.map((role: any) => typeof role === 'string' ? role : role.roleName) || [];
+        const loggedInUserRoles = req.user?.role?.roleName ? [req.user.role.roleName] : [];
 
         console.log(`[TicketService:cancelRegistration] User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}`);
 
@@ -631,9 +630,9 @@ export class TicketService {
      * Allows adding 1 ticket by default, up to a maximum of 10 tickets per registration,
      * and also respects the ticket type's maxQuantity.
      */
-    static async AddToCartTheNoOfTickets(req: AuthenticatedRequest, res: Response): Promise<void> {
+    static async AddToCartTheNoOfTickets(req: Request, res: Response): Promise<void> {
         const loggedInUserId = req.user?.userId;
-        const loggedInUserRoles = req.user?.roles?.map((role: any) => typeof role === 'string' ? role : role.roleName) || [];
+        const loggedInUserRoles = req.user?.role?.roleName ? [req.user.role.roleName] : [];
 
         console.log(`[TicketService:AddToCartTheNoOfTickets] User ID: ${loggedInUserId}, Roles: ${JSON.stringify(loggedInUserRoles)}`);
 

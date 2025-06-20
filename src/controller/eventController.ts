@@ -1,702 +1,288 @@
-import { Request, Response } from "express";
-import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
-import { EventInterface } from "../interfaces/EventInterface";
-import { EventStatus } from "../interfaces/Index";
-import { EventRepository } from "../repositories/eventRepository";
-import { VenueRepository } from "../repositories/venueRepository";
+import { Request, Response, NextFunction } from 'express';
+import { EventStatus } from '../interfaces/Enums/EventStatusEnum';
+import { ApprovalStatus, VenueBooking } from '../models/VenueBooking';
+import { EventInterface } from '../interfaces/EventInterface';
+import { VenueBookingInterface } from '../interfaces/VenueBookingInterface';
+import { EventRepository } from '../repositories/eventRepository';
+import { AppDataSource } from '../config/Database';
+import { Venue } from '../models/Venue';
+import { In } from "typeorm";
 
 export class EventController {
-  // Create a single event
-  static async create(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const organizerId = req.user?.userId;
-    const {
-      eventTitle,
-      eventType,
-      organizationId,
-      startDate,
-      endDate,
-      startTime,
-      endTime,
-      description,
-      eventCategory,
-      maxAttendees,
-      status,
-      isFeatured,
-      qrCode,
-      imageURL,
-      venues,
-    }: Partial<EventInterface> = req.body;
+  private static eventRepository = new EventRepository();
 
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    if (
-      !eventTitle ||
-      !eventType ||
-      !organizationId ||
-      !startDate ||
-      !endDate
-    ) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Missing required fields: eventTitle, eventType, organizationId, startDate, endDate.",
-      });
-      return;
-    }
-
+  static async createEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate venues if provided
-      if (venues && Array.isArray(venues) && venues.length > 0) {
-        const venueIds = venues.map((v) => v.venueId).filter(Boolean);
-        for (const venueId of venueIds) {
-          const venueResult = await VenueRepository.getById(venueId);
-          if (!venueResult) {
-            res.status(404).json({
-              success: false,
-              message: `Venue with ID ${venueId} not found.`,
-            });
-            return;
-          }
-          // --- Venue conflict check ---
-          const eventsResult = await EventRepository.getByVenueId(venueId);
-          if (eventsResult.success && eventsResult.data) {
-            const newStart = startTime
-              ? new Date(`${startDate}T${startTime}:00Z`)
-              : new Date(startDate);
-            const newEnd = endTime
-              ? new Date(`${endDate}T${endTime}:00Z`)
-              : new Date(endDate);
-            const conflictingEvents = eventsResult.data.filter((event) => {
-              const eventStart = event.startTime
-                ? new Date(
-                    `${event.startDate.toISOString().split("T")[0]}T${
-                      event.startTime
-                    }:00Z`
-                  )
-                : event.startDate;
-              const eventEnd = event.endTime
-                ? new Date(
-                    `${event.endDate.toISOString().split("T")[0]}T${
-                      event.endTime
-                    }:00Z`
-                  )
-                : event.endDate;
-              return (
-                eventStart <= newEnd &&
-                eventEnd >= newStart &&
-                event.status !== "CANCELLED"
-              );
-            });
-            if (conflictingEvents.length > 0) {
-              res.status(400).json({
-                success: false,
-                message: `Venue is already booked for the requested period by another event.`,
-                conflicts: conflictingEvents.map((e) => ({
-                  eventId: e.eventId,
-                  eventTitle: e.eventTitle,
-                  startDate: e.startDate,
-                  endDate: e.endDate,
-                  startTime: e.startTime,
-                  endTime: e.endTime,
-                  status: e.status,
-                })),
-              });
-              return;
-            }
-          }
-        }
-      }
-
-      const newEventData: Partial<EventInterface> = {
-        eventTitle,
-        eventType,
-        organizerId,
-        organizationId,
-        startDate,
-        endDate,
-        startTime,
-        endTime,
-        description,
-        eventCategory,
-        maxAttendees,
-        status,
-        isFeatured,
-        qrCode,
-        imageURL,
-        venues,
+      const eventData: Partial<EventInterface> = {
+        ...req.body,
+        status: EventStatus.PENDING,
       };
 
-      const createResult = await EventRepository.create(newEventData);
+      const createResult = await EventRepository.create(eventData);
       if (!createResult.success || !createResult.data) {
-        res.status(400).json({ success: false, message: createResult.message });
+        res.status(400).json({ message: createResult.message });
         return;
       }
 
       const saveResult = await EventRepository.save(createResult.data);
-      if (saveResult.success && saveResult.data) {
-        res.status(201).json({
-          success: true,
-          message: "Event created successfully.",
-          data: saveResult.data,
-        });
-        return;
-      } else {
-        res.status(500).json({
-          success: false,
-          message: saveResult.message || "Failed to save event.",
-        });
+      if (!saveResult.success || !saveResult.data) {
+        res.status(500).json({ message: saveResult.message });
         return;
       }
-    } catch (err) {
-      console.error("Error creating event:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to create event due to a server error.",
-      });
-      return;
+
+      res.status(201).json(saveResult.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Create multiple events
-  static async createMultiple(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
-    const organizerId = req.user?.userId;
-    const eventsData: Partial<EventInterface>[] = req.body.events;
-
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    if (!eventsData || !Array.isArray(eventsData) || eventsData.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "An array of event data is required.",
-      });
-      return;
-    }
-
+  static async approveEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate venues in each event
-      for (const eventData of eventsData) {
-        if (
-          eventData.venues &&
-          Array.isArray(eventData.venues) &&
-          eventData.venues.length > 0
-        ) {
-          const venueIds = eventData.venues
-            .map((v) => v.venueId)
-            .filter(Boolean);
-          for (const venueId of venueIds) {
-            const venueResult = await VenueRepository.getById(venueId);
-            if (!venueResult) {
-              res.status(404).json({
-                success: false,
-                message: `Venue with ID ${venueId} not found.`,
-              });
-              return;
-            }
-          }
-        }
-        // Ensure organizerId is set for each event
-        eventData.organizerId = organizerId;
+      const { id } = req.params;
+      const eventResult = await EventRepository.getById(id);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ message: eventResult.message });
+        return;
       }
 
-      const createResult = await EventRepository.createMultiple(eventsData);
-      res.status(createResult.success ? 201 : 207).json({
-        success: createResult.success,
-        message: createResult.success
-          ? "All events created successfully."
-          : "Some events failed to create.",
-        data: createResult.events,
-        errors: createResult.errors,
-      });
-    } catch (err) {
-      console.error("Error creating multiple events:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to create events due to a server error.",
-      });
+      const updateResult = await EventRepository.update(id, { status: EventStatus.APPROVED });
+      if (!updateResult.success || !updateResult.data) {
+        res.status(500).json({ message: updateResult.message });
+        return;
+      }
+
+      res.json(updateResult.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Get event by ID
-  static async getById(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
-    if (!id) {
-      res
-        .status(400)
-        .json({ success: false, message: "Event ID is required." });
-      return;
-    }
-
+  static async getEventById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const { id } = req.params;
       const result = await EventRepository.getById(id);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: result.message || "Event not found.",
-        });
-      }
-    } catch (err) {
-      console.error("Error getting event by ID:", err);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to get event by ID." });
-    }
-  }
-
-  // Get events by organizer ID
-  static async getByOrganizerId(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
-    const organizerId = req.user?.userId;
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    try {
-      const result = await EventRepository.getByOrganizerId(organizerId);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: result.message || "No events found for this organizer.",
-        });
-      }
-    } catch (err) {
-      console.error("Error getting events by organizer ID:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to get events by organizer ID.",
-      });
-    }
-  }
-
-  // Get events by organization ID
-  static async getByOrganizationId(req: Request, res: Response): Promise<void> {
-    const { organizationId } = req.query;
-    if (!organizationId || typeof organizationId !== "string") {
-      res
-        .status(400)
-        .json({ success: false, message: "Organization ID is required." });
-      return;
-    }
-
-    try {
-      const result = await EventRepository.getByOrganizationId(organizationId);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: result.message || "No events found for this organization.",
-        });
-      }
-    } catch (err) {
-      console.error("Error getting events by organization ID:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to get events by organization ID.",
-      });
-    }
-  }
-
-  // Get events by venue ID
-  static async getByVenueId(req: Request, res: Response): Promise<void> {
-    const { venueId } = req.query;
-    if (!venueId || typeof venueId !== "string") {
-      res
-        .status(400)
-        .json({ success: false, message: "Venue ID is required." });
-      return;
-    }
-
-    try {
-      const result = await EventRepository.getByVenueId(venueId);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: result.message || "No events found for this venue.",
-        });
-      }
-    } catch (err) {
-      console.error("Error getting events by venue ID:", err);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to get events by venue ID." });
-    }
-  }
-
-  // Get events by status
-  static async getByStatus(req: Request, res: Response): Promise<void> {
-    const { status } = req.query;
-    if (
-      !status ||
-      !Object.values(EventStatus).includes(status as EventStatus)
-    ) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid event status is required." });
-      return;
-    }
-
-    try {
-      const result = await EventRepository.getByStatus(status as EventStatus);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: result.message || `No events found with status ${status}.`,
-        });
-      }
-    } catch (err) {
-      console.error("Error getting events by status:", err);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to get events by status." });
-    }
-  }
-
-  // Get events by date range
-  static async getByDateRange(req: Request, res: Response): Promise<void> {
-    const { startDate, endDate } = req.query;
-    if (
-      !startDate ||
-      !endDate ||
-      typeof startDate !== "string" ||
-      typeof endDate !== "string"
-    ) {
-      res
-        .status(400)
-        .json({ success: false, message: "Start and end dates are required." });
-      return;
-    }
-
-    try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        res
-          .status(400)
-          .json({ success: false, message: "Invalid date format." });
+      if (!result.success || !result.data) {
+        res.status(404).json({ message: result.message });
         return;
       }
-
-      const result = await EventRepository.getByDateRange(start, end);
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(404).json({
-          success: false,
-          message:
-            result.message || "No events found in the specified date range.",
-        });
-      }
-    } catch (err) {
-      console.error("Error getting events by date range:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to get events by date range.",
-      });
+      res.json(result.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Get all events
-  static async getAll(req: Request, res: Response): Promise<void> {
+  static async getAllEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await EventRepository.getAll();
-      if (result.success && result.data) {
-        res.status(200).json({ success: true, data: result.data });
-      } else {
-        res.status(200).json({
-          success: false,
-          message: result.message || "No events found.",
-        });
+      if (!result.success || !result.data) {
+        res.status(500).json({ message: result.message });
+        return;
       }
-    } catch (err) {
-      console.error("Error getting all events:", err);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to get all events." });
+      res.json(result.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Update event
-  static async update(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const { id } = req.params;
-    const organizerId = req.user?.userId;
-    const {
-      eventTitle,
-      eventType,
-      organizationId,
-      startDate,
-      endDate,
-      startTime,
-      endTime,
-      description,
-      eventCategory,
-      maxAttendees,
-      status,
-      isFeatured,
-      qrCode,
-      imageURL,
-      venues,
-    }: Partial<EventInterface> = req.body;
-
-    if (!id) {
-      res
-        .status(400)
-        .json({ success: false, message: "Event ID is required." });
-      return;
-    }
-
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
+  static async updateEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate venues if provided
-      if (venues && Array.isArray(venues) && venues.length > 0) {
-        const venueIds = venues.map((v) => v.venueId).filter(Boolean);
-        for (const venueId of venueIds) {
-          const venueResult = await VenueRepository.getById(venueId);
-          if (!venueResult) {
-            res.status(404).json({
-              success: false,
-              message: `Venue with ID ${venueId} not found.`,
-            });
-            return;
-          }
-        }
-      }
-
-      const updateData: Partial<EventInterface> = {
-        eventTitle,
-        eventType,
-        organizerId,
-        organizationId,
-        startDate,
-        endDate,
-        startTime,
-        endTime,
-        description,
-        eventCategory,
-        maxAttendees,
-        status,
-        isFeatured,
-        qrCode,
-        imageURL,
-        venues,
+      const { id } = req.params;
+      const eventData: Partial<EventInterface> = {
+        ...req.body,
+        status: EventStatus.PENDING,
       };
 
-      const updateResult = await EventRepository.update(id, updateData);
-      if (updateResult.success && updateResult.data) {
-        res.status(200).json({
-          success: true,
-          message: "Event updated successfully.",
-          data: updateResult.data,
-        });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: updateResult.message || "Event not found.",
-        });
+      const updateResult = await EventRepository.update(id, eventData);
+      if (!updateResult.success || !updateResult.data) {
+        res.status(500).json({ message: updateResult.message });
+        return;
       }
-    } catch (err) {
-      console.error("Error updating event:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to update event due to a server error.",
-      });
+      res.json(updateResult.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Delete event
-  static async delete(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const { id } = req.params;
-    const organizerId = req.user?.userId;
-
-    if (!id) {
-      res
-        .status(400)
-        .json({ success: false, message: "Event ID is required." });
-      return;
-    }
-
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
+  static async deleteEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const deleteResult = await EventRepository.delete(id);
-      if (deleteResult.success) {
-        res.status(200).json({
-          success: true,
-          message: deleteResult.message || "Event deleted successfully.",
-        });
-      } else {
-        res.status(404).json({
-          success: false,
-          message: deleteResult.message || "Event not found.",
-        });
+      const { id } = req.params;
+      const result = await EventRepository.delete(id);
+      if (!result.success) {
+        res.status(500).json({ message: result.message });
+        return;
       }
-    } catch (err) {
-      console.error("Error deleting event:", err);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to delete event." });
+      res.json({ message: 'Event deleted' });
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Assign venues to an event
-  static async assignVenues(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
-    const organizerId = req.user?.userId;
-    const { eventId, venueIds }: { eventId: string; venueIds: string[] } =
-      req.body;
-
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    if (
-      !eventId ||
-      !venueIds ||
-      !Array.isArray(venueIds) ||
-      venueIds.length === 0
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Event ID and an array of venue IDs are required.",
-      });
-      return;
-    }
-
+static async bulkCreateVenueBookings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate venues
-      for (const venueId of venueIds) {
-        const venueResult = await VenueRepository.getById(venueId);
-        if (!venueResult) {
-          res.status(404).json({
-            success: false,
-            message: `Venue with ID ${venueId} not found.`,
-          });
-          return;
-        }
+      const { organizationId, bookings } = req.body;
+      const userId = req.user?.userId; // From AuthMiddleware
+      const eventId = req.params.eventId;
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: "Unauthorized: User ID not found in token" });
+        return;
       }
 
-      const result = await EventRepository.assignVenues(eventId, venueIds);
-      if (result.success) {
-        res.status(200).json({
-          success: true,
-          message: result.message || "Venues assigned successfully.",
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: result.message || "Failed to assign venues.",
-        });
+      if (!organizationId) {
+        res.status(400).json({ success: false, message: "organizationId is required" });
+        return;
       }
-    } catch (err) {
-      console.error("Error assigning venues:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to assign venues due to a server error.",
+
+      if (!Array.isArray(bookings) || bookings.length === 0) {
+        res.status(400).json({ success: false, message: "Booking array is required" });
+        return;
+      }
+
+      // Validate venues exist
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venueIds = bookings.map(b => b.venueId);
+      const venues = await venueRepo.find({
+        where: { venueId: In(venueIds) },
+        relations: ["organization"],
       });
+
+      if (venues.length !== bookings.length) {
+        res.status(404).json({ success: false, message: "One or more venues not found" });
+        return;
+      }
+
+      const result = await EventRepository.bulkCreateVenueBookings(
+        bookings.map(b => ({
+          ...b,
+          organizationId,
+          approvalStatus: ApprovalStatus.PENDING
+        })),
+        userId,
+        eventId,
+        organizationId
+      );
+
+      if (!result.success) {
+        res.status(400).json({ success: false, message: result.message });
+        return;
+      }
+
+      // Format response with full venue data
+      const formattedBookings = result.data?.map(booking => ({
+        bookingId: booking.bookingId,
+        venue: {
+          venueId: booking.venue.venueId,
+          venueName: booking.venue.venueName,
+          location: booking.venue.location,
+          capacity: booking.venue.capacity,
+          amount: booking.venue.amount,
+          latitude: booking.venue.latitude,
+          longitude: booking.venue.longitude,
+          googleMapsLink: booking.venue.googleMapsLink,
+          managerId: booking.venue.managerId,
+          organizationId: booking.venue.organizationId,
+          amenities: booking.venue.amenities,
+          venueType: booking.venue.venueType,
+          contactPerson: booking.venue.contactPerson,
+          contactEmail: booking.venue.contactEmail,
+          contactPhone: booking.venue.contactPhone,
+          websiteURL: booking.venue.websiteURL,
+          createdAt: booking.venue.createdAt,
+          updatedAt: booking.venue.updatedAt,
+          deletedAt: booking.venue.deletedAt,
+        },
+        eventId: booking.eventId,
+        userId: booking.userId,
+        organizationId: booking.organizationId,
+        totalAmountDue: booking.totalAmountDue,
+        venueInvoiceId: booking.venueInvoiceId,
+        approvalStatus: booking.approvalStatus,
+        notes: booking.notes,
+        createdAt: booking.createdAt,
+        updatedAt: booking.updatedAt,
+        deletedAt: booking.deletedAt,
+      }));
+
+      res.status(201).json({ success: true, message: "Bookings created", data: formattedBookings });
+    } catch (error) {
+      console.error("Error in bulkCreateVenueBookings:", error);
+      next(error);
+    }
+  }
+  static async approveVenueBooking(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const updateResult = await EventRepository.updateVenueBooking(bookingId, { approvalStatus: ApprovalStatus.APPROVED });
+      if (!updateResult.success || !updateResult.data) {
+        res.status(500).json({ message: updateResult.message });
+        return;
+      }
+
+      res.json(updateResult.data);
+    } catch (error) {
+      next(error);
     }
   }
 
-  // Remove venues from an event
-  static async removeVenues(
-    req: AuthenticatedRequest,
-    res: Response
-  ): Promise<void> {
-    const organizerId = req.user?.userId;
-    const { eventId, venueIds }: { eventId: string; venueIds: string[] } =
-      req.body;
-
-    if (!organizerId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    if (
-      !eventId ||
-      !venueIds ||
-      !Array.isArray(venueIds) ||
-      venueIds.length === 0
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Event ID and an array of venue IDs are required.",
-      });
-      return;
-    }
-
+  static async getVenueBookings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate venues
-      for (const venueId of venueIds) {
-        const venueResult = await VenueRepository.getById(venueId);
-        if (!venueResult) {
-          res.status(404).json({
-            success: false,
-            message: `Venue with ID ${venueId} not found.`,
-          });
-          return;
-        }
+      const { eventId } = req.params;
+      const eventResult = await EventRepository.getById(eventId);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ message: eventResult.message });
+        return;
+      }
+      res.json(eventResult.data.venueBookings || []);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateVenueBooking(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const bookingData: Partial<VenueBookingInterface> = {
+        ...req.body,
+        approvalStatus: ApprovalStatus.PENDING,
+      };
+
+      const updateResult = await EventRepository.updateVenueBooking(bookingId, bookingData);
+      if (!updateResult.success || !updateResult.data) {
+        res.status(500).json({ message: updateResult.message });
+        return;
+      }
+      res.json(updateResult.data);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteVenueBooking(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { eventId, bookingId } = req.params;
+      const removeResult = await EventRepository.removeVenueBookings(eventId, [bookingId]);
+      if (!removeResult.success) {
+        res.status(500).json({ message: removeResult.message });
+        return;
       }
 
-      const result = await EventRepository.removeVenues(eventId, venueIds);
-      if (result.success) {
-        res.status(200).json({
-          success: true,
-          message: result.message || "Venues removed successfully.",
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: result.message || "Failed to remove venues.",
-        });
+      const deleteResult = await EventRepository.deleteVenueBooking(bookingId);
+      if (!deleteResult.success) {
+        res.status(500).json({ message: deleteResult.message });
+        return;
       }
-    } catch (err) {
-      console.error("Error removing venues:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to remove venues due to a server error.",
-      });
+      res.json({ message: 'Venue booking deleted' });
+    } catch (error) {
+      next(error);
     }
+  }
+
+  static validate(data: Partial<VenueBookingInterface>): string[] {
+    const errors: string[] = [];
+    if (!data.eventId) errors.push('eventId is required');
+    if (!data.venueId) errors.push('venueId is required');
+    if (!data.organizerId) errors.push('organizerId is required');
+    if (!data.organizationId) errors.push('organizationId is required');
+    return errors;
   }
 }

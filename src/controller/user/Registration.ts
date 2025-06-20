@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { UserRepository } from "../../repositories/UserRepository";
 import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
@@ -8,7 +8,6 @@ import { Organization } from "../../models/Organization"; // Import Organization
 import { UserInterface } from "../../interfaces/UserInterface"; // Import UserInterface
 import bcrypt from "bcryptjs";
 import { OrganizationRepository } from "../../repositories/OrganizationRepository";
-import { AuthenticatedRequest } from "../../middlewares/AuthMiddleware";
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -381,9 +380,12 @@ export class UserController {
     }
   }
 
-  static async getUserById(req: Request, res: Response): Promise<void> {
+ 
+
+  static async getUserById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await UserRepository.getUserById(req.params.id);
+      const { id } = req.params;
+      const user = await UserRepository.getUserById(id);
 
       if (!user) {
         res.status(404).json({ success: false, message: "User not found" });
@@ -391,7 +393,6 @@ export class UserController {
       }
 
       const formattedUser = {
-        // All User fields
         userId: user.userId,
         username: user.username,
         firstName: user.firstName,
@@ -416,8 +417,6 @@ export class UserController {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         deletedAt: user.deletedAt,
-
-        // Role (all fields, including permissions)
         role: user.role
           ? {
               roleId: user.role.roleId,
@@ -435,8 +434,6 @@ export class UserController {
                 : [],
             }
           : null,
-
-        // Organizations (all fields)
         organizations: Array.isArray(user.organizations)
           ? user.organizations.map((org) => ({
               organizationId: org.organizationId,
@@ -453,267 +450,236 @@ export class UserController {
               createdAt: org.createdAt,
               updatedAt: org.updatedAt,
               deletedAt: org.deletedAt,
-              // Optionally, map org.users, org.events, org.venues, org.bookings, org.venueInvoices if needed
             }))
           : [],
-
-        // Registrations as Attendee (all fields, with nested event, ticketType, venue, payment, invoice)
-        registrations:
-          user.registrationsAsAttendee?.map((registration) => ({
-            registrationId: registration.registrationId,
-            eventId: registration.eventId,
-            userId: registration.userId,
-            buyerId: registration.buyerId,
-            boughtForIds: registration.boughtForIds,
-            ticketTypeId: registration.ticketTypeId,
-            venueId: registration.venueId,
-            noOfTickets: registration.noOfTickets,
-            registrationDate: registration.registrationDate,
-            paymentStatus: registration.paymentStatus,
-            qrCode: registration.qrCode,
-            checkDate: registration.checkDate,
-            attended: registration.attended,
-            totalCost: registration.totalCost,
-            registrationStatus: registration.registrationStatus,
-            paymentId: registration.paymentId,
-            invoiceId: registration.invoiceId,
-            createdAt: registration.createdAt,
-            updatedAt: registration.updatedAt,
-            deletedAt: registration.deletedAt,
-            event: registration.event
-              ? {
-            eventId: registration.event.eventId,
-            eventTitle: registration.event.eventTitle,
-            description: registration.event.description,
-            eventType: registration.event.eventType,
-                  startDate: registration.event.startDate,
-                  endDate: registration.event.endDate,
-                  startTime: registration.event.startTime,
-                  endTime: registration.event.endTime,
-                  maxAttendees: registration.event.maxAttendees,
-                  status: registration.event.status,
-                  isFeatured: registration.event.isFeatured,
-                  qrCode: registration.event.qrCode,
-                  imageURL: registration.event.imageURL,
-                  organizerId: registration.event.organizerId,
-                  organizationId: registration.event.organizationId,
-                  createdAt: registration.event.createdAt,
-                  updatedAt: registration.event.updatedAt,
-                  deletedAt: registration.event.deletedAt,
-                  // Nested organizer
-                  organizer: registration.event.organizer
-                    ? {
-                        userId: registration.event.organizer.userId,
-                        username: registration.event.organizer.username,
-                        firstName: registration.event.organizer.firstName,
-                        lastName: registration.event.organizer.lastName,
-                        email: registration.event.organizer.email,
-                        // ...map all user fields as needed
-                      }
-                    : null,
-                  // Nested venues array
-                  venues: Array.isArray(registration.event.venues)
-                    ? registration.event.venues.map((venue) => ({
-                        venueId: venue.venueId,
-                        venueName: venue.venueName,
-                        // ...map all venue fields as needed
-                      }))
-                    : [],
-                  // Nested bookings array
-                  bookings: Array.isArray(registration.event.bookings)
-                    ? registration.event.bookings.map((booking) => ({
-                        bookingId: booking.bookingId,
-                        // ...map all booking fields as needed
-                      }))
-                    : [],
-                  // Nested registrations array
-                  registrations: Array.isArray(registration.event.registrations)
-                    ? registration.event.registrations.map((reg) => ({
-                        registrationId: reg.registrationId,
-                        // ...map all registration fields as needed
-                      }))
-                    : [],
-                  // Nested payments array
-                  payments: Array.isArray(registration.event.payments)
-                    ? registration.event.payments.map((payment) => ({
-                        paymentId: payment.paymentId,
-                        // ...map all payment fields as needed
-                      }))
-                    : [],
-                  // Nested invoices array
-                  invoices: Array.isArray(registration.event.invoices)
-                    ? registration.event.invoices.map((invoice) => ({
-                        invoiceId: invoice.invoiceId,
-                        // ...map all invoice fields as needed
-                      }))
-                    : [],
-                }
-              : null,
-            ticketType: registration.ticketType
-              ? {
-                  ticketTypeId: registration.ticketType.ticketTypeId,
-                  ticketName: registration.ticketType.ticketName,
-                  // ...map all ticket type fields
-                }
-              : null,
-            venue: registration.venue
+        registrations: user.registrationsAsAttendee?.map((registration) => ({
+          registrationId: registration.registrationId,
+          eventId: registration.eventId,
+          userId: registration.userId,
+          buyerId: registration.buyerId,
+          boughtForIds: registration.boughtForIds,
+          ticketTypeId: registration.ticketTypeId,
+          venueId: registration.venueId,
+          noOfTickets: registration.noOfTickets,
+          registrationDate: registration.registrationDate,
+          paymentStatus: registration.paymentStatus,
+          qrCode: registration.qrCode,
+          checkDate: registration.checkDate,
+          attended: registration.attended,
+          totalCost: registration.totalCost,
+          registrationStatus: registration.registrationStatus,
+          paymentId: registration.paymentId,
+          invoiceId: registration.invoiceId,
+          createdAt: registration.createdAt,
+          updatedAt: registration.updatedAt,
+          deletedAt: registration.deletedAt,
+          event: registration.event
             ? {
-              venueId: registration.venue.venueId,
-              venueName: registration.venue.venueName,
-              capacity: registration.venue.capacity,
-                  amount: registration.venue.amount,
-              location: registration.venue.location,
-                  latitude: registration.venue.latitude,
-                  longitude: registration.venue.longitude,
-                  googleMapsLink: registration.venue.googleMapsLink,
-              managerId: registration.venue.managerId,
-                  organizationId: registration.venue.organizationId,
-                  amenities: registration.venue.amenities,
-                  venueType: registration.venue.venueType,
-                  contactPerson: registration.venue.contactPerson,
-                  contactEmail: registration.venue.contactEmail,
-                  contactPhone: registration.venue.contactPhone,
-                  websiteURL: registration.venue.websiteURL,
-                  createdAt: registration.venue.createdAt,
-                  updatedAt: registration.venue.updatedAt,
-                  deletedAt: registration.venue.deletedAt,
-                }
-              : null,
-            payment: registration.payment
-              ? {
-                  paymentId: registration.payment.paymentId,
-                  // ...map all payment fields
-                }
-              : null,
-            invoice: registration.invoice
-              ? {
-                  invoiceId: registration.invoice.invoiceId,
-                  // ...map all invoice fields
-                }
-              : null,
-          })) || [],
-
-        // Invoices (all fields, with nested payments, registration)
-        invoices:
-          user.invoices?.map((invoice) => ({
-            invoiceId: invoice.invoiceId,
-            eventId: invoice.eventId,
-            userId: invoice.userId,
-            invoiceDate: invoice.invoiceDate,
-            dueDate: invoice.dueDate,
-            totalAmount: invoice.totalAmount,
-            status: invoice.status,
-            createdAt: invoice.createdAt,
-            updatedAt: invoice.updatedAt,
-            deletedAt: invoice.deletedAt,
-            payments:
-              invoice.payments?.map((payment) => ({
-                paymentId: payment.paymentId,
-                // ...map all payment fields
-              })) || [],
-            registration: invoice.registration
-              ? {
-                  registrationId: invoice.registration.registrationId,
-                  // ...map all registration fields
-                }
-              : null,
-          })) || [],
-
-        // Venue Bookings (all fields, with nested event, venue, organizer, organization)
-        venueBookings:
-          user.bookings?.map((booking) => ({
-            bookingId: booking.bookingId,
-            eventId: booking.eventId,
-            venueId: booking.venueId,
-            user: booking.user
-              ? {
-                  userId: booking.user.userId,
-                  username: booking.user.username,
-                  firstName: booking.user.firstName,
-                  lastName: booking.user.lastName,
-                  email: booking.user.email,
-                  phoneNumber: booking.user.phoneNumber,
-                  roleId: booking.user.roleId,
-                  bio: booking.user.bio,
-                  profilePictureURL: booking.user.profilePictureURL,
-                  preferredLanguage: booking.user.preferredLanguage,
-                  timezone: booking.user.timezone,
-                  emailNotificationsEnabled:
-                    booking.user.emailNotificationsEnabled,
-                  smsNotificationsEnabled: booking.user.smsNotificationsEnabled,
-                  socialMediaLinks: booking.user.socialMediaLinks,
-                  dateOfBirth: booking.user.dateOfBirth,
-                  gender: booking.user.gender,
-                  addressLine1: booking.user.addressLine1,
-                  addressLine2: booking.user.addressLine2,
-                  city: booking.user.city,
-                  stateProvince: booking.user.stateProvince,
-                  postalCode: booking.user.postalCode,
-                  country: booking.user.country,
-                  createdAt: booking.user.createdAt,
-                  updatedAt: booking.user.updatedAt,
-                  deletedAt: booking.user.deletedAt,
-                }
-              : null,
-            venue: booking.venue
-              ? {
-                  venueId: booking.venue.venueId,
-                  venueName: booking.venue.venueName,
-                  capacity: booking.venue.capacity,
-                  amount: booking.venue.amount,
-                  location: booking.venue.location,
-                  managerId: booking.venue.managerId,
-                  latitude: booking.venue.latitude,
-                  longitude: booking.venue.longitude,
-                  googleMapsLink: booking.venue.googleMapsLink,
-                  organizationId: booking.venue.organizationId,
-                  amenities: booking.venue.amenities,
-                  venueType: booking.venue.venueType,
-                  contactPerson: booking.venue.contactPerson,
-                  contactEmail: booking.venue.contactEmail,
-                  contactPhone: booking.venue.contactPhone,
-                  websiteURL: booking.venue.websiteURL,
-                  createdAt: booking.venue.createdAt,
-                  updatedAt: booking.venue.updatedAt,
-                  deletedAt: booking.venue.deletedAt,
-                }
-              : null,
-            organization: booking.organization
-              ? {
-                  organizationId: booking.organization.organizationId,
-                  organizationName: booking.organization.organizationName,
-                  description: booking.organization.description,
-                  contactEmail: booking.organization.contactEmail,
-                  contactPhone: booking.organization.contactPhone,
-                  address: booking.organization.address,
-                  organizationType: booking.organization.organizationType,
-                  city: booking.organization.city,
-                  country: booking.organization.country,
-                  postalCode: booking.organization.postalCode,
-                  stateProvince: booking.organization.stateProvince,
-                  createdAt: booking.organization.createdAt,
-                  updatedAt: booking.organization.updatedAt,
-                  deletedAt: booking.organization.deletedAt,
-            }
+                eventId: registration.event.eventId,
+                eventTitle: registration.event.eventTitle,
+                description: registration.event.description,
+                eventType: registration.event.eventType,
+                startDate: registration.event.startDate,
+                endDate: registration.event.endDate,
+                startTime: registration.event.startTime,
+                endTime: registration.event.endTime,
+                maxAttendees: registration.event.maxAttendees,
+                status: registration.event.status,
+                isFeatured: registration.event.isFeatured,
+                qrCode: registration.event.qrCode,
+                imageURL: registration.event.imageURL,
+                organizerId: registration.event.organizerId,
+                organizationId: registration.event.organizationId,
+                createdAt: registration.event.createdAt,
+                updatedAt: registration.event.updatedAt,
+                deletedAt: registration.event.deletedAt,
+                organizer: registration.event.organizer
+                  ? {
+                      userId: registration.event.organizer.userId,
+                      username: registration.event.organizer.username,
+                      firstName: registration.event.organizer.firstName,
+                      lastName: registration.event.organizer.lastName,
+                      email: registration.event.organizer.email,
+                    }
+                  : null,
+                venues: Array.isArray(registration.event.venues)
+                  ? registration.event.venues.map((venue) => ({
+                      venueId: venue.venueId,
+                      venueName: venue.venueName,
+                    }))
+                  : [],
+                bookings: Array.isArray(registration.event.venueBookings)
+                  ? registration.event.venueBookings.map((booking) => ({
+                      bookingId: booking.bookingId,
+                    }))
+                  : [],
+                registrations: Array.isArray(registration.event.registrations)
+                  ? registration.event.registrations.map((reg) => ({
+                      registrationId: reg.registrationId,
+                    }))
+                  : [],
+                payments: Array.isArray(registration.event.payments)
+                  ? registration.event.payments.map((payment) => ({
+                      paymentId: payment.paymentId,
+                    }))
+                  : [],
+                invoices: Array.isArray(registration.event.invoices)
+                  ? registration.event.invoices.map((invoice) => ({
+                      invoiceId: invoice.invoiceId,
+                    }))
+                  : [],
+              }
             : null,
+          ticketType: registration.ticketType
+            ? {
+                ticketTypeId: registration.ticketType.ticketTypeId,
+                ticketName: registration.ticketType.ticketName,
+              }
+            : null,
+          venue: registration.venue
+            ? {
+                venueId: registration.venue.venueId,
+                venueName: registration.venue.venueName,
+                capacity: registration.venue.capacity,
+                amount: registration.venue.amount,
+                location: registration.venue.location,
+                latitude: registration.venue.latitude,
+                longitude: registration.venue.longitude,
+                googleMapsLink: registration.venue.googleMapsLink,
+                managerId: registration.venue.managerId,
+                organizationId: registration.venue.organizationId,
+                amenities: registration.venue.amenities,
+                venueType: registration.venue.venueType,
+                contactPerson: registration.venue.contactPerson,
+                contactEmail: registration.venue.contactEmail,
+                contactPhone: registration.venue.contactPhone,
+                websiteURL: registration.venue.websiteURL,
+                createdAt: registration.venue.createdAt,
+                updatedAt: registration.venue.updatedAt,
+                deletedAt: registration.venue.deletedAt,
+              }
+            : null,
+          payment: registration.payment
+            ? {
+                paymentId: registration.payment.paymentId,
+              }
+            : null,
+          invoice: registration.invoice
+            ? {
+                invoiceId: registration.invoice.invoiceId,
+              }
+            : null,
+        })) || [],
+        invoices: user.invoices?.map((invoice) => ({
+          invoiceId: invoice.invoiceId,
+          eventId: invoice.eventId,
+          userId: invoice.userId,
+          invoiceDate: invoice.invoiceDate,
+          dueDate: invoice.dueDate,
+          totalAmount: invoice.totalAmount,
+          status: invoice.status,
+          createdAt: invoice.createdAt,
+          updatedAt: invoice.updatedAt,
+          deletedAt: invoice.deletedAt,
+          payments: invoice.payments?.map((payment) => ({
+            paymentId: payment.paymentId,
           })) || [],
-
-        // Created Events (all fields, with nested venues, bookings, registrations, payments, invoices)
-        createdEvents:
-          user.createdEvents?.map((event) => ({
-            eventId: event.eventId,
-            eventTitle: event.eventTitle,
-            // ...map all event fields and nested objects as above
+          registration: invoice.registration
+            ? {
+                registrationId: invoice.registration.registrationId,
+              }
+            : null,
+        })) || [],
+        venueBookings: user.bookings?.map((booking) => ({
+          bookingId: booking.bookingId,
+          eventId: booking.eventId,
+          venueId: booking.venueId,
+          user: booking.user
+            ? {
+                userId: booking.user.userId,
+                username: booking.user.username,
+                firstName: booking.user.firstName,
+                lastName: booking.user.lastName,
+                email: booking.user.email,
+                phoneNumber: booking.user.phoneNumber,
+                roleId: booking.user.roleId,
+                bio: booking.user.bio,
+                profilePictureURL: booking.user.profilePictureURL,
+                preferredLanguage: booking.user.preferredLanguage,
+                timezone: booking.user.timezone,
+                emailNotificationsEnabled: booking.user.emailNotificationsEnabled,
+                smsNotificationsEnabled: booking.user.smsNotificationsEnabled,
+                socialMediaLinks: booking.user.socialMediaLinks,
+                dateOfBirth: booking.user.dateOfBirth,
+                gender: booking.user.gender,
+                addressLine1: booking.user.addressLine1,
+                addressLine2: booking.user.addressLine2,
+                city: booking.user.city,
+                stateProvince: booking.user.stateProvince,
+                postalCode: booking.user.postalCode,
+                country: booking.user.country,
+                createdAt: booking.user.createdAt,
+                updatedAt: booking.user.updatedAt,
+                deletedAt: booking.user.deletedAt,
+              }
+            : null,
+          venue: booking.venue
+            ? {
+                venueId: booking.venue.venueId,
+                venueName: booking.venue.venueName,
+                capacity: booking.venue.capacity,
+                amount: booking.venue.amount,
+                location: booking.venue.location,
+                managerId: booking.venue.managerId,
+                latitude: booking.venue.latitude,
+                longitude: booking.venue.longitude,
+                googleMapsLink: booking.venue.googleMapsLink,
+                organizationId: booking.venue.organizationId,
+                amenities: booking.venue.amenities,
+                venueType: booking.venue.venueType,
+                contactPerson: booking.venue.contactPerson,
+                contactEmail: booking.venue.contactEmail,
+                contactPhone: booking.venue.contactPhone,
+                websiteURL: booking.venue.websiteURL,
+                createdAt: booking.venue.createdAt,
+                updatedAt: booking.venue.updatedAt,
+                deletedAt: booking.venue.deletedAt,
+              }
+            : null,
+          organization: booking.organization
+            ? {
+                organizationId: booking.organization.organizationId,
+                organizationName: booking.organization.organizationName,
+                description: booking.organization.description,
+                contactEmail: booking.organization.contactEmail,
+                contactPhone: booking.organization.contactPhone,
+                address: booking.organization.address,
+                organizationType: booking.organization.organizationType,
+                city: booking.organization.city,
+                country: booking.organization.country,
+                postalCode: booking.organization.postalCode,
+                stateProvince: booking.organization.stateProvince,
+                createdAt: booking.organization.createdAt,
+                updatedAt: booking.organization.updatedAt,
+                deletedAt: booking.organization.deletedAt,
+              }
+            : null,
+        })) || [],
+        createdEvents: user.createdEvents?.map((event) => ({
+          eventId: event.eventId,
+          eventTitle: event.eventTitle,
         })) || [],
       };
+
+      console.log(`Permissions in response for user ${id}: ${JSON.stringify(formattedUser.role?.permissions || [])}`);
+
       res.status(200).json({ success: true, user: formattedUser });
     } catch (error) {
       console.error("Error in getUserById:", error);
-      res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
+      res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
+
 
   static async updateUser(req: Request, res: Response): Promise<void> {
     try {
@@ -930,7 +896,7 @@ export class UserController {
   }
 
   static async getMyOrganizations(
-    req: AuthenticatedRequest,
+    req: Request,
     res: Response
   ): Promise<void> {
     const userId = req.user?.userId;

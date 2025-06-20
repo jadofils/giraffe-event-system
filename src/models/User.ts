@@ -97,6 +97,9 @@ export class User {
   @OneToMany(() => Event, (event) => event.createdBy)
   createdEvents!: Event[];
 
+  @ManyToMany(() => Venue, venue => venue.users)
+  venues!: Venue[];
+
   // --- NEW OPTIONAL USER PROFILE FIELDS ---
   @Column({ type: 'varchar', length: 1000, nullable: true })
   @IsOptional()

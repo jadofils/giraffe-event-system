@@ -8,7 +8,6 @@ router.get("/:id", RoleController.getById);
 router.put("/:id", RoleController.update);
 router.delete("/:id", RoleController.deleteById);
 router.post("/search-by-name", RoleController.getRolesByName);
-
 // Add endpoint to get all permissions
 
 
