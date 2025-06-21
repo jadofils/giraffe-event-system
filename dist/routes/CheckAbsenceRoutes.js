@@ -15,7 +15,7 @@ const router = (0, express_1.Router)();
 /**
  * @route GET /api/v1/venues/:venueId/available-slots
  * @description Check available days and hours for a specific venue within a date range.
- * @access Private (Authenticated Users)
+ * @access Private (d Users)
  */
 router.get("/:venueId/available-slots", ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

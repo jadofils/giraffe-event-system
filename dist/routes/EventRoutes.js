@@ -1,13 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.eventRoute = void 0;
 const express_1 = require("express");
 const eventController_1 = require("../controller/eventController");
+const AuthMiddleware_1 = require("../middlewares/AuthMiddleware");
 const router = (0, express_1.Router)();
-router.get("/all", eventController_1.EventController.getAll);
-router.get("/get/:id", eventController_1.EventController.getById);
-router.get("/getByOrgizerId", eventController_1.EventController.getByOrganizerId);
-router.post("/create", eventController_1.EventController.create);
-router.put("/update/:id", eventController_1.EventController.update);
-router.delete("/delete/:id", eventController_1.EventController.delete);
-exports.eventRoute = router;
+// =======================
+// 📂 Public Event Routes
+// =======================
+router.get('/', eventController_1.EventController.getAllEvents);
+router.get('/:id', eventController_1.EventController.getEventById);
+router.get('/:eventId/venue-bookings', eventController_1.EventController.getVenueBookings);
+// =======================
+// 🔒 Protected Event Routes
+// =======================
+router.use(AuthMiddleware_1.authenticate);
+// Event Management
+router.post('/', eventController_1.EventController.createEvent);
+router.put('/:id/approve', eventController_1.EventController.approveEvent);
+router.put('/:id', eventController_1.EventController.updateEvent);
+router.delete('/:id', eventController_1.EventController.deleteEvent);
+// Venue Booking Management
+router.post('/:eventId/venue-bookings', eventController_1.EventController.bulkCreateVenueBookings);
+router.put('/venue-bookings/:bookingId/approve', eventController_1.EventController.approveVenueBooking);
+router.put('/:eventId/venue-bookings/:bookingId', eventController_1.EventController.updateVenueBooking);
+router.delete('/:eventId/venue-bookings/:bookingId', eventController_1.EventController.deleteVenueBooking);
+exports.default = router;

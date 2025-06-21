@@ -25,7 +25,9 @@ class ResourceRepository {
     // Static function to retrieve all resources
     static findAllResources() {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.resourceRepository.find({ relations: ['eventResources'] });
+            return yield this.resourceRepository.find({
+                relations: ["eventResources"],
+            });
         });
     }
     // Static function to update a resource
@@ -45,11 +47,35 @@ class ResourceRepository {
             return result.affected === 1;
         });
     }
+    // Bulk assign resources to an event
+    static bulkAssignResourcesToEvent(eventId, resources) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _b;
+            if (!eventId || !Array.isArray(resources) || resources.length === 0) {
+                throw new Error("eventId and a non-empty resources array are required");
+            }
+            const eventResourceRepo = Database_1.AppDataSource.getRepository("EventResource");
+            const created = [];
+            for (const r of resources) {
+                const eventResource = eventResourceRepo.create({
+                    eventId,
+                    resourceId: r.resourceId,
+                    quantity: r.quantity,
+                    amountSpent: (_b = r.amountSpent) !== null && _b !== void 0 ? _b : null,
+                });
+                created.push(yield eventResourceRepo.save(eventResource));
+            }
+            return created;
+        });
+    }
 }
 exports.ResourceRepository = ResourceRepository;
 _a = ResourceRepository;
 ResourceRepository.resourceRepository = Database_1.AppDataSource.getRepository(Resources_1.Resource);
 //Static function to retrieve a resource by ID
 ResourceRepository.findResourceById = (resourceId) => __awaiter(void 0, void 0, void 0, function* () {
-    return yield _a.resourceRepository.findOne({ where: { resourceId }, relations: ['eventResources'] });
+    return yield _a.resourceRepository.findOne({
+        where: { resourceId },
+        relations: ["eventResources"],
+    });
 });

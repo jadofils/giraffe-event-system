@@ -13,194 +13,684 @@ exports.OrganizationRepository = void 0;
 const Database_1 = require("../config/Database");
 const Organization_1 = require("../models/Organization");
 const User_1 = require("../models/User");
-const In_1 = require("typeorm/find-options/operator/In");
+const typeorm_1 = require("typeorm");
+const CacheService_1 = require("../services/CacheService");
+const Venue_1 = require("../models/Venue");
+const CACHE_TTL = 3600; // 1 hour
 class OrganizationRepository {
-    // Get all organizations
+    /**
+     * Get all organizations
+     * @returns List of organizations with users
+     */
     static getAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const organizations = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).find({
-                    relations: ['user', 'user.role', 'user.organizations'],
-                });
+                const cacheKey = "org:all";
+                const organizations = yield CacheService_1.CacheService.getOrSetMultiple(cacheKey, Database_1.AppDataSource.getRepository(Organization_1.Organization), () => __awaiter(this, void 0, void 0, function* () {
+                    return yield Database_1.AppDataSource.getRepository(Organization_1.Organization).find({
+                        relations: ["users", "users.role"],
+                    });
+                }), CACHE_TTL);
                 return { success: true, data: organizations };
             }
             catch (error) {
-                return { success: false, message: 'Failed to fetch organizations' };
+                console.error("[Organization Fetch Error]:", error);
+                return { success: false, message: "Failed to fetch organizations" };
             }
         });
     }
-    // Get an organization by ID
+    /**
+     * Get an organization by ID
+     * @param id Organization UUID
+     * @returns Organization with users
+     */
     static getById(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!id) {
-                return { success: false, message: 'Organization ID is required' };
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
             }
             try {
-                const organization = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).findOne({ where: { organizationId: id },
-                    relations: ['user', 'user.role', 'user.organizations'], });
+                const cacheKey = `org:id:${id}`;
+                const organization = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, Database_1.AppDataSource.getRepository(Organization_1.Organization), () => __awaiter(this, void 0, void 0, function* () {
+                    return yield Database_1.AppDataSource.getRepository(Organization_1.Organization).findOne({
+                        where: { organizationId: id },
+                        relations: ["users", "users.role"],
+                    });
+                }), CACHE_TTL);
                 if (!organization) {
-                    return { success: false, message: 'Organization not found' };
+                    return { success: false, message: "Organization not found" };
                 }
                 return { success: true, data: organization };
             }
             catch (error) {
-                return { success: false, message: 'Failed to fetch organization' };
+                console.error(`[Organization Fetch Error] ID: ${id}:`, error);
+                return { success: false, message: "Failed to fetch organization" };
             }
         });
     }
-    // Create a new organization
+    /**
+     * Create a new organization (not saved)
+     * @param data Organization data
+     * @returns Organization entity
+     */
     static create(data) {
         var _a, _b;
-        if (!data.OrganizationName || !data.ContactEmail || !data.Address || !data.OrganizationType) {
-            return { success: false, message: 'Required fields are missing' };
+        if (!data.organizationName || !data.contactEmail || !data.address || !data.organizationType) {
+            return { success: false, message: "Required fields (name, email, address, type) are missing" };
         }
         const organization = new Organization_1.Organization();
-        organization.organizationName = data.OrganizationName;
-        organization.description = (_a = data.Description) !== null && _a !== void 0 ? _a : '';
-        organization.contactEmail = data.ContactEmail;
-        organization.contactPhone = (_b = data.ContactPhone) !== null && _b !== void 0 ? _b : '';
-        organization.address = data.Address;
-        organization.organizationType = data.OrganizationType;
+        organization.organizationName = data.organizationName;
+        organization.description = (_a = data.description) !== null && _a !== void 0 ? _a : "";
+        organization.contactEmail = data.contactEmail;
+        organization.contactPhone = (_b = data.contactPhone) !== null && _b !== void 0 ? _b : "";
+        organization.address = data.address;
+        organization.organizationType = data.organizationType;
+        organization.createdAt = new Date();
+        organization.updatedAt = new Date();
         return { success: true, data: organization };
     }
-    // Save an organization
+    /**
+     * Create multiple organizations
+     * @param data Array of organization data
+     * @returns Created organizations
+     */
+    static bulkCreate(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            if (!data.length) {
+                return { success: false, message: "At least one organization is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organizations = [];
+                const existingNames = new Set();
+                const existingEmails = new Set();
+                // Validate and create entities
+                for (const item of data) {
+                    if (!item.organizationName ||
+                        !item.contactEmail ||
+                        !item.address ||
+                        !item.organizationType) {
+                        return { success: false, message: "Required fields missing in one or more organizations" };
+                    }
+                    if (existingNames.has(item.organizationName) || existingEmails.has(item.contactEmail)) {
+                        return { success: false, message: "Duplicate organization name or email in bulk data" };
+                    }
+                    existingNames.add(item.organizationName);
+                    existingEmails.add(item.contactEmail);
+                    const org = repo.create({
+                        organizationName: item.organizationName,
+                        description: (_a = item.description) !== null && _a !== void 0 ? _a : "",
+                        contactEmail: item.contactEmail,
+                        contactPhone: (_b = item.contactPhone) !== null && _b !== void 0 ? _b : "",
+                        address: item.address,
+                        organizationType: item.organizationType,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    });
+                    organizations.push(org);
+                }
+                // Check existing organizations
+                const existing = yield repo.find({
+                    where: [
+                        { organizationName: (0, typeorm_1.In)([...existingNames]) },
+                        { contactEmail: (0, typeorm_1.In)([...existingEmails]) },
+                    ],
+                });
+                if (existing.length) {
+                    return {
+                        success: false,
+                        message: "One or more organizations already exist with provided name or email",
+                    };
+                }
+                // Save all organizations
+                const savedOrganizations = yield repo.save(organizations);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple(["org:all", ...savedOrganizations.map((org) => `org:id:${org.organizationId}`)]);
+                return { success: true, data: savedOrganizations, message: "Organizations created successfully" };
+            }
+            catch (error) {
+                console.error("[Organization Bulk Create Error]:", error);
+                return { success: false, message: "Failed to create organizations" };
+            }
+        });
+    }
+    /**
+     * Save an organization
+     * @param org Organization entity
+     * @returns Saved organization
+     */
     static save(org) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!org.organizationName || !org.contactEmail || !org.address || !org.organizationType) {
-                return { success: false, message: 'Required fields are missing' };
+                return { success: false, message: "Required fields (name, email, address, type) are missing" };
             }
             try {
-                // Check if the organization already exists by name or email
-                const existingOrganization = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).findOne({
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                // Check for duplicates
+                const existing = yield repo.findOne({
                     where: [
                         { organizationName: org.organizationName },
                         { contactEmail: org.contactEmail },
                     ],
                 });
-                if (existingOrganization) {
+                if (existing && existing.organizationId !== org.organizationId) {
                     return {
                         success: false,
-                        message: 'Organization with this name or email already exists.You can Join it!!!',
-                        data: existingOrganization,
+                        message: "Organization with this name or email already exists",
+                        data: existing,
                     };
                 }
-                // Save the new organization
-                const savedOrganization = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).save(org);
-                return { success: true, data: savedOrganization, message: 'Organization saved successfully' };
+                org.updatedAt = new Date();
+                const savedOrganization = yield repo.save(org);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${savedOrganization.organizationId}`,
+                ]);
+                return { success: true, data: savedOrganization, message: "Organization saved successfully" };
             }
             catch (error) {
-                console.error('Error saving organization:', error);
-                return { success: false, message: 'Failed to save organization' };
+                console.error("[Organization Save Error]:", error);
+                return { success: false, message: "Failed to save organization" };
             }
         });
     }
-    // Update an organization
+    /**
+     * Update an organization
+     * @param id Organization UUID
+     * @param data Partial organization data
+     * @returns Updated organization
+     */
     static update(id, data) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e, _f;
-            if (!id) {
-                return { success: false, message: 'Organization ID is required' };
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
             }
             try {
                 const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
-                const organization = yield repo.findOne({ where: { organizationId: id } });
+                const organization = yield repo.findOne({
+                    where: { organizationId: id },
+                    relations: ["users"],
+                });
                 if (!organization) {
-                    return { success: false, message: 'Organization not found' };
+                    return { success: false, message: "Organization not found" };
+                }
+                // Check for duplicate name/email
+                if (data.organizationName || data.contactEmail) {
+                    const existing = yield repo.findOne({
+                        where: [
+                            { organizationName: data.organizationName || "" },
+                            { contactEmail: data.contactEmail || "" },
+                        ],
+                    });
+                    if (existing && existing.organizationId !== id) {
+                        return { success: false, message: "Organization name or email already exists" };
+                    }
                 }
                 repo.merge(organization, {
-                    organizationName: (_a = data.OrganizationName) !== null && _a !== void 0 ? _a : organization.organizationName,
-                    description: (_b = data.Description) !== null && _b !== void 0 ? _b : organization.description,
-                    contactEmail: (_c = data.ContactEmail) !== null && _c !== void 0 ? _c : organization.contactEmail,
-                    contactPhone: (_d = data.ContactPhone) !== null && _d !== void 0 ? _d : organization.contactPhone,
-                    address: (_e = data.Address) !== null && _e !== void 0 ? _e : organization.address,
-                    organizationType: (_f = data.OrganizationType) !== null && _f !== void 0 ? _f : organization.organizationType,
+                    organizationName: (_a = data.organizationName) !== null && _a !== void 0 ? _a : organization.organizationName,
+                    description: (_b = data.description) !== null && _b !== void 0 ? _b : organization.description,
+                    contactEmail: (_c = data.contactEmail) !== null && _c !== void 0 ? _c : organization.contactEmail,
+                    contactPhone: (_d = data.contactPhone) !== null && _d !== void 0 ? _d : organization.contactPhone,
+                    address: (_e = data.address) !== null && _e !== void 0 ? _e : organization.address,
+                    organizationType: (_f = data.organizationType) !== null && _f !== void 0 ? _f : organization.organizationType,
+                    updatedAt: new Date(),
                 });
                 const updatedOrganization = yield repo.save(organization);
-                return { success: true, data: updatedOrganization };
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${id}`,
+                    ...organization.users.map((user) => `org:user:${user.userId}`),
+                ]);
+                return { success: true, data: updatedOrganization, message: "Organization updated successfully" };
             }
             catch (error) {
-                return { success: false, message: 'Failed to update organization' };
+                console.error(`[Organization Update Error] ID: ${id}:`, error);
+                return { success: false, message: "Failed to update organization" };
             }
         });
     }
-    // Delete an organization
+    /**
+     * Update multiple organizations
+     * @param updates Array of organization ID and partial data
+     * @returns Updated organizations
+     */
+    static bulkUpdate(updates) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f;
+            if (!updates.length) {
+                return { success: false, message: "At least one organization update is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const updatedOrganizations = [];
+                const invalidateKeys = ["org:all"];
+                for (const { id, data } of updates) {
+                    if (!id || !this.UUID_REGEX.test(id)) {
+                        return { success: false, message: `Invalid organization ID: ${id}` };
+                    }
+                    const organization = yield repo.findOne({
+                        where: { organizationId: id },
+                        relations: ["users"],
+                    });
+                    if (!organization) {
+                        return { success: false, message: `Organization not found: ${id}` };
+                    }
+                    // Check for duplicate name/email
+                    if (data.organizationName || data.contactEmail) {
+                        const existing = yield repo.findOne({
+                            where: [
+                                { organizationName: data.organizationName || "" },
+                                { contactEmail: data.contactEmail || "" },
+                            ],
+                        });
+                        if (existing && existing.organizationId !== id) {
+                            return { success: false, message: "Organization name or email already exists" };
+                        }
+                    }
+                    repo.merge(organization, {
+                        organizationName: (_a = data.organizationName) !== null && _a !== void 0 ? _a : organization.organizationName,
+                        description: (_b = data.description) !== null && _b !== void 0 ? _b : organization.description,
+                        contactEmail: (_c = data.contactEmail) !== null && _c !== void 0 ? _c : organization.contactEmail,
+                        contactPhone: (_d = data.contactPhone) !== null && _d !== void 0 ? _d : organization.contactPhone,
+                        address: (_e = data.address) !== null && _e !== void 0 ? _e : organization.address,
+                        organizationType: (_f = data.organizationType) !== null && _f !== void 0 ? _f : organization.organizationType,
+                        updatedAt: new Date(),
+                    });
+                    const updatedOrg = yield repo.save(organization);
+                    updatedOrganizations.push(updatedOrg);
+                    invalidateKeys.push(`org:id:${id}`, ...organization.users.map((user) => `org:user:${user.userId}`));
+                }
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
+                return { success: true, data: updatedOrganizations, message: "Organizations updated successfully" };
+            }
+            catch (error) {
+                console.error("[Organization Bulk Update Error]:", error);
+                return { success: false, message: "Failed to update organizations" };
+            }
+        });
+    }
+    /**
+     * Delete an organization
+     * @param id Organization UUID
+     * @returns Deletion result
+     */
     static delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!id) {
-                return { success: false, message: 'Organization ID is required' };
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
             }
             try {
-                const result = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).delete(id);
-                if (result.affected === 0) {
-                    return { success: false, message: 'Organization not found or already deleted' };
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield repo.findOne({
+                    where: { organizationId: id },
+                    relations: ["users"],
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
                 }
-                return { success: true, message: 'Organization deleted successfully' };
+                const result = yield repo.delete(id);
+                if (result.affected === 0) {
+                    return { success: false, message: "Organization not found or already deleted" };
+                }
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${id}`,
+                    ...organization.users.map((user) => `org:user:${user.userId}`),
+                ]);
+                return { success: true, message: "Organization deleted successfully" };
             }
             catch (error) {
-                return { success: false, message: 'Failed to delete organization' };
+                console.error(`[Organization Delete Error] ID: ${id}:`, error);
+                return { success: false, message: "Failed to delete organization" };
             }
         });
     }
+    /**
+     * Assign users to an organization
+     * @param userIds Array of user UUIDs
+     * @param organizationId Organization UUID
+     * @returns Assignment result
+     */
     static assignUsersToOrganization(userIds, organizationId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
-            const organizationRepository = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+            if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            if (!(userIds === null || userIds === void 0 ? void 0 : userIds.length) || userIds.some((id) => !this.UUID_REGEX.test(id))) {
+                return { success: false, message: "Valid user IDs are required" };
+            }
             try {
-                // Fetch the organization
-                const organization = yield organizationRepository.findOne({
-                    where: { organizationId }
+                const organizationRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                // Fetch organization with existing users
+                const organization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["users"],
                 });
                 if (!organization) {
-                    return { success: false, message: 'Organization not found' };
+                    return { success: false, message: "Organization not found" };
                 }
-                // Get all the users by their IDs
-                const users = yield userRepository.findBy({ userId: (0, In_1.In)(userIds) });
-                if (users.length === 0) {
-                    return { success: false, message: 'No valid users found' };
+                // Fetch users
+                const users = yield userRepo.find({
+                    where: { userId: (0, typeorm_1.In)(userIds) },
+                    relations: ["organizations"],
+                });
+                if (users.length !== userIds.length) {
+                    return { success: false, message: "One or more users not found" };
                 }
-                const assignedOrganizations = [];
-                // For each user, create a copy of the organization or update existing
-                for (const user of users) {
-                    // Check if this user is already assigned to this organization
-                    const existingAssignment = yield organizationRepository.findOne({
-                        where: {
-                            organizationId,
-                            user: { userId: user.userId }
-                        }
-                    });
-                    if (existingAssignment) {
-                        // Skip this user as they're already assigned
-                        continue;
-                    }
-                    // If it's a new organization, we'll clone it for each user
-                    // (Note: This approach depends on your specific requirements)
-                    if (userIds.length > 1) {
-                        // Create a new organization entry for each user except the first one
-                        const orgCopy = organizationRepository.create(Object.assign(Object.assign({}, organization), { user: user // Assign the user object directly as a relation
-                         }));
-                        const savedOrg = yield organizationRepository.save(orgCopy);
-                        assignedOrganizations.push(savedOrg);
-                    }
-                    else {
-                        // If it's just one user, update the existing organization
-                        organization.user = user;
-                        organization.user = user;
-                        const updatedOrg = yield organizationRepository.save(organization);
-                        assignedOrganizations.push(updatedOrg);
-                    }
+                // Filter out already assigned users
+                const newUsers = users.filter((user) => !user.organizations.some((org) => org.organizationId === organizationId));
+                if (!newUsers.length) {
+                    return { success: true, message: "All users are already assigned to this organization", data: organization };
                 }
+                // Assign users
+                organization.users = [...(organization.users || []), ...newUsers];
+                const updatedOrganization = yield organizationRepo.save(organization);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${organizationId}`,
+                    ...userIds.map((id) => `org:user:${id}`),
+                    ...userIds.map((id) => `user:id:${id}`),
+                ]);
                 return {
                     success: true,
-                    message: `${assignedOrganizations.length} assignments created successfully`,
-                    assignedOrganizations
+                    message: `${newUsers.length} users assigned to organization`,
+                    data: updatedOrganization,
                 };
             }
-            catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                console.error('Error assigning users to organization:', errorMessage);
-                return { success: false, message: 'Failed to assign users to organization' };
+            catch (error) {
+                console.error(`[Organization Assign Users Error] Org ID: ${organizationId}:`, error);
+                return { success: false, message: "Failed to assign users to organization" };
+            }
+        });
+    }
+    /**
+     * Remove users from an organization
+     * @param userIds Array of user UUIDs
+     * @param organizationId Organization UUID
+     * @returns Removal result
+     */
+    static removeUsersFromOrganization(userIds, organizationId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            if (!(userIds === null || userIds === void 0 ? void 0 : userIds.length) || userIds.some((id) => !this.UUID_REGEX.test(id))) {
+                return { success: false, message: "Valid user IDs are required" };
+            }
+            try {
+                const organizationRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["users"],
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                // Filter users to remove
+                organization.users = organization.users.filter((user) => !userIds.includes(user.userId));
+                const updatedOrganization = yield organizationRepo.save(organization);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${organizationId}`,
+                    ...userIds.map((id) => `org:user:${id}`),
+                    ...userIds.map((id) => `user:id:${id}`),
+                ]);
+                return {
+                    success: true,
+                    message: `${userIds.length} users removed from organization`,
+                    data: updatedOrganization,
+                };
+            }
+            catch (error) {
+                console.error(`[Organization Remove Users Error] Org ID: ${organizationId}:`, error);
+                return { success: false, message: "Failed to remove users from organization" };
+            }
+        });
+    }
+    /**
+     * Get users by organization
+     * @param organizationId Organization UUID
+     * @returns Users associated with organization
+     */
+    static getUsersByOrganization(organizationId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            try {
+                const cacheKey = `org:users:${organizationId}`;
+                const users = yield CacheService_1.CacheService.getOrSetMultiple(cacheKey, Database_1.AppDataSource.getRepository(User_1.User), () => __awaiter(this, void 0, void 0, function* () {
+                    const organization = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).findOne({
+                        where: { organizationId },
+                        relations: ["users", "users.role"],
+                    });
+                    return (organization === null || organization === void 0 ? void 0 : organization.users) || [];
+                }), CACHE_TTL);
+                return { success: true, data: users };
+            }
+            catch (error) {
+                console.error(`[Organization Fetch Users Error] Org ID: ${organizationId}:`, error);
+                return { success: false, message: "Failed to fetch users for organization" };
+            }
+        });
+    }
+    static getOrganizationsByUserId(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!userId)
+                return { success: false, message: "User ID is required" };
+            try {
+                const organizations = yield Database_1.AppDataSource.getRepository(Organization_1.Organization).find({
+                    relations: [
+                        "users",
+                        "users.role",
+                        "events",
+                        "venues",
+                        "venues.manager",
+                        "venues.bookings",
+                        "venues.invoices",
+                        "venues.payments",
+                    ],
+                    where: {
+                        users: {
+                            userId: userId
+                        }
+                    },
+                    order: { organizationName: "ASC" }
+                });
+                if (!organizations.length) {
+                    return { success: false, message: "No organizations found for this user" };
+                }
+                return { success: true, data: organizations };
+            }
+            catch (error) {
+                return { success: false, message: "Failed to fetch organizations", error };
+            }
+        });
+    }
+    /**
+    * Add one or more venues to an organization.
+    * @param organizationId Organization UUID
+    * @param venueIds Array of Venue UUIDs to add
+    * @returns Assignment result
+    */
+    static addVenuesToOrganization(organizationId, venueIds) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            if (!(venueIds === null || venueIds === void 0 ? void 0 : venueIds.length) || venueIds.some((id) => !this.UUID_REGEX.test(id))) {
+                return { success: false, message: "Valid venue IDs are required" };
+            }
+            try {
+                const organizationRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                // Fetch the organization with its current venues
+                const organization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["venues"], // Eagerly load venues
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                // Fetch the venues to be added
+                const venuesToAdd = yield venueRepo.find({
+                    where: { venueId: (0, typeorm_1.In)(venueIds) },
+                    relations: ["organization", "users"], // Load existing organization relation and users
+                });
+                const foundVenueIds = venuesToAdd.map(v => v.venueId);
+                const missingVenueIds = venueIds.filter(id => !foundVenueIds.includes(id));
+                if (missingVenueIds.length > 0) {
+                    // Try to fetch details for missing venues (if soft-deleted or in another org)
+                    const missingVenues = yield venueRepo.find({
+                        where: { venueId: (0, typeorm_1.In)(missingVenueIds) },
+                        relations: ["users"],
+                        withDeleted: true // if using soft deletes
+                    });
+                    // Format missing venues with users and status in uppercase
+                    const missingVenueDetails = missingVenues.map(venue => {
+                        var _a;
+                        return ({
+                            venueId: venue.venueId,
+                            venueName: venue.venueName,
+                            status: venue.status ? String(venue.status).toUpperCase() : undefined,
+                            users: ((_a = venue.users) === null || _a === void 0 ? void 0 : _a.map((user) => ({
+                                userId: user.userId,
+                                username: user.username,
+                                email: user.email,
+                            }))) || []
+                        });
+                    });
+                    return {
+                        success: false,
+                        message: "One or more venues not found",
+                        missingVenues: missingVenueDetails
+                    };
+                }
+                const assignedVenuesCount = { added: 0, alreadyAssigned: 0 };
+                const invalidateKeys = ["org:all", `org:id:${organizationId}`];
+                for (const venue of venuesToAdd) {
+                    // Check if the venue is already assigned to this organization
+                    if (venue.organization && venue.organization.organizationId === organizationId) {
+                        assignedVenuesCount.alreadyAssigned++;
+                    }
+                    else if (venue.organization && venue.organization.organizationId !== organizationId) {
+                        // Venue is already assigned to a different organization
+                        return {
+                            success: false,
+                            message: `Venue '${venue.venueName}' (ID: ${venue.venueId}) is already assigned to another organization`,
+                        };
+                    }
+                    else {
+                        // Assign the venue to the organization and set status to PENDING
+                        venue.organization = organization;
+                        venue.status = Venue_1.VenueStatus.PENDING;
+                        yield venueRepo.save(venue); // Save the venue to update its organizationId foreign key
+                        assignedVenuesCount.added++;
+                        invalidateKeys.push(`venue:id:${venue.venueId}`); // Invalidate venue cache too
+                    }
+                }
+                if (assignedVenuesCount.added === 0 && assignedVenuesCount.alreadyAssigned > 0) {
+                    return {
+                        success: true,
+                        message: "All specified venues are already assigned to this organization",
+                        data: organization,
+                    };
+                }
+                else if (assignedVenuesCount.added === 0) {
+                    return { success: false, message: "No venues were added" };
+                }
+                // After saving venues, refetch organization if its 'venues' relation isn't automatically updated by TypeORM
+                // For OneToMany/ManyToOne, the update happens on the 'Many' side (Venue), so we might need to refresh the Organization
+                const updatedOrganization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["venues"],
+                });
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
+                return {
+                    success: true,
+                    message: `${assignedVenuesCount.added} venue(s) added successfully to organization`,
+                    data: updatedOrganization !== null && updatedOrganization !== void 0 ? updatedOrganization : undefined,
+                };
+            }
+            catch (error) {
+                console.error(`[Organization Add Venues Error] Org ID: ${organizationId}:`, error);
+                return { success: false, message: "Failed to add venues to organization" };
+            }
+        });
+    }
+    /**
+     * Remove one or more venues from an organization.
+     * @param organizationId Organization UUID
+     * @param venueIds Array of Venue UUIDs to remove
+     * @returns Removal result
+     */
+    static removeVenuesFromOrganization(organizationId, venueIds) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            if (!(venueIds === null || venueIds === void 0 ? void 0 : venueIds.length) || venueIds.some((id) => !this.UUID_REGEX.test(id))) {
+                return { success: false, message: "Valid venue IDs are required" };
+            }
+            try {
+                const organizationRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                const organization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["venues"],
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                const venuesToRemove = yield venueRepo.find({
+                    where: {
+                        venueId: (0, typeorm_1.In)(venueIds),
+                        organization: { organizationId: organizationId }, // Ensure we only target venues already linked to this org
+                    },
+                });
+                if (!venuesToRemove.length) {
+                    return {
+                        success: true,
+                        message: "No specified venues found linked to this organization to remove",
+                        data: organization,
+                    };
+                }
+                const invalidateKeys = ["org:all", `org:id:${organizationId}`];
+                let removedCount = 0;
+                for (const venue of venuesToRemove) {
+                    venue.organization = undefined; // Set the foreign key to undefined
+                    yield venueRepo.save(venue);
+                    removedCount++;
+                    invalidateKeys.push(`venue:id:${venue.venueId}`); // Invalidate venue cache
+                }
+                const updatedOrganization = yield organizationRepo.findOne({
+                    where: { organizationId },
+                    relations: ["venues"], // Refetch to get updated list
+                });
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
+                return {
+                    success: true,
+                    message: `${removedCount} venue(s) removed from organization`,
+                    data: updatedOrganization !== null && updatedOrganization !== void 0 ? updatedOrganization : undefined,
+                };
+            }
+            catch (error) {
+                console.error(`[Organization Remove Venues Error] Org ID: ${organizationId}:`, error);
+                return { success: false, message: "Failed to remove venues from organization" };
             }
         });
     }
 }
 exports.OrganizationRepository = OrganizationRepository;
+OrganizationRepository.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

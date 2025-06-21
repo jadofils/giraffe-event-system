@@ -1,5 +1,37 @@
 "use strict";
-// Fixed version of RegistrationRepository.ts with all ticketType -> ticketTypes corrections
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -9,672 +41,388 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistrationRepository = void 0;
-const typeorm_1 = require("typeorm");
-const Database_1 = require("../config/Database");
+const Database_1 = require("../config/Database"); // IMPORT APPDATASOURCE
 const Registration_1 = require("../models/Registration");
-const TicketType_1 = require("../models/TicketType");
-const ValidationRegistrationService_1 = require("../services/registrations/ValidationRegistrationService");
-const class_validator_1 = require("class-validator");
-const Venue_1 = require("../models/Venue");
+const Event_1 = require("../models/Event");
 const User_1 = require("../models/User");
+const TicketType_1 = require("../models/TicketType");
+const Venue_1 = require("../models/Venue");
+const QrCodeService_1 = require("../services/registrations/QrCodeService");
+const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const uuid_1 = require("uuid");
+const ValidationRegistrationService_1 = require("../services/registrations/ValidationRegistrationService");
 class RegistrationRepository {
+    static findByQRCode(rawQrCodeDataString) {
+        // Decode the base64 string to get the JSON payload
+        const decodedData = Buffer.from(rawQrCodeDataString, 'base64').toString('utf-8');
+        const qrPayload = JSON.parse(decodedData);
+        // Extract the registrationId from the payload
+        const { registrationId } = qrPayload;
+        // Use the repository to find the registration by ID
+        return this.getRepository().findOne({
+            where: { registrationId },
+            relations: ['event', 'user', 'buyer', 'ticketType', 'venue']
+        });
+    }
+    // Get repository using the initialized AppDataSource
+    static getRepository() {
+        // Ensure AppDataSource is initialized before calling getRepository
+        if (!Database_1.AppDataSource.isInitialized) {
+            throw new Error("AppDataSource is not initialized. Call AppDataSource.initialize() first.");
+        }
+        return Database_1.AppDataSource.getRepository(Registration_1.Registration);
+    }
+    // Core Registration CRUD Operations
+    // Note: registrationData should be Partial<RegistrationRequestInterface> or the full DTO
     static create(registrationData) {
         return __awaiter(this, void 0, void 0, function* () {
-            // 1. Validate external IDs (existence in DB) using ValidationService
-            const validationServiceResult = yield ValidationRegistrationService_1.ValidationService.validateRegistrationIds(registrationData);
-            if (!validationServiceResult.valid) {
-                return { success: false, message: validationServiceResult.message };
-            }
             try {
-                const entityData = Object.assign({}, registrationData);
-                // Map relation IDs to partial entities for TypeORM's .create()
-                if (registrationData.event && registrationData.event.eventId) {
-                    entityData.event = { eventId: registrationData.event.eventId };
+                const repository = this.getRepository();
+                // Fetch the full entity objects based on the provided IDs
+                // This is crucial for TypeORM to correctly establish relationships
+                const event = yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({ where: { eventId: registrationData.eventId } });
+                const user = yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: registrationData.userId } });
+                const buyer = registrationData.buyerId
+                    ? yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: registrationData.buyerId } })
+                    : null;
+                const ticketType = yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({ where: { ticketTypeId: registrationData.ticketTypeId } });
+                const venue = yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({ where: { venueId: registrationData.venueId } });
+                // IMPORTANT: ValidationService already confirmed these IDs exist.
+                // If any are null here, it indicates a critical bug or race condition.
+                if (!event || !user || !buyer || !ticketType || !venue) {
+                    throw new Error("Missing required entity for registration after validation.");
                 }
-                if (registrationData.user && registrationData.user.userId) {
-                    entityData.user = { userId: registrationData.user.userId };
-                }
-                if (registrationData.buyer && registrationData.buyer.userId) {
-                    entityData.buyer = { userId: registrationData.buyer.userId };
-                }
-                if (registrationData.venue && registrationData.venue.venueId) {
-                    entityData.venue = { venueId: registrationData.venue.venueId };
-                }
-                // --- CRITICAL CHANGE FOR MANY-TO-MANY TICKET TYPES ---
-                if (registrationData.ticketTypes && registrationData.ticketTypes.length > 0) {
-                    const ticketTypeIds = registrationData.ticketTypes.map((tt) => tt.ticketTypeId);
-                    const foundTicketTypes = yield this.ticketTypeRepository.find({
-                        where: { ticketTypeId: (0, typeorm_1.In)(ticketTypeIds) },
-                    });
-                    entityData.ticketTypes = foundTicketTypes;
-                }
-                else {
-                    entityData.ticketTypes = [];
-                }
-                // --- END CRITICAL CHANGE ---
-                const newRegistration = this.repository.create(entityData);
-                // 2. Perform class-validator validation on the new entity instance
-                const errors = yield (0, class_validator_1.validate)(newRegistration);
-                if (errors.length > 0) {
-                    const errorMessages = errors.flatMap((error) => Object.values(error.constraints || {}));
-                    return { success: false, message: "Input validation failed: " + errorMessages.join(", ") };
-                }
-                const savedRegistration = yield this.repository.save(newRegistration);
-                // Handle case where save might return an array (shouldn't happen here, but for type safety)
-                const registrationObj = Array.isArray(savedRegistration) ? savedRegistration[0] : savedRegistration;
-                if (!registrationObj || !registrationObj.registrationId) {
-                    return { success: false, message: "Failed to retrieve registration ID after save." };
-                }
-                const fetchedRegistration = yield this.repository.findOne({
-                    where: { registrationId: registrationObj.registrationId },
-                    relations: ["event", "user", "buyer", "venue", "ticketTypes"], // Correctly using 'ticketTypes' (plural)
+                // Create new registration instance with full entity objects for relationships
+                const registration = repository.create({
+                    registrationId: registrationData.registrationId, // Ensure ID is passed if generated by controller
+                    event: event,
+                    user: user,
+                    buyer: buyer,
+                    boughtForIds: registrationData.boughtForIds || [], // Ensure array
+                    ticketType: ticketType,
+                    venue: venue,
+                    noOfTickets: registrationData.noOfTickets,
+                    registrationDate: registrationData.registrationDate,
+                    paymentStatus: registrationData.paymentStatus,
+                    qrCode: registrationData.qrCode,
+                    checkDate: registrationData.checkDate,
+                    attended: registrationData.attended || false
                 });
-                if (!fetchedRegistration) {
-                    return { success: false, message: "Failed to retrieve saved registration with relations." };
-                }
-                return { success: true, data: fetchedRegistration, message: "Registration created successfully." };
+                // Save to database
+                return yield repository.save(registration);
             }
             catch (error) {
-                console.error("Error creating registration in repository:", error);
-                if (error.code === "23505") {
-                    return { success: false, message: "Failed to create registration: A similar entry already exists." };
-                }
-                if (error.code === "23503") {
-                    return {
-                        success: false,
-                        message: "Failed to create registration: A referenced entity (e.g., Event, User, TicketType) does not exist or relation is incorrect.",
-                    };
-                }
-                return { success: false, message: `Failed to create registration: ${error.message || "Unknown error"}` };
+                console.error('Error creating registration:', error);
+                throw error;
             }
         });
     }
-    // Find All Registrations
     static findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const registrations = yield this.repository.find({
-                    relations: ["event", "user", "buyer", "ticketTypes", "venue"], // Correctly using 'ticketTypes' (plural)
+                const repository = this.getRepository();
+                return yield repository.find({
+                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue']
                 });
-                return { success: true, data: registrations };
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch registrations." };
+                console.error('Error finding all registrations:', error);
+                throw error;
             }
         });
     }
-    // Find Registration by ID
     static findById(registrationId) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
             try {
-                const registration = yield this.repository.findOne({
+                const repository = this.getRepository();
+                const registration = yield repository.findOne({
                     where: { registrationId },
-                    relations: ["event", "user", "buyer", "ticketTypes", "venue"], // Correctly using 'ticketTypes' (plural)
+                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue']
                 });
-                if (!registration) {
-                    return { success: false, message: "Registration not found." };
-                }
-                return { success: true, data: registration };
+                return registration || null;
             }
             catch (error) {
-                return { success: false, message: "Failed to find registration." };
+                console.error(`Error finding registration by ID ${registrationId}:`, error);
+                throw error;
             }
         });
     }
-    // Update Registration (With Validation)
     static update(registrationId, updateData) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
-            // Validate external IDs (existence in DB) using ValidationService
-            const validation = yield ValidationRegistrationService_1.ValidationService.validateRegistrationIds(updateData);
-            if (!validation.valid) {
-                return { success: false, message: (_a = validation.errors) === null || _a === void 0 ? void 0 : _a.join(", ") };
-            }
             try {
-                const registration = yield this.repository.findOne({ where: { registrationId } });
+                const repository = this.getRepository();
+                // First check if registration exists
+                const registration = yield this.findById(registrationId);
                 if (!registration) {
-                    return { success: false, message: "Registration not found." };
+                    return null;
                 }
-                // Map updateData to match Registration entity structure
-                const entityData = Object.assign({}, updateData);
-                if (updateData.event && typeof updateData.event === "object" && "eventId" in updateData.event) {
-                    entityData.event = { eventId: updateData.event.eventId };
+                // Fetch related entities if their IDs are provided in updateData
+                if (updateData.eventId) {
+                    registration.event = (yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({ where: { eventId: updateData.eventId } })) || registration.event;
                 }
-                if (updateData.user && typeof updateData.user === "object" && "userId" in updateData.user) {
-                    entityData.user = { userId: updateData.user.userId };
+                if (updateData.userId) {
+                    registration.user = (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: updateData.userId } })) || registration.user;
                 }
-                if (updateData.buyer && typeof updateData.buyer === "object" && "userId" in updateData.buyer) {
-                    entityData.buyer = { userId: updateData.buyer.userId };
+                if (updateData.buyerId) { // Note: buyerId is usually tied to the original buyer, but allowing update here
+                    registration.buyer = (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: updateData.buyerId } })) || registration.buyer;
                 }
-                // FIXED: Changed from ticketTypes (singular object) to ticketTypes (array of objects)
-                if (updateData.ticketTypes && Array.isArray(updateData.ticketTypes)) {
-                    const ticketTypeIds = updateData.ticketTypes.map((tt) => typeof tt === "object" && "ticketTypeId" in tt ? tt.ticketTypeId : tt);
-                    const foundTicketTypes = yield this.ticketTypeRepository.find({
-                        where: { ticketTypeId: (0, typeorm_1.In)(ticketTypeIds) },
-                    });
-                    entityData.ticketTypes = foundTicketTypes;
+                if (updateData.ticketTypeId) {
+                    registration.ticketType = (yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({ where: { ticketTypeId: updateData.ticketTypeId } })) || registration.ticketType;
                 }
-                if (updateData.venue && typeof updateData.venue === "object" && "venueId" in updateData.venue) {
-                    entityData.venue = { venueId: updateData.venue.venueId };
+                if (updateData.venueId) {
+                    registration.venue = (yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({ where: { venueId: updateData.venueId } })) || registration.venue;
                 }
-                this.repository.merge(registration, entityData);
-                const updatedRegistration = yield this.repository.save(registration);
-                return { success: true, data: updatedRegistration, message: "Registration updated successfully." };
+                // Update primitive fields
+                if (updateData.boughtForIds !== undefined)
+                    registration.boughtForIds = updateData.boughtForIds;
+                if (updateData.noOfTickets !== undefined)
+                    registration.noOfTickets = updateData.noOfTickets;
+                if (updateData.registrationDate)
+                    registration.registrationDate = new Date(updateData.registrationDate);
+                if (updateData.paymentStatus)
+                    registration.paymentStatus = updateData.paymentStatus;
+                if (updateData.qrCode)
+                    registration.qrCode = updateData.qrCode;
+                if (updateData.checkDate !== undefined)
+                    registration.checkDate = new Date(updateData.checkDate);
+                if (updateData.attended !== undefined)
+                    registration.attended = updateData.attended;
+                // Save updated registration
+                return yield repository.save(registration);
             }
             catch (error) {
-                return { success: false, message: "Failed to update registration." };
+                console.error(`Error updating registration ${registrationId}:`, error);
+                throw error;
             }
         });
     }
-    // Delete Registration
     static delete(registrationId) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
             try {
-                const deleteResult = yield this.repository.delete(registrationId);
-                if (deleteResult.affected === 0) {
-                    return { success: false, message: "Registration not found or already deleted." };
-                }
-                return { success: true, message: "Registration deleted successfully." };
+                const repository = this.getRepository();
+                const result = yield repository.delete(registrationId);
+                return typeof result.affected === 'number' && result.affected > 0;
             }
             catch (error) {
-                return { success: false, message: "Failed to delete registration." };
+                console.error(`Error deleting registration ${registrationId}:`, error);
+                throw error;
             }
         });
     }
-    // Event-Specific Operations
+    // --- Add other repository methods for event-specific, user-specific, QR code, attendance, payment, and ticket operations ---
+    // Example: findByEventId (add to RegistrationRepository class)
     static findByEventId(eventId) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!eventId) {
-                return { success: false, message: "Event ID is required." };
-            }
             try {
-                const registrations = yield this.repository.find({
-                    where: { event: { eventId } },
-                    relations: ["user", "buyer", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
+                const repository = this.getRepository();
+                return yield repository.find({
+                    where: { event: { eventId } }, // Filter by eventId
+                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue']
                 });
-                return { success: true, data: registrations };
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch registrations for this event." };
+                console.error(`Error finding registrations for event ${eventId}:`, error);
+                throw error;
             }
         });
     }
-    static getEventRegistrationStats(eventId) {
+    /**
+       * Handles the creation of a new registration.
+       * This method also generates a unique QR code for the registration.
+       */
+    static createRegistration(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!eventId) {
-                return { success: false, message: "Event ID is required." };
-            }
+            var _b;
             try {
-                // Get total registrations
-                const totalRegistrations = yield this.repository.count({
-                    where: { event: { eventId } },
+                const registrationData = req.body;
+                const buyerId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.userId;
+                if (!buyerId) {
+                    res.status(401).json({
+                        success: false,
+                        message: "Authentication required. Buyer information not found."
+                    });
+                    return;
+                }
+                const registrationId = (0, uuid_1.v4)(); // Generate a unique ID for the registration
+                const dataForValidation = Object.assign(Object.assign({}, registrationData), { registrationId: registrationId, buyerId: buyerId, registrationDate: registrationData.registrationDate || new Date().toISOString(), paymentStatus: registrationData.paymentStatus || 'pending', attended: registrationData.attended || false, boughtForIds: registrationData.boughtForIds || [] });
+                // Validate duplicate registration (e.g., prevent same user(s) registering for same event twice)
+                const validationResult = yield ValidationRegistrationService_1.RegistrationService.validateDuplicateRegistration(dataForValidation.eventId, dataForValidation.userId, buyerId, dataForValidation.boughtForIds);
+                if (!validationResult.valid) {
+                    res.status(400).json({
+                        success: false,
+                        message: validationResult.message,
+                        errors: validationResult.errors || []
+                    });
+                    return;
+                }
+                // --- Generate QR Code and get its FILENAME ---
+                // The QrCodeService.generateQrCode returns *only the filename* (e.g., 'qrcode-xyz.png')
+                const qrCodeFileName = yield QrCodeService_1.QrCodeService.generateQrCode(registrationId, dataForValidation.userId, dataForValidation.eventId);
+                // Store only the filename in the database `qrCode` field
+                dataForValidation.qrCode = qrCodeFileName;
+                // Create the registration record in the database
+                const result = yield _a.create(dataForValidation);
+                res.status(201).json({
+                    success: true,
+                    message: "Registration created successfully",
+                    data: Object.assign(Object.assign({}, result), { 
+                        // Construct the full URL for the client to access the QR code image
+                        qrCodeUrl: `/static/${qrCodeFileName}` })
                 });
-                // Get total tickets
-                const ticketsResult = yield this.repository
-                    .createQueryBuilder("registration")
-                    .select("SUM(registration.noOfTickets)", "totalTickets")
-                    .where("registration.event.eventId = :eventId", { eventId })
-                    .getRawOne();
-                // FIXED: Updated query to use ticketTypes (plural) and join table
-                const ticketTypeStats = yield this.repository
-                    .createQueryBuilder("registration")
-                    .select("ticketType.ticketTypeId", "ticketTypeId")
-                    .addSelect("ticketType.ticketName", "ticketName")
-                    .addSelect("COUNT(registration.registrationId)", "count")
-                    .addSelect("SUM(registration.noOfTickets)", "tickets")
-                    .innerJoin("registration.ticketTypes", "ticketTypes") // FIXED: Changed from ticketType to ticketTypes
-                    .where("registration.event.eventId = :eventId", { eventId })
-                    .groupBy("ticketType.ticketTypeId")
-                    .addGroupBy("ticketType.ticketName")
-                    .getRawMany();
-                // Get attendance stats
-                const attendanceStats = yield this.repository
-                    .createQueryBuilder("registration")
-                    .select("COUNT(CASE WHEN registration.attended = true THEN 1 END)", "attended")
-                    .addSelect("COUNT(CASE WHEN registration.attended = false THEN 1 END)", "notAttended")
-                    .where("registration.event.eventId = :eventId", { eventId })
-                    .getRawOne();
-                const stats = {
-                    totalRegistrations,
-                    totalTickets: ticketsResult.totalTickets || 0,
-                    ticketTypeStats,
-                    attendanceStats,
-                };
-                return { success: true, data: stats };
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch registration statistics for this event." };
+                console.error('Error creating registration:', error);
+                if (error instanceof Error && error.message.startsWith("Validation failed")) {
+                    res.status(400).json({
+                        success: false,
+                        message: error.message,
+                        errors: error.message.split(". ")
+                    });
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: "Failed to create registration due to an unexpected error."
+                    });
+                }
             }
         });
     }
-    static countRegistrationsByEvent(eventId) {
+    /**
+     * Gets the QR code path (filename) stored for a specific registration.
+     * This method retrieves the path from the database, not the image itself.
+     */
+    static getRegistrationQrCode(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!eventId) {
-                return { success: false, message: "Event ID is required." };
-            }
             try {
-                const count = yield this.repository.count({
-                    where: { event: { eventId } },
-                });
-                return { success: true, data: count };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to count registrations for this event." };
-            }
-        });
-    }
-    // User-Specific Operations
-    static findByUserId(userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!userId) {
-                return { success: false, message: "User ID is required." };
-            }
-            try {
-                const registrations = yield this.repository.find({
-                    where: { user: { userId } },
-                    relations: ["event", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
-                });
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch registrations for this user." };
-            }
-        });
-    }
-    static findUpcomingByUserId(userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!userId) {
-                return { success: false, message: "User ID is required." };
-            }
-            try {
-                const currentDate = new Date().toISOString().split("T")[0]; // Get current date in YYYY-MM-DD format
-                // Need to join with Event to get event date for comparison
-                const registrations = yield this.repository
-                    .createQueryBuilder("registration")
-                    .innerJoinAndSelect("registration.event", "event")
-                    .innerJoinAndSelect("registration.ticketTypes", "ticketTypes") // FIXED: Changed from ticketType to ticketTypes
-                    .innerJoinAndSelect("registration.venue", "venue")
-                    .where("registration.user.userId = :userId", { userId })
-                    .andWhere("event.startDate >= :currentDate", { currentDate })
-                    .getMany();
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch upcoming registrations for this user." };
-            }
-        });
-    }
-    static findHistoryByUserId(userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!userId) {
-                return { success: false, message: "User ID is required." };
-            }
-            try {
-                const currentDate = new Date().toISOString().split("T")[0]; // Get current date in YYYY-MM-DD format
-                // Need to join with Event to get event date for comparison
-                const registrations = yield this.repository
-                    .createQueryBuilder("registration")
-                    .innerJoinAndSelect("registration.event", "event")
-                    .innerJoinAndSelect("registration.ticketTypes", "ticketTypes") // FIXED: Changed from ticketType to ticketTypes
-                    .innerJoinAndSelect("registration.venue", "venue")
-                    .where("registration.user.userId = :userId", { userId })
-                    .andWhere("event.startDate < :currentDate", { currentDate })
-                    .getMany();
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch registration history for this user." };
-            }
-        });
-    }
-    // QR Code Operations
-    static findByQrCode(qrCode) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!qrCode) {
-                return { success: false, message: "QR code is required." };
-            }
-            try {
-                const registration = yield this.repository.findOne({
-                    where: { qrCode },
-                    relations: ["event", "user", "buyer", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
-                });
+                const { id } = req.params;
+                const registration = yield _a.findById(id);
                 if (!registration) {
-                    return { success: false, message: "Registration not found with this QR code." };
+                    res.status(404).json({ success: false, message: "Registration not found." });
+                    return;
                 }
-                return { success: true, data: registration };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to find registration by QR code." };
-            }
-        });
-    }
-    static updateQrCode(registrationId, qrCode) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
-            if (!qrCode) {
-                return { success: false, message: "QR code is required." };
-            }
-            try {
-                const updateResult = yield this.repository.update(registrationId, { qrCode });
-                if (updateResult.affected === 0) {
-                    return { success: false, message: "Registration not found or QR code not updated." };
+                if (!registration.qrCode) {
+                    res.status(404).json({ success: false, message: "QR code not generated for this registration." });
+                    return;
                 }
-                return { success: true, message: "QR code updated successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to update QR code." };
-            }
-        });
-    }
-    // Attendance Operations
-    static updateAttendance(registrationId, attended, checkDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
-            try {
-                const updateData = { attended };
-                if (checkDate) {
-                    updateData.checkDate = checkDate;
-                }
-                else if (attended) {
-                    // If marking as attended and no check date provided, use current date
-                    updateData.checkDate = new Date().toISOString().split("T")[0];
-                }
-                const updateResult = yield this.repository.update(registrationId, updateData);
-                if (updateResult.affected === 0) {
-                    return { success: false, message: "Registration not found or attendance not updated." };
-                }
-                return { success: true, message: "Attendance updated successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to update attendance." };
-            }
-        });
-    }
-    static findAttendanceByEvent(eventId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!eventId) {
-                return { success: false, message: "Event ID is required." };
-            }
-            try {
-                const registrations = yield this.repository.find({
-                    where: {
-                        event: { eventId },
-                        attended: true,
-                    },
-                    relations: ["user", "ticketTypes"], // FIXED: Changed from ticketType to ticketTypes
+                res.status(200).json({
+                    success: true,
+                    message: "QR code path retrieved successfully.",
+                    qrCodeFileName: registration.qrCode, // Changed to fileName for clarity
+                    qrCodeUrl: `/static/${registration.qrCode}` // Provide a full URL
                 });
-                return { success: true, data: registrations };
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch attendance for this event." };
+                console.error(`Error getting QR code path for registration ${req.params.id}:`, error);
+                res.status(500).json({ success: false, message: "Failed to retrieve QR code path." });
             }
         });
     }
-    static bulkCheckIn(registrationIds, checkDate) {
+    /**
+     * Serves the actual QR code image file for a given registration ID.
+     */
+    static getRegistrationQrCodeImage(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationIds || registrationIds.length === 0) {
-                return { success: false, message: "Registration IDs are required." };
-            }
             try {
-                const date = checkDate || new Date().toISOString().split("T")[0];
-                // Use transaction to ensure all updates succeed or fail together
-                yield Database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
-                    const promises = registrationIds.map((id) => transactionalEntityManager.update(Registration_1.Registration, id, {
-                        attended: true,
-                        checkDate: date,
-                    }));
-                    yield Promise.all(promises);
-                }));
-                return { success: true, message: "Bulk check-in completed successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to perform bulk check-in." };
-            }
-        });
-    }
-    // Payment Operations
-    static updatePaymentStatus(registrationId, paymentStatus) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
-            if (!paymentStatus) {
-                return { success: false, message: "Payment status is required." };
-            }
-            try {
-                const updateResult = yield this.repository.update(registrationId, { paymentStatus });
-                if (updateResult.affected === 0) {
-                    return { success: false, message: "Registration not found or payment status not updated." };
+                const { id } = req.params;
+                const registration = yield _a.findById(id);
+                if (!registration || !registration.qrCode) {
+                    res.status(404).json({ success: false, message: "QR code not found for this registration, or it hasn't been generated yet." });
+                    return;
                 }
-                return { success: true, message: "Payment status updated successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to update payment status." };
-            }
-        });
-    }
-    static findByPaymentStatus(paymentStatus) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!paymentStatus) {
-                return { success: false, message: "Payment status is required." };
-            }
-            try {
-                const registrations = yield this.repository.find({
-                    where: { paymentStatus },
-                    relations: ["event", "user", "buyer", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
-                });
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch registrations by payment status." };
-            }
-        });
-    }
-    // Venue Operations
-    static findByVenueId(venueId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!venueId) {
-                return { success: false, message: "Venue ID is required." };
-            }
-            try {
-                const registrations = yield this.repository.find({
-                    where: { venue: { venueId } },
-                    relations: ["event", "user", "ticketTypes"], // FIXED: Changed from ticketType to ticketTypes
-                });
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch registrations for this venue." };
-            }
-        });
-    }
-    static getVenueCapacityInfo(venueId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!venueId) {
-                return { success: false, message: "Venue ID is required." };
-            }
-            try {
-                // Get venue capacity
-                const venueRepository = Database_1.AppDataSource.getRepository(Venue_1.Venue);
-                const venue = yield venueRepository.findOne({ where: { venueId } });
-                if (!venue) {
-                    return { success: false, message: "Venue not found." };
+                const QR_CODES_UPLOAD_BASE_DIR = path.join(__dirname, '..', '..', 'src', 'uploads', 'qrcodes');
+                const absolutePath = path.join(QR_CODES_UPLOAD_BASE_DIR, registration.qrCode);
+                // Check if the file actually exists on the server's disk
+                if (!fs.existsSync(absolutePath)) {
+                    console.error(`QR code image file not found at: ${absolutePath}`);
+                    res.status(404).json({ success: false, message: "QR code image file not found on server storage." });
+                    return;
                 }
-                // Get total registrations for this venue
-                const registrationsCount = yield this.repository.count({
-                    where: { venue: { venueId } },
-                });
-                // Get total tickets for this venue
-                const ticketsResult = yield this.repository
-                    .createQueryBuilder("registration")
-                    .select("SUM(registration.noOfTickets)", "totalTickets")
-                    .where("registration.venue.venueId = :venueId", { venueId })
-                    .getRawOne();
-                const totalTickets = ticketsResult.totalTickets || 0;
-                // Get registrations by event for this venue
-                const eventStats = yield this.repository
-                    .createQueryBuilder("registration")
-                    .select("event.eventId", "eventId")
-                    .addSelect("event.eventTitle", "eventTitle")
-                    .addSelect("COUNT(registration.registrationId)", "registrationsCount")
-                    .addSelect("SUM(registration.noOfTickets)", "ticketsCount")
-                    .leftJoin("registration.event", "event")
-                    .where("registration.venue.venueId = :venueId", { venueId })
-                    .groupBy("event.eventId")
-                    .addGroupBy("event.eventTitle")
-                    .getRawMany();
-                const capacityInfo = {
-                    venueId,
-                    venueName: venue.venueName,
-                    capacity: venue.capacity,
-                    totalRegistrations: registrationsCount,
-                    totalTickets,
-                    remainingCapacity: venue.capacity - totalTickets,
-                    utilizationPercentage: (totalTickets / venue.capacity) * 100,
-                    eventBreakdown: eventStats,
-                };
-                return { success: true, data: capacityInfo };
+                // Send the file to the client
+                res.sendFile(absolutePath);
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch venue capacity information." };
-            }
-        });
-    }
-    // Bulk Operations
-    static createBulk(registrationsData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationsData || registrationsData.length === 0) {
-                return { success: false, message: "Registration data is required." };
-            }
-            try {
-                // Use transaction to ensure all creations succeed or fail together
-                const savedRegistrations = yield Database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
-                    const registrationRepository = transactionalEntityManager.getRepository(Registration_1.Registration);
-                    const ticketTypeRepository = transactionalEntityManager.getRepository(TicketType_1.TicketType);
-                    // Process each registration
-                    const registrationsToSave = [];
-                    for (const data of registrationsData) {
-                        // Map data to match Registration entity structure
-                        const entityData = Object.assign({}, data);
-                        if (data.event && typeof data.event === "object" && "eventId" in data.event) {
-                            entityData.event = { eventId: data.event.eventId };
-                        }
-                        if (data.user && typeof data.user === "object" && "userId" in data.user) {
-                            entityData.user = { userId: data.user.userId };
-                        }
-                        if (data.buyer && typeof data.buyer === "object" && "userId" in data.buyer) {
-                            entityData.buyer = { userId: data.buyer.userId };
-                        }
-                        // FIXED: Handle ticketTypes as array for many-to-many
-                        if (data.ticketTypes && Array.isArray(data.ticketTypes)) {
-                            const ticketTypeIds = data.ticketTypes.map((tt) => typeof tt === "object" && "ticketTypeId" in tt ? tt.ticketTypeId : tt);
-                            const foundTicketTypes = yield ticketTypeRepository.find({
-                                where: { ticketTypeId: (0, typeorm_1.In)(ticketTypeIds) },
-                            });
-                            entityData.ticketTypes = foundTicketTypes;
-                        }
-                        else {
-                            entityData.ticketTypes = [];
-                        }
-                        if (data.venue && typeof data.venue === "object" && "venueId" in data.venue) {
-                            entityData.venue = { venueId: data.venue.venueId };
-                        }
-                        registrationsToSave.push(registrationRepository.create(entityData));
-                    }
-                    // Save all registrations
-                    return yield registrationRepository.save(registrationsToSave.flat());
-                }));
-                return { success: true, data: savedRegistrations, message: "Bulk registrations created successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to create bulk registrations." };
-            }
-        });
-    }
-    static findPending() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const registrations = yield this.repository.find({
-                    where: { paymentStatus: "pending" },
-                    relations: ["event", "user", "buyer", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
-                });
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch pending registrations." };
-            }
-        });
-    }
-    // Transfer Operations
-    static transferTicket(registrationId, newUserId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!registrationId) {
-                return { success: false, message: "Registration ID is required." };
-            }
-            if (!newUserId) {
-                return { success: false, message: "New user ID is required." };
-            }
-            try {
-                // Check if registration exists
-                const registration = yield this.repository.findOne({ where: { registrationId } });
-                if (!registration) {
-                    return { success: false, message: "Registration not found." };
-                }
-                // Check if new user exists
-                const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
-                const newUser = yield userRepository.findOne({ where: { userId: newUserId } });
-                if (!newUser) {
-                    return { success: false, message: "New user not found." };
-                }
-                // Update the user ID for the registration
-                const updateResult = yield this.repository.update(registrationId, {
-                    user: { userId: newUserId },
-                });
-                if (updateResult.affected === 0) {
-                    return { success: false, message: "Failed to transfer ticket." };
-                }
-                return { success: true, message: "Ticket transferred successfully." };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to transfer ticket." };
-            }
-        });
-    }
-    // Export Operations
-    static getRegistrationsForExport(eventId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!eventId) {
-                return { success: false, message: "Event ID is required." };
-            }
-            try {
-                const registrations = yield this.repository.find({
-                    where: { event: { eventId } },
-                    relations: ["user", "buyer", "ticketTypes", "venue"], // FIXED: Changed from ticketType to ticketTypes
-                    order: { registrationDate: "DESC" },
-                });
-                return { success: true, data: registrations };
-            }
-            catch (error) {
-                return { success: false, message: "Failed to fetch registrations for export." };
+                console.error(`Error retrieving QR code image for registration ${req.params.id}:`, error);
+                res.status(500).json({ success: false, message: "Failed to retrieve QR code image due to a server error." });
             }
         });
     }
 }
 exports.RegistrationRepository = RegistrationRepository;
-RegistrationRepository.repository = Database_1.AppDataSource.getRepository(Registration_1.Registration);
-RegistrationRepository.ticketTypeRepository = Database_1.AppDataSource.getRepository(TicketType_1.TicketType);
+_a = RegistrationRepository;
+/**
+ * Regenerates the QR code for a specific registration.
+ * Deletes the old QR code file and saves the new one.
+ */
+RegistrationRepository.regenerateQrCode = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id: registrationId } = req.params;
+        // 1. Find the existing registration
+        const existingRegistration = yield _a.findById(registrationId);
+        if (!existingRegistration) {
+            res.status(404).json({ success: false, message: "Registration not found." });
+            return;
+        }
+        // 2. Delete the old QR code file if it exists
+        if (existingRegistration.qrCode) {
+            // Construct absolute path to the old file
+            const QR_CODES_UPLOAD_BASE_DIR = path.join(__dirname, '..', '..', 'src', 'uploads', 'qrcodes');
+            const oldQrCodePath = path.join(QR_CODES_UPLOAD_BASE_DIR, existingRegistration.qrCode);
+            if (fs.existsSync(oldQrCodePath)) {
+                fs.unlinkSync(oldQrCodePath); // Synchronous for simplicity, consider async for production
+                console.log(`Deleted old QR code file: ${oldQrCodePath}`);
+            }
+        }
+        // 3. Generate a new QR code (this now returns filename)
+        const newQrCodeFileName = yield QrCodeService_1.QrCodeService.generateQrCode(existingRegistration.registrationId, existingRegistration.user.userId, existingRegistration.event.eventId);
+        // 4. Update the registration with the new QR code filename
+        const updatedRegistration = yield _a.update(registrationId, { qrCode: newQrCodeFileName });
+        if (!updatedRegistration) {
+            throw new Error("Failed to update registration with new QR code path.");
+        }
+        res.status(200).json({
+            success: true,
+            message: "QR code regenerated successfully.",
+            data: updatedRegistration,
+            qrCodeUrl: `/static/${newQrCodeFileName}`
+        });
+    }
+    catch (error) {
+        console.error(`Error regenerating QR code for registration ${req.params.id}:`, error);
+        res.status(500).json({ success: false, message: "Failed to regenerate QR code." });
+    }
+});
+/**
+ * Validates a raw QR code string (the base64 encoded data) and returns the associated registration.
+ * This is typically used for check-in scenarios by event staff.
+ */
+RegistrationRepository.validateQrCode = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { qrCode: rawQrCodeDataString } = req.params; // Expecting the raw base64 string from the QR code
+        if (!rawQrCodeDataString) {
+            res.status(400).json({ success: false, message: "QR code data string is required for validation." });
+            return;
+        }
+        // Use the repository method that leverages QrCodeService for validation and lookup
+        const registration = yield _a.findByQRCode(rawQrCodeDataString);
+        if (registration === null) {
+            res.status(404).json({ success: false, message: "Invalid or expired QR code, or registration not found." });
+            return;
+        }
+        // Optionally, mark attendance here if validation is successful
+        // For example: await RegistrationRepository.update(registration.registrationId, { attended: true });
+        res.status(200).json({
+            success: true,
+            message: "QR code validated successfully. Registration details retrieved.",
+            data: registration
+        });
+    }
+    catch (error) {
+        console.error(`Error validating QR code:`, error);
+        res.status(500).json({ success: false, message: "Failed to validate QR code due to an internal server error." });
+    }
+});

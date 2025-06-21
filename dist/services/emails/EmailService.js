@@ -16,6 +16,49 @@ const nodemailer_1 = __importDefault(require("nodemailer"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 class PasswordService {
+    static sendTicketEmail(_a) {
+        return __awaiter(this, arguments, void 0, function* ({ to, subject, eventName, eventDate, venueName, ticketPdf, qrCode }) {
+            try {
+                // Configure Nodemailer transporter
+                const transporter = nodemailer_1.default.createTransport({
+                    service: 'gmail',
+                    auth: {
+                        user: process.env.EMAIL_USER, // Set your email environment variable
+                        pass: process.env.EMAIL_PASS // Set your password securely
+                    }
+                });
+                // Email content
+                const mailOptions = {
+                    from: `"Event Tickets" <${process.env.EMAIL_USER}>`,
+                    to,
+                    subject,
+                    html: `
+                <h2>Your Ticket for ${eventName}</h2>
+                <p><strong>Event Date:</strong> ${eventDate.toDateString()}</p>
+                <p><strong>Venue:</strong> ${venueName}</p>
+                <p>Attached is your ticket. Please present the QR code below at the event.</p>
+                ${qrCode ? `<img src="${qrCode}" alt="QR Code" width="150"/>` : ''}
+                <p>Thank you for booking with us!</p>
+            `,
+                    attachments: [
+                        {
+                            filename: `${eventName}_Ticket.pdf`,
+                            content: ticketPdf, // Attach ticket PDF
+                            contentType: 'application/pdf'
+                        }
+                    ]
+                };
+                // Send email
+                yield transporter.sendMail(mailOptions);
+                console.log(`Ticket email sent successfully to ${to}`);
+                return true;
+            }
+            catch (error) {
+                console.error('Error sending ticket email:', error);
+                return false;
+            }
+        });
+    }
     static sendEmail(email, arg1, emailContent) {
         throw new Error("Method not implemented.");
     }

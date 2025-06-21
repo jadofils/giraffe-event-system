@@ -1,5 +1,5 @@
 "use strict";
-// src/services/registrations/ValidationRegistrationService.ts
+// src/services/registrations/RegistrationService.ts
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -10,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ValidationService = void 0;
+exports.RegistrationService = void 0;
 const Event_1 = require("../../models/Event");
 const User_1 = require("../../models/User");
 const TicketType_1 = require("../../models/TicketType");
@@ -18,138 +18,330 @@ const Venue_1 = require("../../models/Venue");
 const Registration_1 = require("../../models/Registration");
 const Database_1 = require("../../config/Database");
 const typeorm_1 = require("typeorm");
-class ValidationService {
+const Index_1 = require("../../interfaces/Index");
+class RegistrationService {
     /**
-     * Validate that all referenced IDs exist in the database for a new registration.
+     * Helper to ensure repositories are initialized.
      */
-    static validateRegistrationIds(registrationData) {
+    static ensureRepositoriesInitialized() {
+        if (!Database_1.AppDataSource.isInitialized) {
+            throw new Error("Database connection not initialized.");
+        }
+        if (!RegistrationService.registrationRepository) {
+            RegistrationService.registrationRepository =
+                Database_1.AppDataSource.getRepository(Registration_1.Registration);
+            RegistrationService.eventRepository = Database_1.AppDataSource.getRepository(Event_1.Event);
+            RegistrationService.userRepository = Database_1.AppDataSource.getRepository(User_1.User);
+            RegistrationService.ticketTypeRepository =
+                Database_1.AppDataSource.getRepository(TicketType_1.TicketType);
+            RegistrationService.venueRepository = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+        }
+    }
+    /**
+     * Creates a new registration record in the database.
+     */
+    static createRegistration(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d;
-            const errors = [];
-            // Get repositories once to avoid redundancy
-            const eventRepository = Database_1.AppDataSource.getRepository(Event_1.Event);
-            const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
-            const ticketTypeRepository = Database_1.AppDataSource.getRepository(TicketType_1.TicketType);
-            const venueRepository = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+            this.ensureRepositoriesInitialized();
             try {
-                // Validate Event exists
-                const eventId = (_a = registrationData.event) === null || _a === void 0 ? void 0 : _a.eventId;
-                if (!eventId) {
-                    errors.push("Event ID is required.");
+                // Fetch related entities
+                const [event, user, buyer, ticketType, venue] = yield Promise.all([
+                    this.eventRepository.findOne({ where: { eventId: data.eventId } }),
+                    this.userRepository.findOne({ where: { userId: data.userId } }),
+                    this.userRepository.findOne({
+                        where: { userId: data.buyerId },
+                    }),
+                    this.ticketTypeRepository.findOne({
+                        where: { ticketTypeId: data.ticketTypeId },
+                    }),
+                    this.venueRepository.findOne({ where: { venueId: data.venueId } }),
+                ]);
+                if (!event || !user || !buyer || !ticketType || !venue) {
+                    throw new Error("One or more required related entities (Event, User, Buyer, TicketType, Venue) not found during registration creation.");
                 }
-                else {
-                    const event = yield eventRepository.findOne({ where: { eventId } });
-                    if (!event) {
-                        errors.push(`Event with ID '${eventId}' does not exist.`);
-                    }
+                // Calculate totalCost based on fetched ticketType price
+                const totalCost = (data.noOfTickets || 0) * (ticketType.price || 0);
+                // Create a new instance of the Registration entity
+                const newRegistration = this.registrationRepository.create({
+                    noOfTickets: data.noOfTickets,
+                    registrationDate: data.registrationDate
+                        ? new Date(data.registrationDate)
+                        : new Date(),
+                    paymentStatus: data.paymentStatus || Index_1.PaymentStatus.PENDING,
+                    qrCode: data.qrCode,
+                    checkDate: data.checkDate ? new Date(data.checkDate) : undefined,
+                    attended: (_a = data.attended) !== null && _a !== void 0 ? _a : false,
+                    boughtForIds: data.boughtForIds && data.boughtForIds.length > 0
+                        ? data.boughtForIds
+                        : [],
+                    totalCost: totalCost,
+                    registrationStatus: data.registrationStatus || "active",
+                    event: event,
+                    user: user,
+                    buyer: buyer,
+                    ticketType: ticketType,
+                    venue: venue,
+                    paymentId: data.paymentId,
+                    invoiceId: data.invoiceId,
+                });
+                // Save the new registration to the database
+                const savedRegistration = yield this.registrationRepository.save(newRegistration);
+                // Re-fetch with relations
+                const fullyPopulatedRegistration = yield this.registrationRepository.findOne({
+                    where: { registrationId: savedRegistration.registrationId },
+                    relations: [
+                        "event",
+                        "user",
+                        "buyer",
+                        "ticket_types",
+                        "venue",
+                        "payment",
+                        "invoice",
+                    ],
+                });
+                if (!fullyPopulatedRegistration) {
+                    throw new Error("Failed to retrieve fully populated registration after save.");
                 }
-                // Validate User (primary attendee) exists
-                const userId = (_b = registrationData.user) === null || _b === void 0 ? void 0 : _b.userId;
-                if (!userId) {
-                    errors.push("User ID (attendee) is required.");
-                }
-                else {
-                    const user = yield userRepository.findOne({ where: { userId } });
-                    if (!user) {
-                        errors.push(`User (attendee) with ID '${userId}' does not exist.`);
-                    }
-                }
-                // Validate Buyer exists (from token)
-                const buyerId = (_c = registrationData.buyer) === null || _c === void 0 ? void 0 : _c.userId;
-                if (!buyerId) {
-                    errors.push("Buyer ID is required.");
-                }
-                else {
-                    const buyer = yield userRepository.findOne({ where: { userId: buyerId } });
-                    if (!buyer) {
-                        errors.push(`Buyer with ID '${buyerId}' does not exist.`);
-                    }
-                }
-                // --- Validate boughtForIds and its length ---
-                const noOfTickets = registrationData.noOfTickets;
-                const boughtForIds = registrationData.boughtForIds;
-                if (!boughtForIds || boughtForIds.length === 0) {
-                    errors.push("boughtForIds is required and cannot be empty.");
-                }
-                else {
-                    // Check if all boughtForIds exist
-                    const users = yield userRepository.find({
-                        where: { userId: (0, typeorm_1.In)(boughtForIds) },
-                    });
-                    if (users.length !== boughtForIds.length) {
-                        const foundIds = users.map((u) => u.userId);
-                        const notFound = boughtForIds.filter((id) => !foundIds.includes(id));
-                        errors.push(`User(s) with ID(s) '${notFound.join(", ")}' do not exist in boughtForIds.`);
-                    }
-                    // Validate that boughtForIds length matches noOfTickets
-                    if (noOfTickets !== undefined && boughtForIds.length !== noOfTickets) {
-                        errors.push(`Number of boughtForIds (${boughtForIds.length}) must match noOfTickets (${noOfTickets}).`);
-                    }
-                    // Optional: Ensure the primary attendee (registrationData.user.userId) is among boughtForIds
-                    if (userId && !boughtForIds.includes(userId) && noOfTickets && noOfTickets > 0) {
-                        errors.push(`The primary attendee (User ID: ${userId}) must be included in boughtForIds.`);
-                    }
-                }
-                // --- FIXED: Validate ticketTypes (plural) and its length ---
-                const requestedTicketTypes = registrationData.ticketTypes; // ✅ Now using correct property name
-                if (!requestedTicketTypes || requestedTicketTypes.length === 0) {
-                    errors.push("At least one Ticket Type is required.");
-                }
-                else {
-                    const uniqueTicketTypeIds = Array.from(new Set(requestedTicketTypes.map((tt) => tt.ticketTypeId)));
-                    // Check if all requested ticketTypeIds exist
-                    const foundTicketTypes = yield ticketTypeRepository.find({
-                        where: { ticketTypeId: (0, typeorm_1.In)(uniqueTicketTypeIds) },
-                    });
-                    if (foundTicketTypes.length !== uniqueTicketTypeIds.length) {
-                        const foundIds = foundTicketTypes.map((tt) => tt.ticketTypeId); // ✅ Fixed variable name
-                        const notFound = uniqueTicketTypeIds.filter((id) => !foundIds.includes(id));
-                        errors.push(`Ticket Type(s) with ID(s) '${notFound.join(", ")}' do not exist.`);
-                    }
-                    // IMPORTANT FIX: Compare noOfTickets with the *total count* of requested ticketType entries
-                    if (noOfTickets !== undefined && requestedTicketTypes.length !== noOfTickets) {
-                        errors.push(`Number of ticketType entries provided (${requestedTicketTypes.length}) must match noOfTickets (${noOfTickets}).`);
-                    }
-                }
-                // Validate Venue exists
-                const venueId = (_d = registrationData.venue) === null || _d === void 0 ? void 0 : _d.venueId;
-                if (!venueId) {
-                    errors.push("Venue ID is required.");
-                }
-                else {
-                    const venue = yield venueRepository.findOne({ where: { venueId } });
-                    if (!venue) {
-                        errors.push(`Venue with ID '${venueId}' does not exist.`);
-                    }
-                }
-                // Basic checks for noOfTickets
-                if (noOfTickets === undefined || noOfTickets <= 0) {
-                    errors.push("Number of tickets must be a positive number.");
-                }
-                return {
-                    valid: errors.length === 0,
-                    message: errors.length > 0 ? `Validation failed: ${errors.join(" ")}` : undefined,
-                    errors: errors.length > 0 ? errors : undefined,
+                // Transform to response interface
+                const response = {
+                    registrationId: fullyPopulatedRegistration.registrationId,
+                    event: {
+                        eventId: fullyPopulatedRegistration.event.eventId,
+                        eventTitle: fullyPopulatedRegistration.event.eventTitle,
+                        description: fullyPopulatedRegistration.event.description,
+                        eventType: fullyPopulatedRegistration.event.eventType,
+                        organizerId: fullyPopulatedRegistration.event.organizationId,
+                        venueId: (_c = (_b = fullyPopulatedRegistration.event.venues) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.venueId,
+                        maxAttendees: fullyPopulatedRegistration.event.maxAttendees,
+                        status: fullyPopulatedRegistration.event.status,
+                        isFeatured: fullyPopulatedRegistration.event.isFeatured,
+                        qrCode: fullyPopulatedRegistration.event.qrCode,
+                    },
+                    user: {
+                        userId: fullyPopulatedRegistration.user.userId,
+                        username: fullyPopulatedRegistration.user.username,
+                        firstName: fullyPopulatedRegistration.user.firstName,
+                        lastName: fullyPopulatedRegistration.user.lastName,
+                        email: fullyPopulatedRegistration.user.email,
+                        phoneNumber: fullyPopulatedRegistration.user.phoneNumber,
+                        createdAt: fullyPopulatedRegistration.user.createdAt,
+                        updatedAt: fullyPopulatedRegistration.user.updatedAt,
+                        deletedAt: fullyPopulatedRegistration.user.deletedAt,
+                    },
+                    buyer: {
+                        userId: fullyPopulatedRegistration.buyer.userId,
+                        username: fullyPopulatedRegistration.buyer.username,
+                        firstName: fullyPopulatedRegistration.buyer.firstName,
+                        lastName: fullyPopulatedRegistration.buyer.lastName,
+                        email: fullyPopulatedRegistration.buyer.email,
+                        phoneNumber: fullyPopulatedRegistration.buyer.phoneNumber,
+                        createdAt: fullyPopulatedRegistration.buyer.createdAt,
+                        updatedAt: fullyPopulatedRegistration.buyer.updatedAt,
+                        deletedAt: fullyPopulatedRegistration.buyer.deletedAt,
+                    },
+                    boughtForIds: fullyPopulatedRegistration.boughtForIds || [],
+                    ticketType: {
+                        ticketTypeId: fullyPopulatedRegistration.ticketType.ticketTypeId,
+                        ticketName: fullyPopulatedRegistration.ticketType.ticketName,
+                        price: fullyPopulatedRegistration.ticketType.price,
+                        ticketCategory: fullyPopulatedRegistration.ticketType.ticketCategory,
+                        description: fullyPopulatedRegistration.ticketType.description,
+                        promoName: fullyPopulatedRegistration.ticketType.promoName,
+                        promoDescription: fullyPopulatedRegistration.ticketType.promoDescription,
+                        capacity: fullyPopulatedRegistration.ticketType.capacity,
+                        availableFrom: fullyPopulatedRegistration.ticketType.availableFrom,
+                        availableUntil: fullyPopulatedRegistration.ticketType.availableUntil,
+                        isActive: fullyPopulatedRegistration.ticketType.isActive,
+                        minQuantity: fullyPopulatedRegistration.ticketType.minQuantity,
+                        maxQuantity: fullyPopulatedRegistration.ticketType.maxQuantity,
+                        requiresVerification: fullyPopulatedRegistration.ticketType.requiresVerification,
+                        perks: fullyPopulatedRegistration.ticketType.perks,
+                        createdAt: fullyPopulatedRegistration.ticketType.createdAt,
+                        updatedAt: fullyPopulatedRegistration.ticketType.updatedAt,
+                        deletedAt: fullyPopulatedRegistration.ticketType.deletedAt,
+                    },
+                    venue: {
+                        venueId: fullyPopulatedRegistration.venue.venueId,
+                        venueName: fullyPopulatedRegistration.venue.venueName,
+                        capacity: fullyPopulatedRegistration.venue.capacity,
+                        location: fullyPopulatedRegistration.venue.location,
+                        managerId: fullyPopulatedRegistration.venue.managerId,
+                        createdAt: (_d = fullyPopulatedRegistration.venue.createdAt) === null || _d === void 0 ? void 0 : _d.toISOString(),
+                        updatedAt: (_e = fullyPopulatedRegistration.venue.updatedAt) === null || _e === void 0 ? void 0 : _e.toISOString(),
+                        deletedAt: ((_f = fullyPopulatedRegistration.venue.deletedAt) === null || _f === void 0 ? void 0 : _f.toISOString()) ||
+                            undefined,
+                    },
+                    noOfTickets: fullyPopulatedRegistration.noOfTickets,
+                    registrationDate: fullyPopulatedRegistration.registrationDate.toISOString(),
+                    paymentStatus: fullyPopulatedRegistration.paymentStatus,
+                    qrCode: fullyPopulatedRegistration.qrCode || undefined,
+                    checkDate: fullyPopulatedRegistration.checkDate
+                        ? fullyPopulatedRegistration.checkDate.toISOString()
+                        : undefined,
+                    attended: fullyPopulatedRegistration.attended,
+                    totalCost: fullyPopulatedRegistration.totalCost,
+                    registrationStatus: fullyPopulatedRegistration.registrationStatus,
+                    payment: fullyPopulatedRegistration.payment
+                        ? {
+                            paymentId: fullyPopulatedRegistration.payment.paymentId,
+                            invoiceId: fullyPopulatedRegistration.payment.invoiceId,
+                            paymentDate: ((_g = fullyPopulatedRegistration.payment) !== null && _g !== void 0 ? _g : {}) instanceof Date
+                                ? fullyPopulatedRegistration.payment.paymentDate.toString()
+                                : fullyPopulatedRegistration.payment.paymentDate,
+                            paidAmount: fullyPopulatedRegistration.payment.paidAmount,
+                            paymentMethod: fullyPopulatedRegistration.payment.paymentMethod,
+                            paymentStatus: fullyPopulatedRegistration.payment.paymentStatus,
+                            description: fullyPopulatedRegistration.payment.description,
+                            createdAt: (_h = fullyPopulatedRegistration.payment.createdAt) === null || _h === void 0 ? void 0 : _h.toISOString(),
+                            updatedAt: (_j = fullyPopulatedRegistration.payment.updatedAt) === null || _j === void 0 ? void 0 : _j.toISOString(),
+                            deletedAt: ((_k = fullyPopulatedRegistration.payment.deletedAt) === null || _k === void 0 ? void 0 : _k.toISOString()) ||
+                                undefined,
+                            invoice: undefined,
+                        }
+                        : undefined,
+                    invoice: fullyPopulatedRegistration.invoice
+                        ? {
+                            invoiceId: fullyPopulatedRegistration.invoice.invoiceId,
+                            eventId: fullyPopulatedRegistration.invoice.eventId,
+                            userId: fullyPopulatedRegistration.invoice.userId,
+                            invoiceDate: (_l = fullyPopulatedRegistration.invoice.invoiceDate) === null || _l === void 0 ? void 0 : _l.toISOString(),
+                            dueDate: (_m = fullyPopulatedRegistration.invoice.dueDate) === null || _m === void 0 ? void 0 : _m.toISOString(),
+                            totalAmount: fullyPopulatedRegistration.invoice.totalAmount,
+                            status: fullyPopulatedRegistration.invoice.status,
+                            createdAt: (_o = fullyPopulatedRegistration.invoice.createdAt) === null || _o === void 0 ? void 0 : _o.toISOString(),
+                            updatedAt: (_p = fullyPopulatedRegistration.invoice.updatedAt) === null || _p === void 0 ? void 0 : _p.toISOString(),
+                            deletedAt: fullyPopulatedRegistration.invoice.deletedAt
+                                ? fullyPopulatedRegistration.invoice.deletedAt.toISOString()
+                                : undefined,
+                        }
+                        : undefined,
+                    paymentId: fullyPopulatedRegistration.paymentId || undefined,
+                    invoiceId: fullyPopulatedRegistration.invoiceId || undefined,
+                    createdAt: fullyPopulatedRegistration.createdAt.toISOString(),
+                    updatedAt: fullyPopulatedRegistration.updatedAt.toISOString(),
+                    deletedAt: fullyPopulatedRegistration.deletedAt
+                        ? fullyPopulatedRegistration.deletedAt.toISOString()
+                        : undefined,
                 };
+                return response;
             }
             catch (error) {
-                console.error("Error validating registration IDs:", error);
-                return {
-                    valid: false,
-                    message: "An internal server error occurred during ID validation.",
-                    errors: ["Internal validation error"],
-                };
+                console.error("Error saving registration to database:", error);
+                throw new Error(`Failed to create registration: ${error.message || "An unexpected database error occurred."}`);
             }
         });
     }
     /**
-     * Check if user exists by ID
+     * Validates that all referenced IDs in the registration data exist in the database.
+     */
+    static validateRegistrationIds(registrationData) {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.ensureRepositoriesInitialized();
+            const errors = [];
+            const { eventId, ticketTypeId, venueId, noOfTickets } = registrationData;
+            const userId = registrationData.userId;
+            let buyerId = registrationData.buyerId;
+            const boughtForIds = registrationData.boughtForIds || [];
+            // Basic validation
+            if (!eventId)
+                errors.push("Event ID is required.");
+            if (!ticketTypeId)
+                errors.push("Ticket Type ID is required.");
+            if (!venueId)
+                errors.push("Venue ID is required.");
+            if (noOfTickets === undefined ||
+                typeof noOfTickets !== "number" ||
+                noOfTickets <= 0) {
+                errors.push("Number of tickets must be a positive number.");
+            }
+            if (!userId)
+                errors.push("User ID (account owner) is required.");
+            // Set default buyerId if not provided
+            if (buyerId === null || buyerId === undefined) {
+                buyerId = userId;
+                registrationData.buyerId = userId;
+            }
+            if (errors.length > 0) {
+                return {
+                    valid: false,
+                    message: `Validation failed: ${errors.join(" ")}`,
+                    errors: errors,
+                };
+            }
+            // Validate existence of IDs in DB
+            const [event, user, actualBuyerUser, ticketType, venue] = yield Promise.all([
+                this.eventRepository.findOne({ where: { eventId } }),
+                this.userRepository.findOne({ where: { userId } }),
+                this.userRepository.findOne({ where: { userId: buyerId } }),
+                this.ticketTypeRepository.findOne({ where: { ticketTypeId } }),
+                this.venueRepository.findOne({ where: { venueId } }),
+            ]);
+            if (!event)
+                errors.push(`Event with ID '${eventId}' does not exist.`);
+            if (!user)
+                errors.push(`User (account owner) with ID '${userId}' does not exist.`);
+            if (!actualBuyerUser)
+                errors.push(`Buyer with ID '${buyerId}' does not exist.`);
+            if (!ticketType)
+                errors.push(`Ticket Type with ID '${ticketTypeId}' does not exist.`);
+            if (!venue)
+                errors.push(`Venue with ID '${venueId}' does not exist.`);
+            if (errors.length > 0) {
+                return {
+                    valid: false,
+                    message: `Validation failed: ${errors.join(" ")}`,
+                    errors: errors,
+                };
+            }
+            // Validate ticket logic
+            const uniqueBoughtForIds = [...new Set(boughtForIds)];
+            // Check for invalid inclusions in boughtForIds
+            if (userId && boughtForIds.includes(userId)) {
+                errors.push("The account owner (userId) should not be explicitly listed in 'boughtForIds'.");
+            }
+            if (buyerId && boughtForIds.includes(buyerId)) {
+                errors.push("The buyer (buyerId) should not be explicitly listed in 'boughtForIds'.");
+            }
+            if (noOfTickets === 1) {
+                if (uniqueBoughtForIds.length > 0) {
+                    errors.push("For a single ticket, 'boughtForIds' array must be empty.");
+                }
+            }
+            else if (noOfTickets && noOfTickets > 1) {
+                if (uniqueBoughtForIds.length !== noOfTickets - 1) {
+                    errors.push(`For ${noOfTickets} tickets, 'boughtForIds' must contain ${noOfTickets - 1} unique attendee IDs (excluding the buyer). Found: ${uniqueBoughtForIds.length}.`);
+                }
+                if (uniqueBoughtForIds.length > 0) {
+                    const existingAttendees = yield this.userRepository.find({
+                        where: { userId: (0, typeorm_1.In)(uniqueBoughtForIds) },
+                    });
+                    if (existingAttendees.length !== uniqueBoughtForIds.length) {
+                        const foundIds = existingAttendees.map((u) => u.userId);
+                        const notFound = uniqueBoughtForIds.filter((id) => !foundIds.includes(id));
+                        errors.push(`Attendee User(s) with ID(s) '${notFound.join(", ")}' specified in 'boughtForIds' do not exist.`);
+                    }
+                }
+            }
+            return {
+                valid: errors.length === 0,
+                message: errors.length > 0
+                    ? `Validation failed: ${errors.join(" ")}`
+                    : undefined,
+                errors: errors.length > 0 ? errors : undefined,
+            };
+        });
+    }
+    /**
+     * Checks if a user with the given `userId` exists in the database.
      */
     static checkUserExists(userId) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.ensureRepositoriesInitialized();
             try {
-                const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
-                const user = yield userRepository.findOne({ where: { userId: userId } });
+                const user = yield this.userRepository.findOne({
+                    where: { userId: userId },
+                });
                 return !!user;
             }
             catch (error) {
@@ -159,71 +351,112 @@ class ValidationService {
         });
     }
     /**
-     * Validate event capacity and ticket availability
+     * Validates if there's enough capacity at the venue for the requested number of tickets for an event.
      */
     static validateEventCapacity(eventId, venueId, requestedTickets) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.ensureRepositoriesInitialized();
             try {
-                const venueRepository = Database_1.AppDataSource.getRepository(Venue_1.Venue);
-                const venue = yield venueRepository.findOne({ where: { venueId } });
+                const venue = yield this.venueRepository.findOne({ where: { venueId } });
                 if (!venue) {
-                    return { valid: false, message: "Venue not found" };
-                }
-                const registrationRepository = Database_1.AppDataSource.getRepository(Registration_1.Registration);
-                // ✅ FIXED: Updated query to use correct relations
-                const currentRegistrations = yield registrationRepository
-                    .createQueryBuilder("registration")
-                    .select("SUM(registration.noOfTickets)", "totalTickets")
-                    .where("registration.event.eventId = :eventId", { eventId })
-                    .getRawOne();
-                const currentTicketCount = Number.parseInt(currentRegistrations.totalTickets) || 0;
-                const availableCapacity = venue.capacity - currentTicketCount;
-                if (requestedTickets > availableCapacity) {
                     return {
                         valid: false,
-                        message: `Not enough capacity. Available: ${availableCapacity}, Requested: ${requestedTickets}`,
+                        message: `Venue with ID '${venueId}' does not exist.`,
+                    };
+                }
+                const event = yield this.eventRepository.findOne({ where: { eventId } });
+                if (!event) {
+                    return {
+                        valid: false,
+                        message: `Event with ID '${eventId}' does not exist.`,
+                    };
+                }
+                // Get total tickets sold for this event with 'COMPLETED' payment status
+                const totalTicketsSoldResult = yield this.registrationRepository
+                    .createQueryBuilder("registration")
+                    .select("SUM(registration.noOfTickets)", "sum")
+                    .where("registration.eventId = :eventId", { eventId })
+                    .andWhere("registration.paymentStatus = :status", {
+                    status: Index_1.PaymentStatus.COMPLETED,
+                })
+                    .getRawOne();
+                const ticketsSold = parseInt((totalTicketsSoldResult === null || totalTicketsSoldResult === void 0 ? void 0 : totalTicketsSoldResult.sum) || "0", 10);
+                const remainingCapacity = venue.capacity - ticketsSold;
+                if (requestedTickets > remainingCapacity) {
+                    return {
+                        valid: false,
+                        message: `Not enough capacity. Only ${remainingCapacity} tickets left for event '${event.eventTitle}'.`,
                     };
                 }
                 return { valid: true };
             }
             catch (error) {
                 console.error("Error validating event capacity:", error);
-                return { valid: false, message: "Error checking event capacity" };
+                return {
+                    valid: false,
+                    message: "An error occurred while checking event capacity.",
+                };
             }
         });
     }
     /**
-     * ✅ ENHANCED: Validate duplicate registration with better logic
-     * This checks if any user in 'boughtForIds' is already registered for this event.
+     * FIXED: Validates if there are duplicate registrations for the given event and attendees.
+     * This method now correctly identifies actual attendees based on the business rules.
      */
-    static validateDuplicateRegistration(eventId, userId, boughtForIds) {
+    static validateDuplicateRegistration(eventId, primaryUserId, buyerId, boughtForIds) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.ensureRepositoriesInitialized();
             try {
-                const registrationRepository = Database_1.AppDataSource.getRepository(Registration_1.Registration);
-                // Check if the primary attendee is already registered
-                const existingRegistration = yield registrationRepository.findOne({
-                    where: {
-                        event: { eventId },
-                        user: { userId: userId },
-                    },
-                });
-                if (existingRegistration) {
-                    return {
-                        valid: false,
-                        message: "Primary attendee is already registered for this event",
-                    };
-                }
-                // ✅ ENHANCED: Also check if any user in boughtForIds is already registered
+                // Determine who will actually be attending this event based on business rules
+                const actualAttendees = new Set();
+                // Rule: buyerId is always an attendee (they get a ticket)
+                actualAttendees.add(buyerId);
+                // Rule: boughtForIds are additional attendees (if any)
                 if (boughtForIds && boughtForIds.length > 0) {
-                    const existingRegistrationsForBoughtUsers = yield registrationRepository
-                        .createQueryBuilder("registration")
-                        .where("registration.event.eventId = :eventId", { eventId })
-                        .andWhere("registration.boughtForIds && :boughtForIds", { boughtForIds })
-                        .getMany();
-                    if (existingRegistrationsForBoughtUsers.length > 0) {
+                    boughtForIds.forEach((id) => actualAttendees.add(id));
+                }
+                // Convert to array for database query
+                const attendeeIdsToCheck = Array.from(actualAttendees);
+                console.log(`Checking for duplicate registrations for event ${eventId}`);
+                console.log(`Actual attendees to check: ${attendeeIdsToCheck.join(", ")}`);
+                console.log(`Primary user ID (account owner): ${primaryUserId} - NOT checked for duplicates unless they are an attendee`);
+                // Query for existing registrations where any of our actual attendees are already registered
+                const existingRegistrations = yield this.registrationRepository
+                    .createQueryBuilder("registration")
+                    .leftJoinAndSelect("registration.user", "user")
+                    .leftJoinAndSelect("registration.buyer", "buyer")
+                    .where("registration.eventId = :eventId", { eventId })
+                    .andWhere(
+                // Check if any of our attendees are already registered as:
+                // 1. A buyer in another registration
+                // 2. Someone in a boughtForIds array in another registration
+                "(buyer.userId IN (:...attendeeIds) OR registration.boughtForIds && ARRAY[:...attendeeIds]::uuid[])", { attendeeIds: attendeeIdsToCheck })
+                    // Optionally filter by active registrations only
+                    .andWhere("registration.registrationStatus IN (:...activeStatuses)", {
+                    activeStatuses: ["active", "completed"],
+                })
+                    .getMany();
+                if (existingRegistrations.length > 0) {
+                    const duplicatedUserIds = [];
+                    existingRegistrations.forEach((reg) => {
+                        // Check if any of our attendees is the buyer in an existing registration
+                        if (reg.buyer && attendeeIdsToCheck.includes(reg.buyer.userId)) {
+                            duplicatedUserIds.push(reg.buyer.userId);
+                        }
+                        // Check if any of our attendees is in the boughtForIds of an existing registration
+                        if (reg.boughtForIds && reg.boughtForIds.length > 0) {
+                            reg.boughtForIds.forEach((boughtForId) => {
+                                if (attendeeIdsToCheck.includes(boughtForId)) {
+                                    duplicatedUserIds.push(boughtForId);
+                                }
+                            });
+                        }
+                    });
+                    const uniqueDuplicatedUserIds = [...new Set(duplicatedUserIds)];
+                    if (uniqueDuplicatedUserIds.length > 0) {
                         return {
                             valid: false,
-                            message: "One or more users in boughtForIds are already registered for this event",
+                            message: `The following user(s) are already registered for event ID '${eventId}': ${uniqueDuplicatedUserIds.join(", ")}.`,
                         };
                     }
                 }
@@ -231,86 +464,43 @@ class ValidationService {
             }
             catch (error) {
                 console.error("Error validating duplicate registration:", error);
-                return { valid: false, message: "Error checking duplicate registration" };
-            }
-        });
-    }
-    /**
-     * ✅ NEW: Comprehensive validation method that combines all checks
-     */
-    static validateCompleteRegistration(registrationData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d;
-            const allErrors = [];
-            try {
-                // 1. Validate all IDs exist
-                const idValidation = yield this.validateRegistrationIds(registrationData);
-                if (!idValidation.valid && idValidation.errors) {
-                    allErrors.push(...idValidation.errors);
-                }
-                // 2. Validate event capacity
-                if (((_a = registrationData.event) === null || _a === void 0 ? void 0 : _a.eventId) && ((_b = registrationData.venue) === null || _b === void 0 ? void 0 : _b.venueId) && registrationData.noOfTickets) {
-                    const capacityValidation = yield this.validateEventCapacity(registrationData.event.eventId, registrationData.venue.venueId, registrationData.noOfTickets);
-                    if (!capacityValidation.valid && capacityValidation.message) {
-                        allErrors.push(capacityValidation.message);
-                    }
-                }
-                // 3. Validate duplicate registration
-                if (((_c = registrationData.event) === null || _c === void 0 ? void 0 : _c.eventId) && ((_d = registrationData.user) === null || _d === void 0 ? void 0 : _d.userId)) {
-                    const duplicateValidation = yield this.validateDuplicateRegistration(registrationData.event.eventId, registrationData.user.userId, registrationData.boughtForIds);
-                    if (!duplicateValidation.valid && duplicateValidation.message) {
-                        allErrors.push(duplicateValidation.message);
-                    }
-                }
-                return {
-                    valid: allErrors.length === 0,
-                    message: allErrors.length > 0 ? `Validation failed: ${allErrors.join(" ")}` : undefined,
-                    errors: allErrors.length > 0 ? allErrors : undefined,
-                };
-            }
-            catch (error) {
-                console.error("Error in complete registration validation:", error);
                 return {
                     valid: false,
-                    message: "An internal server error occurred during validation.",
-                    errors: ["Internal validation error"],
+                    message: "An error occurred while checking for duplicate registrations.",
                 };
             }
         });
     }
     /**
-     * ✅ NEW: Validate ticket type pricing and calculate total cost
+     * Validates the ticket type and quantity, then calculates the total cost.
      */
-    static validateAndCalculateTicketCost(ticketTypeIds) {
+    static validateAndCalculateTicketCost(ticketTypeId, quantity) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.ensureRepositoriesInitialized();
             try {
-                const ticketTypeRepository = Database_1.AppDataSource.getRepository(TicketType_1.TicketType);
-                const ticketTypes = yield ticketTypeRepository.find({
-                    where: { ticketTypeId: (0, typeorm_1.In)(ticketTypeIds) },
+                const ticketType = yield this.ticketTypeRepository.findOne({
+                    where: { ticketTypeId },
                 });
-                if (ticketTypes.length !== ticketTypeIds.length) {
-                    const foundIds = ticketTypes.map((tt) => tt.ticketTypeId);
-                    const notFound = ticketTypeIds.filter((id) => !foundIds.includes(id));
+                if (!ticketType) {
                     return {
                         valid: false,
-                        message: `Ticket Type(s) with ID(s) '${notFound.join(", ")}' do not exist.`,
+                        message: `Ticket Type with ID '${ticketTypeId}' does not exist.`,
                     };
                 }
-                const totalCost = ticketTypes.reduce((sum, ticket) => sum + ticket.price, 0);
-                return {
-                    valid: true,
-                    totalCost,
-                    ticketTypes,
-                };
+                if (quantity <= 0) {
+                    return { valid: false, message: "Quantity must be a positive number." };
+                }
+                const totalCost = ticketType.price * quantity;
+                return { valid: true, totalCost, ticketType };
             }
             catch (error) {
                 console.error("Error validating ticket cost:", error);
                 return {
                     valid: false,
-                    message: "Error calculating ticket cost",
+                    message: "An error occurred while calculating ticket cost.",
                 };
             }
         });
     }
 }
-exports.ValidationService = ValidationService;
+exports.RegistrationService = RegistrationService;

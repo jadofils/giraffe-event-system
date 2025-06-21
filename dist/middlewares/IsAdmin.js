@@ -23,15 +23,18 @@ const isAdmin = (req, res, next) => __awaiter(void 0, void 0, void 0, function* 
         const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
         const user = yield userRepository.findOne({
             where: { userId },
-            relations: ['role'],
+            relations: ['role'], // Make sure 'role' relation is defined in User entity
         });
-        if (!user || user.role.roleName.toLowerCase() !== 'admin') {
+        // Check if user exists AND if their role is admin
+        if (!user || !user.role || user.role.roleName.toLowerCase() !== 'admin') {
             res.status(403).json({ message: 'Forbidden: Admins only' });
             return;
         }
-        next(); // proceed if admin
+        // If the user is found and is an admin, proceed
+        next();
     }
     catch (error) {
+        console.error("Error in isAdmin middleware:", error); // Log the server-side error
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 });

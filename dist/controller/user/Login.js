@@ -60,47 +60,59 @@ exports.LoginController = void 0;
 const Database_1 = require("../../config/Database");
 const User_1 = require("../../models/User");
 const bcrypt = __importStar(require("bcryptjs"));
-const Registration_1 = require("./Registration");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const EmailService_1 = __importDefault(require("../../services/emails/EmailService"));
-const SECRET_KEY = process.env.JWT_SECRET || 'sdbgvkghdfcnmfxdxdfggj';
+const CacheService_1 = require("../../services/CacheService");
+const SECRET_KEY = process.env.JWT_SECRET || "sdbgvkghdfcnmfxdxdfggj";
 const COOKIE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours
-class LoginController extends Registration_1.UserController {
-    static loginWithDefaultPassward(req, res) {
+const CACHE_TTL = 3600; // 1 hour, consistent with VenueBookingRepository
+class LoginController {
+    /**
+     * Login using default or user password
+     * @route POST /api/auth/login/default
+     * @access Public
+     */
+    static loginWithDefaultPassword(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             if (!Database_1.AppDataSource.isInitialized) {
+                console.error("[Login Attempt] Database not initialized");
                 res.status(500).json({ success: false, message: "Database not initialized" });
                 return;
             }
             const { identifier, password } = req.body;
             if (!identifier || !password) {
-                res.status(400).json({
-                    success: false,
-                    message: "Please enter both email/username and password.",
-                });
+                console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
+                res.status(400).json({ success: false, message: "Please enter both identifier and password." });
                 return;
             }
             const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
             try {
-                const user = yield userRepository.findOne({
-                    where: [{ email: identifier }, { username: identifier }],
-                    relations: ["role", "organizations"],
-                });
-                if (!user) {
-                    res.status(404).json({
-                        success: false,
-                        message: "No account found with that email or username.",
+                const cacheKey = `user:identifier:${identifier}`;
+                const user = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, userRepository, () => __awaiter(this, void 0, void 0, function* () {
+                    return yield userRepository.findOne({
+                        where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
+                        relations: ["role", "organizations"],
                     });
+                }), CACHE_TTL);
+                if (!user) {
+                    console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
+                    res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
                     return;
                 }
-                // Verify session data matches
+                // Validate user UUID
+                if (!LoginController.UUID_REGEX.test(user.userId)) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
+                    res.status(500).json({ success: false, message: "Invalid user ID format." });
+                    return;
+                }
+                // Verify session data
                 if (!((_a = req.session) === null || _a === void 0 ? void 0 : _a.defaultPassword) ||
-                    !(req.session.defaultEmail === user.email || req.session.username === user.username)) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Session data doesn't match user account.",
-                    });
+                    !(req.session.defaultEmail === user.email ||
+                        req.session.username === user.username ||
+                        req.session.phoneNumber === user.phoneNumber)) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid session data`);
+                    res.status(401).json({ success: false, message: "Session data doesn't match user account." });
                     return;
                 }
                 // Password verification
@@ -110,15 +122,30 @@ class LoginController extends Registration_1.UserController {
                     isMatch = true;
                     isSessionPasswordLogin = true;
                     EmailService_1.default.invalidateDefaultPassword(req, user.email);
+                    // Clear session data
+                    req.session.defaultPassword = undefined;
+                    req.session.defaultEmail = undefined;
+                    req.session.username = undefined;
+                    req.session.phoneNumber = undefined;
                 }
                 else if (user.password) {
                     isMatch = yield bcrypt.compare(password, user.password);
                 }
                 if (!isMatch) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Incorrect password. Please try again.",
-                    });
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
+                    res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
+                    return;
+                }
+                // Validate organization
+                if (!user.organizations || user.organizations.length === 0) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
+                    res.status(401).json({ success: false, message: "User is not associated with any organization." });
+                    return;
+                }
+                const firstOrganization = user.organizations[0];
+                if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
+                    res.status(500).json({ success: false, message: "Invalid organization ID format." });
                     return;
                 }
                 // Generate JWT token
@@ -126,7 +153,13 @@ class LoginController extends Registration_1.UserController {
                     userId: user.userId,
                     email: user.email,
                     username: user.username,
+                    phoneNumber: user.phoneNumber,
+                    organizationId: firstOrganization.organizationId,
                     needsPasswordReset: isSessionPasswordLogin,
+                    roles: {
+                        roleId: user.role.roleId,
+                        roleName: user.role.roleName,
+                    },
                 }, SECRET_KEY, { expiresIn: "24h" });
                 res.cookie("authToken", token, {
                     httpOnly: true,
@@ -135,119 +168,152 @@ class LoginController extends Registration_1.UserController {
                     secure: process.env.NODE_ENV === "production",
                 });
                 const { password: _ } = user, userData = __rest(user, ["password"]);
+                console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+                user.role.permissions.forEach(permission => {
+                    console.log({
+                        userId: user.userId,
+                        username: user.username,
+                        roleId: user.role.roleId,
+                        roleName: user.role.roleName,
+                        permissionId: permission.id,
+                        permissionName: permission.name,
+                        permissionDescription: permission.description,
+                    });
+                });
                 res.status(200).json({
                     success: true,
-                    message: isSessionPasswordLogin
-                        ? "Login successful! Please create a new password."
-                        : "Login successful!",
+                    message: isSessionPasswordLogin ? "Login successful! Please create a new password." : "Login successful!",
                     user: Object.assign(Object.assign({}, userData), { needsPasswordReset: isSessionPasswordLogin }),
                     token,
                 });
             }
             catch (error) {
-                console.error("Login error:", error);
+                console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
                 res.status(500).json({
                     success: false,
                     message: "Something went wrong while logging in.",
-                    error: error instanceof Error ? error.message : 'Unknown error',
+                    error: error instanceof Error ? error.message : "Unknown error",
                 });
             }
         });
     }
+    /**
+     * Login using user password
+     * @route POST /api/auth/login
+     * @access Public
+     */
     static login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             const { identifier, password } = req.body;
             // Validate request
             if (!identifier || !password) {
-                res.status(400).json({
-                    success: false,
-                    message: "Please provide both username/email and password."
-                });
+                console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
+                res.status(400).json({ success: false, message: "Please provide both identifier and password." });
                 return;
             }
             const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
             try {
-                // Find user by email or username, including organizations
-                const user = yield userRepository.findOne({
-                    where: [{ email: identifier }, { username: identifier }],
-                    relations: ["organizations"] // Eager load organizations
-                });
-                if (!user) {
-                    res.status(404).json({
-                        success: false,
-                        message: "No account found with that email or username."
+                const cacheKey = `user:identifier:${identifier}`;
+                const user = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, userRepository, () => __awaiter(this, void 0, void 0, function* () {
+                    return yield userRepository.findOne({
+                        where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
+                        relations: ["organizations", "role", "role.permissions"],
                     });
+                }), CACHE_TTL);
+                if (!user) {
+                    console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
+                    res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
+                    return;
+                }
+                // Validate user UUID
+                if (!LoginController.UUID_REGEX.test(user.userId)) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
+                    res.status(500).json({ success: false, message: "Invalid user ID format." });
                     return;
                 }
                 // Check password
-                let isMatch = false;
-                if (!password) {
-                    isMatch = true; // Default password logic
-                }
-                else if (user.password) {
-                    isMatch = yield bcrypt.compare(password, user.password);
-                }
-                if (!isMatch) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Incorrect password. Please try again."
-                    });
+                if (!user.password || !(yield bcrypt.compare(password, user.password))) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
+                    res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
                     return;
                 }
-                // Ensure organizations exist before generating token
+                // Validate organization
                 if (!user.organizations || user.organizations.length === 0) {
-                    res.status(401).json({
-                        success: false,
-                        message: "Unauthorized: User is not associated with any organization."
-                    });
+                    console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
+                    res.status(401).json({ success: false, message: "User is not associated with any organization." });
                     return;
                 }
-                // Extract full organization details
-                const organizations = user.organizations.map(org => ({
-                    organizationId: org.organizationId,
-                    organizationName: org.organizationName,
-                    description: org.description,
-                    contactEmail: org.contactEmail,
-                    contactPhone: org.contactPhone,
-                    address: org.address,
-                    organizationType: org.organizationType
-                }));
-                console.log("Organizations found:", JSON.stringify(organizations, null, 2));
-                // Extract first organization ID
-                const firstOrganizationId = organizations[0].organizationId;
-                console.log("First Organization ID:", firstOrganizationId);
-                // Generate JWT token with full organization details AND first organization ID
+                const firstOrganization = user.organizations[0];
+                if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
+                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
+                    res.status(500).json({ success: false, message: "Invalid organization ID format." });
+                    return;
+                }
+                // Prepare organization data for JWT
+                const organization = {
+                    organizationId: firstOrganization.organizationId,
+                    organizationName: firstOrganization.organizationName,
+                    description: firstOrganization.description,
+                    contactEmail: firstOrganization.contactEmail,
+                    contactPhone: firstOrganization.contactPhone,
+                    address: firstOrganization.address,
+                    organizationType: firstOrganization.organizationType,
+                };
+                // Generate JWT token
                 const token = jsonwebtoken_1.default.sign({
                     userId: user.userId,
                     email: user.email,
                     username: user.username,
-                    organizations, // Store full organization details
-                    organizationId: firstOrganizationId, // Store first organization ID separately
-                    roles: user.roles,
+                    phoneNumber: user.phoneNumber,
+                    organization,
+                    organizationId: firstOrganization.organizationId,
+                    roles: {
+                        roleId: user.role.roleId,
+                        roleName: user.role.roleName,
+                    },
                 }, SECRET_KEY, { expiresIn: "24h" });
-                // Send the token as response
+                res.cookie("authToken", token, {
+                    httpOnly: true,
+                    maxAge: COOKIE_EXPIRATION,
+                    sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+                    secure: process.env.NODE_ENV === "production",
+                });
+                console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+                user.role.permissions.forEach(permission => {
+                    console.log({
+                        userId: user.userId,
+                        username: user.username,
+                        roleId: user.role.roleId,
+                        roleName: user.role.roleName,
+                        permissionId: permission.id,
+                        permissionName: permission.name,
+                        permissionDescription: permission.description,
+                    });
+                });
                 res.status(200).json({
                     success: true,
+                    message: "Login successful!",
                     user: {
                         userId: user.userId,
                         email: user.email,
                         username: user.username,
-                        roles: user.roles,
-                        organizations: organizations.map(organizationId => organizationId), // Send full organization details
+                        phoneNumber: user.phoneNumber,
+                        roles: user.role,
+                        organizations: user.organizations,
                     },
-                    message: "Login successful!",
-                    token
+                    token,
                 });
             }
             catch (error) {
-                console.error("Login error:", error);
+                console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
                 res.status(500).json({
                     success: false,
                     message: "Something went wrong while logging in.",
-                    error: error instanceof Error ? error.message : 'Unknown error',
+                    error: error instanceof Error ? error.message : "Unknown error",
                 });
             }
         });
     }
 }
 exports.LoginController = LoginController;
+LoginController.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

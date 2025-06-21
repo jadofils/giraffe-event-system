@@ -10,40 +10,68 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Role = void 0;
+// src/models/Role.ts
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
 const User_1 = require("./User");
+const Permission_1 = require("./Permission");
 let Role = class Role {
 };
 exports.Role = Role;
 __decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
-    (0, class_validator_1.IsUUID)('4'),
+    (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
+    (0, class_validator_1.IsUUID)("4", { message: "roleId must be a valid UUID" }) // Added validation message
+    ,
     __metadata("design:type", String)
 ], Role.prototype, "roleId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ unique: true }),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.Length)(3, 50),
+    (0, class_validator_1.IsNotEmpty)({ message: "roleName is required" }),
+    (0, class_validator_1.Length)(3, 50, {
+        message: "roleName must be between $constraint1 and $constraint2 characters",
+    }),
     __metadata("design:type", String)
 ], Role.prototype, "roleName", void 0);
 __decorate([
-    (0, typeorm_1.Column)('simple-array', { nullable: true }),
+    (0, typeorm_1.Column)({ type: "text", nullable: true }) // Explicitly define type 'text'
+    ,
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)(),
-    __metadata("design:type", Array)
-], Role.prototype, "permissions", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Length)(0, 500),
+    (0, class_validator_1.Length)(0, 500, {
+        message: "description must be at most $constraint2 characters",
+    }) // Added validation message
+    ,
     __metadata("design:type", String)
 ], Role.prototype, "description", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => User_1.User, user => user.role) // Adjusted for one role to many users
-    ,
+    (0, typeorm_1.OneToMany)(() => User_1.User, (user) => user.role),
     __metadata("design:type", Array)
 ], Role.prototype, "users", void 0);
+__decorate([
+    (0, typeorm_1.ManyToMany)(() => Permission_1.Permission, (permission) => permission.roles, {
+        cascade: true,
+    }),
+    (0, typeorm_1.JoinTable)({
+        name: "role_permissions",
+        joinColumn: { name: "role_id", referencedColumnName: "roleId" },
+        inverseJoinColumn: { name: "permission_id", referencedColumnName: "id" },
+    }),
+    __metadata("design:type", Array)
+], Role.prototype, "permissions", void 0);
+__decorate([
+    (0, typeorm_1.CreateDateColumn)({ type: "timestamp with time zone" }) // Explicit type
+    ,
+    __metadata("design:type", Date)
+], Role.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ type: "timestamp with time zone" }) // Explicit type
+    ,
+    __metadata("design:type", Date)
+], Role.prototype, "updatedAt", void 0);
+__decorate([
+    (0, typeorm_1.DeleteDateColumn)({ type: "timestamp with time zone", nullable: true }) // Added for consistency with other models
+    ,
+    __metadata("design:type", Date)
+], Role.prototype, "deletedAt", void 0);
 exports.Role = Role = __decorate([
-    (0, typeorm_1.Entity)('roles')
+    (0, typeorm_1.Entity)("roles")
 ], Role);

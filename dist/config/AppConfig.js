@@ -52,14 +52,14 @@ AppConfig.PORT = parseInt(process.env.PORT || '3000', 10);
 AppConfig.API_PREFIX = process.env.API_PREFIX || '/api/v1';
 AppConfig.CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 // JWT Authentication
-AppConfig.JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+AppConfig.JWT_SECRET = process.env.JWT_SECRET || 'dsghjkaskakgskjhajlslakklsjfdhjhkajlsjlajskal';
 AppConfig.JWT_EXPIRATION = process.env.JWT_EXPIRATION || '1d';
-AppConfig.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key';
+AppConfig.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fgdhjahshlajsaghkslkajsjkajsjgagksjhahsk';
 AppConfig.JWT_REFRESH_EXPIRATION = process.env.JWT_REFRESH_EXPIRATION || '7d';
 // Database
 AppConfig.DB_TYPE = process.env.DB_TYPE || 'postgres';
 AppConfig.DB_HOST = process.env.DB_HOST || 'localhost';
-AppConfig.DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
+AppConfig.DB_PORT = parseInt(process.env.DB_PORT || '5432', 1000);
 AppConfig.DB_USERNAME = process.env.DB_USERNAME || 'postgres';
 AppConfig.DB_PASSWORD = process.env.DB_PASSWORD || 'postgres';
 AppConfig.DB_DATABASE = process.env.DB_DATABASE || 'event_management';
@@ -67,14 +67,15 @@ AppConfig.DB_SYNCHRONIZE = process.env.DB_SYNCHRONIZE === 'true';
 AppConfig.DB_LOGGING = process.env.DB_LOGGING === 'true';
 // Redis (for caching/sessions if needed)
 AppConfig.REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-AppConfig.REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
+AppConfig.REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 1000);
 AppConfig.REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
+AppConfig.SESSION_SECRET = process.env.SESSION_SECRET || '';
 // Email
-AppConfig.SMTP_HOST = process.env.SMTP_HOST || 'smtp.example.com';
+AppConfig.SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 AppConfig.SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-AppConfig.SMTP_USER = process.env.SMTP_USER || 'user@example.com';
+AppConfig.SMTP_USER = process.env.SMTP_USER || 'jasezikeye50@gmail.com';
 AppConfig.SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'password';
-AppConfig.EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@example.com';
+AppConfig.EMAIL_FROM = process.env.EMAIL_FROM || 'jasezikeye50@gmail.com';
 // File Upload
 AppConfig.UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 AppConfig.MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '5242880', 10); // 5MB

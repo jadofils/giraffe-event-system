@@ -11,57 +11,113 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Payment = void 0;
 const typeorm_1 = require("typeorm");
-const class_validator_1 = require("class-validator");
 const Invoice_1 = require("./Invoice");
+const Registration_1 = require("./Registration");
+const InstallmentPlan_1 = require("./InstallmentPlan");
+const Event_1 = require("./Event");
+const PaymentStatusEnum_1 = require("../interfaces/Enums/PaymentStatusEnum");
 let Payment = class Payment {
 };
 exports.Payment = Payment;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
-    (0, class_validator_1.IsUUID)('4', { message: 'paymentId must be a valid UUID' }),
     __metadata("design:type", String)
 ], Payment.prototype, "paymentId", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
-    (0, class_validator_1.IsUUID)('4', { message: 'invoiceId must be a valid UUID' }),
-    (0, class_validator_1.IsNotEmpty)({ message: 'invoiceId is required' }),
     __metadata("design:type", String)
 ], Payment.prototype, "invoiceId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'date' }),
-    (0, class_validator_1.IsDateString)({}, { message: 'paymentDate must be a valid ISO date string' }),
-    (0, class_validator_1.IsNotEmpty)({ message: 'paymentDate is required' }),
+    (0, typeorm_1.ManyToOne)(() => Invoice_1.Invoice, { eager: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'invoiceId' }),
+    __metadata("design:type", Invoice_1.Invoice)
+], Payment.prototype, "invoice", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
+], Payment.prototype, "registrationId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Registration_1.Registration, { eager: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'registrationId' }),
+    __metadata("design:type", Registration_1.Registration)
+], Payment.prototype, "registration", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Payment.prototype, "eventId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Event_1.Event, (event) => event.payments, { eager: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'eventId' }),
+    __metadata("design:type", Event_1.Event)
+], Payment.prototype, "event", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Date)
 ], Payment.prototype, "paymentDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'float' }),
-    (0, class_validator_1.IsNumber)({}, { message: 'paidAmount must be a number' }),
-    (0, class_validator_1.IsPositive)({ message: 'paidAmount must be a positive number' }),
+    (0, typeorm_1.Column)('decimal'),
     __metadata("design:type", Number)
 ], Payment.prototype, "paidAmount", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'paymentMethod is required' }),
-    (0, class_validator_1.Length)(3, 50, { message: 'paymentMethod must be between $constraint1 and $constraint2 characters' }),
     __metadata("design:type", String)
 ], Payment.prototype, "paymentMethod", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: 'pending' }),
-    (0, class_validator_1.IsNotEmpty)({ message: 'paymentStatus is required' }),
-    (0, class_validator_1.Length)(3, 20, { message: 'paymentStatus must be between $constraint1 and $constraint2 characters' }),
+    (0, typeorm_1.Column)({ type: 'enum', enum: PaymentStatusEnum_1.PaymentStatus }),
     __metadata("design:type", String)
 ], Payment.prototype, "paymentStatus", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Length)(0, 500, { message: 'description must be at most $constraint2 characters' }),
     __metadata("design:type", String)
 ], Payment.prototype, "description", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Invoice_1.Invoice, invoice => invoice.payments),
-    (0, typeorm_1.JoinColumn)({ name: 'invoiceId' }),
-    __metadata("design:type", Invoice_1.Invoice)
-], Payment.prototype, "invoice", void 0);
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Payment.prototype, "txRef", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Payment.prototype, "flwRef", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Boolean)
+], Payment.prototype, "isSuccessful", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
+    __metadata("design:type", Object)
+], Payment.prototype, "paymentResponse", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Boolean)
+], Payment.prototype, "isInstallment", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], Payment.prototype, "installmentNumber", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Payment.prototype, "installmentPlanId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => InstallmentPlan_1.InstallmentPlan, (installmentPlan) => installmentPlan.payments, { eager: true }),
+    __metadata("design:type", InstallmentPlan_1.InstallmentPlan)
+], Payment.prototype, "installmentPlan", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Payment.prototype, "paidBy", void 0);
+__decorate([
+    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp with time zone' }),
+    __metadata("design:type", Date)
+], Payment.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp with time zone' }),
+    __metadata("design:type", Date)
+], Payment.prototype, "updatedAt", void 0);
+__decorate([
+    (0, typeorm_1.DeleteDateColumn)({ type: 'timestamp with time zone', nullable: true }),
+    __metadata("design:type", Date)
+], Payment.prototype, "deletedAt", void 0);
 exports.Payment = Payment = __decorate([
-    (0, typeorm_1.Entity)('payments')
+    (0, typeorm_1.Entity)()
 ], Payment);

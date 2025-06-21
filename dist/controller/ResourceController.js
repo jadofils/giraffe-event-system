@@ -21,7 +21,7 @@ class ResourceController {
             }
             catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'Failed to create resource' });
+                return res.status(500).json({ message: "Failed to create resource" });
             }
         });
     }
@@ -34,7 +34,7 @@ class ResourceController {
             }
             catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'Failed to fetch resources' });
+                return res.status(500).json({ message: "Failed to fetch resources" });
             }
         });
     }
@@ -44,13 +44,13 @@ class ResourceController {
             try {
                 const resource = yield ResourceRepository_1.ResourceRepository.findResourceById(req.params.id);
                 if (!resource) {
-                    return res.status(404).json({ message: 'Resource not found' });
+                    return res.status(404).json({ message: "Resource not found" });
                 }
                 return res.status(200).json(resource);
             }
             catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'Failed to fetch resource' });
+                return res.status(500).json({ message: "Failed to fetch resource" });
             }
         });
     }
@@ -60,13 +60,13 @@ class ResourceController {
             try {
                 const updatedResource = yield ResourceRepository_1.ResourceRepository.updateResource(req.params.id, req.body);
                 if (!updatedResource) {
-                    return res.status(404).json({ message: 'Resource not found' });
+                    return res.status(404).json({ message: "Resource not found" });
                 }
                 return res.status(200).json(updatedResource);
             }
             catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'Failed to update resource' });
+                return res.status(500).json({ message: "Failed to update resource" });
             }
         });
     }
@@ -76,13 +76,34 @@ class ResourceController {
             try {
                 const deleted = yield ResourceRepository_1.ResourceRepository.deleteResource(req.params.id);
                 if (!deleted) {
-                    return res.status(404).json({ message: 'Resource not found' });
+                    return res.status(404).json({ message: "Resource not found" });
                 }
-                return res.status(200).json({ message: 'Resource deleted successfully' });
+                return res.status(200).json({ message: "Resource deleted successfully" });
             }
             catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'Failed to delete resource' });
+                return res.status(500).json({ message: "Failed to delete resource" });
+            }
+        });
+    }
+    // Bulk assign resources to an event
+    static bulkAssignResourcesToEvent(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { eventId, resources } = req.body;
+            if (!eventId || !Array.isArray(resources) || resources.length === 0) {
+                return res.status(400).json({
+                    message: "eventId and a non-empty resources array are required",
+                });
+            }
+            try {
+                const created = yield ResourceRepository_1.ResourceRepository.bulkAssignResourcesToEvent(eventId, resources);
+                return res.status(201).json({ success: true, data: created });
+            }
+            catch (error) {
+                console.error(error);
+                return res
+                    .status(500)
+                    .json({ message: "Failed to bulk assign resources to event" });
             }
         });
     }

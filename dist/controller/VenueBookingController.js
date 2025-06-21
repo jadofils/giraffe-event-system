@@ -11,93 +11,58 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueBookingController = void 0;
 const VenueBookingRepository_1 = require("../repositories/VenueBookingRepository");
-const BookingService_1 = require("../services/bookings/BookingService");
 class VenueBookingController {
     /**
      * Create a new event booking
      * @route POST /api/bookings
-     * @access Private (Authenticated Users)
+     * @access Private (d Users)
      */
-    static createEventBooking(req, res) {
+    static createVenueBooking(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d;
             try {
                 const bookingData = req.body;
-                console.log("Booking data from request body:", bookingData); // Debugging
-                //accept the booking service
-                const conflictCheck = yield (0, BookingService_1.checkConflict)(bookingData);
-                if (!conflictCheck.success) {
-                    res.status(400).json({ success: false, message: conflictCheck.message });
+                // Validate authentication
+                if (!req.user || !req.user.userId || !req.user.organizationId) {
+                    console.log("User token data:", req.user);
+                    res.status(401).json({ success: false, message: "Unauthorized: User is not properly d." });
                     return;
                 }
-                // Extract user and organization IDs from token
-                if (!req.user || !req.user.organizations || req.user.organizations.length === 0 || !req.user.userId) {
-                    console.log("User token data:", req.user); // Debugging
-                    res.status(401).json({ success: false, message: "Unauthorized: User is not properly authenticated." });
-                    return;
-                }
-                // Use the first organization ID from the token (ensure it's a valid UUID)
-                const organizationId = req.user.organizationId;
-                console.log("Organization ID from token:", organizationId); // Debug the value
-                // Validate UUID format
-                const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-                if (!UUID_REGEX.test(organizationId)) {
-                    console.log("Invalid UUID format for organizationId:", organizationId);
-                    res.status(400).json({
-                        success: false,
-                        message: "Organization ID is not a valid UUID format. Token may contain incorrect organization format."
-                    });
-                    return;
-                }
-                // Use the userId from the token as the organizerId (ensure it's a valid UUID)
                 const organizerId = req.user.userId;
-                console.log("Organizer ID from token:", organizerId); // Debug the value
-                // Validate UUID format for organizerId
-                if (!UUID_REGEX.test(organizerId)) {
+                const organizationId = req.user.organizationId;
+                // Validate UUIDs
+                if (!this.UUID_REGEX.test(organizerId)) {
                     console.log("Invalid UUID format for organizerId:", organizerId);
-                    res.status(400).json({
-                        success: false,
-                        message: "User ID is not a valid UUID format. Token may contain incorrect user ID format."
-                    });
+                    res.status(400).json({ success: false, message: "Invalid user ID format in token." });
                     return;
                 }
-                // Check if the organizationId exists in the database
-                try {
-                    const organizationExists = yield VenueBookingRepository_1.VenueBookingRepository.getOrganizationRepository().findOne({
-                        where: { organizationId },
-                    });
-                    if (!organizationExists) {
-                        console.log("Organization not found:", organizationId);
-                        res.status(404).json({ success: false, message: "Organization not found." });
-                        return;
-                    }
-                }
-                catch (dbError) {
-                    console.error("Database error checking organization:", dbError);
-                    res.status(500).json({
-                        success: false,
-                        message: "Error validating organization. Please check organization ID format."
-                    });
+                if (!this.UUID_REGEX.test(organizationId)) {
+                    console.log("Invalid UUID format for organizationId:", organizationId);
+                    res.status(400).json({ success: false, message: "Invalid organization ID format in token." });
                     return;
                 }
-                // Validate required fields from the request body
-                if (!bookingData.eventId || !bookingData.venueId ||
-                    !bookingData.startDate || !bookingData.endDate || !bookingData.startTime || !bookingData.endTime) {
-                    res.status(400).json({ success: false, message: "Missing required booking fields." });
+                // Validate required fields
+                if (!bookingData.eventId ||
+                    !bookingData.venueId ||
+                    !((_a = bookingData.event) === null || _a === void 0 ? void 0 : _a.startDate) ||
+                    !((_b = bookingData.event) === null || _b === void 0 ? void 0 : _b.endDate) ||
+                    !((_c = bookingData.event) === null || _c === void 0 ? void 0 : _c.startTime) ||
+                    !((_d = bookingData.event) === null || _d === void 0 ? void 0 : _d.endTime)) {
+                    res.status(400).json({ success: false, message: "Missing required fields: eventId, venueId, startDate, endDate, startTime, endTime." });
                     return;
                 }
-                // Validate UUID format for eventId
-                if (!UUID_REGEX.test(bookingData.eventId)) {
-                    res.status(400).json({ success: false, message: "Event ID is not a valid UUID format." });
+                // Validate UUIDs for eventId and venueId
+                if (!this.UUID_REGEX.test(bookingData.eventId)) {
+                    res.status(400).json({ success: false, message: "Invalid event ID format." });
                     return;
                 }
-                // Validate UUID format for venueId
-                if (!UUID_REGEX.test(bookingData.venueId)) {
-                    res.status(400).json({ success: false, message: "Venue ID is not a valid UUID format." });
+                if (!this.UUID_REGEX.test(bookingData.venueId)) {
+                    res.status(400).json({ success: false, message: "Invalid venue ID format." });
                     return;
                 }
                 // Validate dates
-                const startDate = new Date(bookingData.startDate);
-                const endDate = new Date(bookingData.endDate);
+                const startDate = new Date(bookingData.event.startDate);
+                const endDate = new Date(bookingData.event.endDate);
                 if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
                     res.status(400).json({ success: false, message: "Invalid date format." });
                     return;
@@ -106,53 +71,102 @@ class VenueBookingController {
                     res.status(400).json({ success: false, message: "Start date cannot be after end date." });
                     return;
                 }
-                // Validate organizer exists and belongs to the organization
-                try {
-                    const organizerExists = yield VenueBookingRepository_1.VenueBookingRepository.getUserRepository().findOne({
-                        where: { userId: organizerId },
-                        relations: ["organizations"],
-                    });
-                    if (!organizerExists) {
-                        res.status(400).json({ success: false, message: "User in token does not exist in the database." });
-                        return;
-                    }
-                    const userBelongsToOrg = organizerExists.organizations.some((org) => org.organizationId === organizationId);
-                    if (!userBelongsToOrg) {
-                        res.status(403).json({ success: false, message: "Forbidden: User is not part of the specified organization." });
-                        return;
-                    }
-                }
-                catch (dbError) {
-                    console.error("Database error checking user:", dbError);
-                    res.status(500).json({
-                        success: false,
-                        message: "Error validating user. Please check user ID format."
-                    });
+                // Check organization existence
+                const organization = yield VenueBookingRepository_1.VenueBookingRepository.getOrganizationRepository().findOne({
+                    where: { organizationId },
+                });
+                if (!organization) {
+                    console.log("Organization not found:", organizationId);
+                    res.status(404).json({ success: false, message: "Organization not found." });
                     return;
                 }
-                // Set default approval status if not provided
-                bookingData.approvalStatus = bookingData.approvalStatus || "pending";
-                // Create booking with organizationId and organizerId from token
-                try {
-                    const result = yield VenueBookingRepository_1.VenueBookingRepository.createBooking(Object.assign(Object.assign({}, bookingData), { organizationId,
-                        organizerId }));
-                    if (result.success && result.data) {
-                        res.status(201).json({ success: true, message: "Event booking created successfully.", data: result.data });
-                    }
-                    else {
-                        res.status(500).json({ success: false, message: result.message || "Failed to create event booking." });
-                    }
+                // Validate organizer and organization membership
+                const organizer = yield VenueBookingRepository_1.VenueBookingRepository.getUserRepository().findOne({
+                    where: { userId: organizerId },
+                    relations: ["organizations"],
+                });
+                if (!organizer) {
+                    res.status(404).json({ success: false, message: "Organizer not found." });
+                    return;
                 }
-                catch (createError) {
-                    console.error("Error creating booking:", createError);
-                    res.status(500).json({
-                        success: false,
-                        message: "Failed to create booking. Database error occurred."
-                    });
+                const userBelongsToOrg = organizer.organizations.some(org => org.organizationId === organizationId);
+                if (!userBelongsToOrg) {
+                    res.status(403).json({ success: false, message: "Forbidden: User is not part of the specified organization." });
+                    return;
+                }
+                // Check for duplicate bookings
+                const conflictCheck = yield VenueBookingRepository_1.VenueBookingRepository.checkDuplicateBookings(bookingData.venueId, startDate, endDate, bookingData.event.startTime, bookingData.event.endTime);
+                if (!conflictCheck.success) {
+                    res.status(400).json({ success: false, message: conflictCheck.message });
+                    return;
+                }
+                // Create booking
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.createBooking(Object.assign(Object.assign({}, bookingData), { organizerId,
+                    organizationId, approvalStatus: bookingData.approvalStatus || "pending" }));
+                if (result.success && result.data) {
+                    res.status(201).json({ success: true, message: "Event booking created successfully.", data: result.data });
+                }
+                else {
+                    res.status(500).json({ success: false, message: result.message || "Failed to create event booking." });
                 }
             }
             catch (error) {
-                console.error("Error in createEventBooking:", error);
+                console.error("Error in createVenueBooking:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
+            }
+        });
+    }
+    /**
+     * Create multiple event bookings
+     * @route POST /api/bookings/bulk
+     * @access Private (d Users)
+     */
+    static createMultipleVenueBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const bookingsData = req.body.bookings;
+                // Validate authentication
+                if (!req.user || !req.user.userId || !req.user.organizationId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: User is not properly d." });
+                    return;
+                }
+                const organizerId = req.user.userId;
+                const organizationId = req.user.organizationId;
+                // Validate input
+                if (!bookingsData || !Array.isArray(bookingsData) || bookingsData.length === 0) {
+                    res.status(400).json({ success: false, message: "An array of booking data is required." });
+                    return;
+                }
+                // Validate UUIDs and organization
+                const organization = yield VenueBookingRepository_1.VenueBookingRepository.getOrganizationRepository().findOne({
+                    where: { organizationId },
+                });
+                if (!organization) {
+                    res.status(404).json({ success: false, message: "Organization not found." });
+                    return;
+                }
+                const organizer = yield VenueBookingRepository_1.VenueBookingRepository.getUserRepository().findOne({
+                    where: { userId: organizerId },
+                    relations: ["organizations"],
+                });
+                if (!organizer || !organizer.organizations.some(org => org.organizationId === organizationId)) {
+                    res.status(403).json({ success: false, message: "Forbidden: User is not part of the specified organization." });
+                    return;
+                }
+                // Prepare bookings with organizerId and organizationId
+                const preparedBookings = bookingsData.map(booking => (Object.assign(Object.assign({}, booking), { organizerId,
+                    organizationId, approvalStatus: booking.approvalStatus || "pending" })));
+                // Create bookings
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.createMultipleBookings(preparedBookings);
+                res.status(result.success ? 201 : 207).json({
+                    success: result.success,
+                    message: result.success ? "All bookings created successfully." : "Some bookings failed to create.",
+                    data: result.bookings,
+                    errors: result.errors,
+                });
+            }
+            catch (error) {
+                console.error("Error in createMultipleVenueBookings:", error);
                 res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
@@ -162,38 +176,28 @@ class VenueBookingController {
      * @route GET /api/bookings
      * @access Private (Admins)
      */
-    static getAllEventBookings(req, res) {
+    static getAllVenueBookings(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getAllBookings();
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: 'Not Found: No event bookings available.'
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Event bookings retrieved successfully.',
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Event bookings retrieved successfully." : "No event bookings found.",
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve event bookings.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve event bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getAllEventBookings:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getAllVenueBookings:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -202,44 +206,25 @@ class VenueBookingController {
      * @route GET /api/bookings/:id
      * @access Private (Booking Owner, Event Organizer, Admins)
      */
-    static getEventBookingById(req, res) {
+    static getVenueBookingById(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { id } = req.params;
-                if (!id) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Booking ID is required.'
-                    });
+                if (!id || !this.UUID_REGEX.test(id)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing booking ID." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingById(id);
                 if (result.success && result.data) {
-                    res.status(200).json({
-                        success: true,
-                        message: 'Event booking retrieved successfully.',
-                        data: result.data
-                    });
-                }
-                else if (!result.success && result.message === 'Booking not found') {
-                    res.status(404).json({
-                        success: false,
-                        message: 'Not Found: Event booking not found.'
-                    });
+                    res.status(200).json({ success: true, message: "Event booking retrieved successfully.", data: result.data });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve event booking.'
-                    });
+                    res.status(404).json({ success: false, message: result.message || "Event booking not found." });
                 }
             }
             catch (error) {
-                console.error('Error in getEventBookingById:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getVenueBookingById:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -248,82 +233,62 @@ class VenueBookingController {
      * @route PUT /api/bookings/:id
      * @access Private (Booking Owner, Event Organizer, Admins)
      */
-    static updateEventBooking(req, res) {
+    static updateVenueBooking(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d;
             try {
                 const { id } = req.params;
                 const updates = req.body;
-                if (!id) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Booking ID is required for update.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!id || !this.UUID_REGEX.test(id)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing booking ID." });
                     return;
                 }
                 if (Object.keys(updates).length === 0) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: No update data provided.'
-                    });
+                    res.status(400).json({ success: false, message: "No update data provided." });
+                    return;
+                }
+                // Validate UUIDs if provided
+                if (updates.eventId && !this.UUID_REGEX.test(updates.eventId)) {
+                    res.status(400).json({ success: false, message: "Invalid event ID format." });
+                    return;
+                }
+                if (updates.venueId && !this.UUID_REGEX.test(updates.venueId)) {
+                    res.status(400).json({ success: false, message: "Invalid venue ID format." });
                     return;
                 }
                 // Validate dates if provided
-                if (updates.startDate) {
-                    updates.startDate = new Date(updates.startDate);
-                    if (isNaN(updates.startDate.getTime())) {
-                        res.status(400).json({
-                            success: false,
-                            message: 'Bad Request: Invalid start date format.'
-                        });
+                if (((_a = updates.event) === null || _a === void 0 ? void 0 : _a.startDate) || ((_b = updates.event) === null || _b === void 0 ? void 0 : _b.endDate)) {
+                    const startDate = ((_c = updates.event) === null || _c === void 0 ? void 0 : _c.startDate) ? new Date(updates.event.startDate) : undefined;
+                    const endDate = ((_d = updates.event) === null || _d === void 0 ? void 0 : _d.endDate) ? new Date(updates.event.endDate) : undefined;
+                    if ((startDate && isNaN(startDate.getTime())) || (endDate && isNaN(endDate.getTime()))) {
+                        res.status(400).json({ success: false, message: "Invalid date format." });
+                        return;
+                    }
+                    if (startDate && endDate && startDate > endDate) {
+                        res.status(400).json({ success: false, message: "Start date cannot be after end date." });
                         return;
                     }
                 }
-                if (updates.endDate) {
-                    updates.endDate = new Date(updates.endDate);
-                    if (isNaN(updates.endDate.getTime())) {
-                        res.status(400).json({
-                            success: false,
-                            message: 'Bad Request: Invalid end date format.'
-                        });
-                        return;
-                    }
-                }
-                // Validate approval status if provided
-                if (updates.approvalStatus &&
-                    !['pending', 'approved', 'rejected'].includes(updates.approvalStatus)) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Invalid approval status provided.'
-                    });
+                // Validate approval status
+                if (updates.approvalStatus && !["pending", "approved", "rejected"].includes(updates.approvalStatus)) {
+                    res.status(400).json({ success: false, message: "Invalid approval status." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.updateBooking(id, updates);
                 if (result.success && result.data) {
-                    res.status(200).json({
-                        success: true,
-                        message: 'Event booking updated successfully.',
-                        data: result.data
-                    });
-                }
-                else if (!result.success && result.message === 'Booking not found') {
-                    res.status(404).json({
-                        success: false,
-                        message: 'Not Found: Event booking not found.'
-                    });
+                    res.status(200).json({ success: true, message: "Event booking updated successfully.", data: result.data });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to update event booking.'
-                    });
+                    res.status(404).json({ success: false, message: result.message || "Event booking not found." });
                 }
             }
             catch (error) {
-                console.error('Error in updateEventBooking:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in updateVenueBooking:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -332,53 +297,34 @@ class VenueBookingController {
      * @route PATCH /api/bookings/:id/status
      * @access Private (Event Organizer, Admins)
      */
-    static updateEventBookingStatus(req, res) {
+    static updateVenueBookingStatus(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { id } = req.params;
                 const { approvalStatus } = req.body;
-                if (!id || !approvalStatus) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Booking ID and approval status are required.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
                     return;
                 }
-                const validStatuses = ['pending', 'approved', 'rejected'];
-                if (!validStatuses.includes(approvalStatus)) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Invalid approval status provided.'
-                    });
+                if (!id || !this.UUID_REGEX.test(id)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing booking ID." });
+                    return;
+                }
+                if (!approvalStatus || !["pending", "approved", "rejected"].includes(approvalStatus)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing approval status." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.updateBookingStatus(id, approvalStatus);
                 if (result.success && result.data) {
-                    res.status(200).json({
-                        success: true,
-                        message: 'Event booking status updated successfully.',
-                        data: result.data
-                    });
-                }
-                else if (!result.success && result.message === 'Booking not found') {
-                    res.status(404).json({
-                        success: false,
-                        message: 'Not Found: Event booking not found.'
-                    });
+                    res.status(200).json({ success: true, message: "Event booking status updated successfully.", data: result.data });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to update event booking status.'
-                    });
+                    res.status(404).json({ success: false, message: result.message || "Event booking not found." });
                 }
             }
             catch (error) {
-                console.error('Error in updateEventBookingStatus:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in updateVenueBookingStatus:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -387,40 +333,29 @@ class VenueBookingController {
      * @route DELETE /api/bookings/:id
      * @access Private (Booking Owner, Event Organizer, Admins)
      */
-    static deleteEventBooking(req, res) {
+    static deleteVenueBooking(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { id } = req.params;
-                if (!id) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Booking ID is required for deletion.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!id || !this.UUID_REGEX.test(id)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing booking ID." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.deleteBooking(id);
                 if (result.success) {
-                    res.status(204).send(); // 204 No Content (successful deletion, no body to return)
-                }
-                else if (!result.success && result.message === 'Booking not found') {
-                    res.status(404).json({
-                        success: false,
-                        message: 'Not Found: Event booking not found.'
-                    });
+                    res.status(204).send();
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to delete event booking.'
-                    });
+                    res.status(404).json({ success: false, message: result.message || "Event booking not found." });
                 }
             }
             catch (error) {
-                console.error('Error in deleteEventBooking:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in deleteVenueBooking:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -433,42 +368,29 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { eventId } = req.params;
-                if (!eventId) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Event ID is required.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!eventId || !this.UUID_REGEX.test(eventId)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing event ID." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByEventId(eventId);
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: 'Not Found: No bookings found for this event.'
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Bookings retrieved successfully for this event.',
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Bookings retrieved successfully." : "No bookings found for this event.",
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve bookings for event.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getBookingsByEventId:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getBookingsByEventId:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -481,88 +403,64 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { venueId } = req.params;
-                if (!venueId) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Venue ID is required.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!venueId || !this.UUID_REGEX.test(venueId)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing venue ID." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByVenueId(venueId);
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: 'Not Found: No bookings found for this venue.'
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Bookings retrieved successfully for this venue.',
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Bookings retrieved successfully." : "No bookings found for this venue.",
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve bookings for venue.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getBookingsByVenueId:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getBookingsByVenueId:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
+    /**
+     * Get bookings by organizer ID
+     * @route GET /api/bookings/organizer
+     * @access Private (d Organizer)
+     */
     static getBookingsByOrganizerId(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Ensure the user is authenticated
                 if (!req.user || !req.user.userId) {
-                    res.status(401).json({
-                        success: false,
-                        message: 'Unauthorized: Organizer authentication is required.',
-                    });
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
                     return;
                 }
-                const organizerId = req.user.userId; // Extract userId from the token
-                console.log("Organizer ID from token:", organizerId); // Debug the value
-                // Call repository method with the organizerId
+                const organizerId = req.user.userId;
+                if (!this.UUID_REGEX.test(organizerId)) {
+                    res.status(400).json({ success: false, message: "Invalid organizer ID format." });
+                    return;
+                }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByOrganizerId(organizerId);
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: 'Not Found: No bookings found for this organizer.'
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Bookings retrieved successfully for this organizer.',
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Bookings retrieved successfully." : "No bookings found for this organizer.",
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve bookings for organizer.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getBookingsByOrganizerId:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.',
-                });
+                console.error("Error in getBookingsByOrganizerId:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -575,42 +473,38 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { organizationId } = req.params;
-                if (!organizationId) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Organization ID is required.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing organization ID." });
+                    return;
+                }
+                // Verify user belongs to organization
+                const user = yield VenueBookingRepository_1.VenueBookingRepository.getUserRepository().findOne({
+                    where: { userId: req.user.userId },
+                    relations: ["organizations"],
+                });
+                if (!user || !user.organizations.some(org => org.organizationId === organizationId)) {
+                    res.status(403).json({ success: false, message: "Forbidden: User is not part of the specified organization." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByOrganizationId(organizationId);
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: 'Not Found: No bookings found for this organization.'
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Bookings retrieved successfully for this organization.',
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Bookings retrieved successfully." : "No bookings found for this organization.",
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve bookings for organization.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getBookingsByOrganizationId:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getBookingsByOrganizationId:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -623,106 +517,133 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { status } = req.params;
-                if (!status) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Status is required.'
-                    });
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
                     return;
                 }
-                const validStatuses = ['pending', 'approved', 'rejected'];
-                if (!validStatuses.includes(status)) {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Bad Request: Invalid status provided.'
-                    });
+                if (!status || !["pending", "approved", "rejected"].includes(status)) {
+                    res.status(400).json({ success: false, message: "Invalid or missing status." });
                     return;
                 }
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByStatus(status);
                 if (result.success && result.data) {
-                    if (result.data.length === 0) {
-                        res.status(404).json({
-                            success: false,
-                            message: `Not Found: No bookings found with status: ${status}.`
-                        });
-                    }
-                    else {
-                        res.status(200).json({
-                            success: true,
-                            message: `Bookings with status '${status}' retrieved successfully.`,
-                            data: result.data
-                        });
-                    }
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? `Bookings with status '${status}' retrieved successfully.` : `No bookings found with status: ${status}.`,
+                        data: result.data,
+                    });
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: result.message || 'Internal Server Error: Failed to retrieve bookings by status.'
-                    });
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
             }
             catch (error) {
-                console.error('Error in getBookingsByStatus:', error);
-                res.status(500).json({
-                    success: false,
-                    message: 'Internal Server Error: An unexpected error occurred.'
-                });
+                console.error("Error in getBookingsByStatus:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
     /**
-    * Get bookings by date range with eager loading
-    * @route GET /api/bookings/date-range
-    * @access Private (Admins)
-    */
+     * Get bookings by date range
+     * @route GET /api/bookings/date-range
+     * @access Private (Admins)
+     */
     static getBookingsByDateRange(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const { startDate, endDate, filterType, rangeStart, rangeEnd, minStart, minEnd } = req.query;
-                // Validate input
+                const { startDate, endDate, filterOptions } = req.query;
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
                 if (!startDate || !endDate) {
-                    res.status(400).json({ success: false, message: "Bad Request: Start date and end date are required." });
+                    res.status(400).json({ success: false, message: "Start date and end date are required." });
                     return;
                 }
                 const parsedStartDate = new Date(startDate);
                 const parsedEndDate = new Date(endDate);
                 if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-                    res.status(400).json({ success: false, message: "Bad Request: Invalid date format." });
+                    res.status(400).json({ success: false, message: "Invalid date format." });
                     return;
                 }
                 if (parsedStartDate > parsedEndDate) {
-                    res.status(400).json({ success: false, message: "Bad Request: Start date cannot be after end date." });
+                    res.status(400).json({ success: false, message: "Start date cannot be after end date." });
                     return;
                 }
-                const bookingRepo = VenueBookingRepository_1.VenueBookingRepository.getVenueBookingRepository();
-                let query = bookingRepo.createQueryBuilder("booking")
-                    .leftJoinAndSelect("booking.event", "event")
-                    .leftJoinAndSelect("booking.venue", "venue")
-                    .leftJoinAndSelect("booking.user", "user")
-                    .leftJoinAndSelect("booking.organization", "organization")
-                    .where("booking.startDate >= :startDate", { startDate: parsedStartDate })
-                    .andWhere("booking.endDate <= :endDate", { endDate: parsedEndDate });
-                // Apply correct filtering based on user selection
-                if (filterType === "minutes" && minStart && minEnd) {
-                    query.andWhere("EXTRACT(MINUTE FROM booking.startTime) BETWEEN :minStart AND :minEnd", { minStart, minEnd });
+                // Parse filter options
+                let filters = ["all"];
+                if (filterOptions) {
+                    const options = Array.isArray(filterOptions) ? filterOptions : [filterOptions];
+                    filters = options.filter(opt => ["min", "hours", "days", "all"].includes(opt));
+                    if (filters.length === 0) {
+                        res.status(400).json({ success: false, message: "Invalid filter options. Use 'min', 'hours', 'days', or 'all'." });
+                        return;
+                    }
                 }
-                if (filterType === "hours" && rangeStart && rangeEnd) {
-                    query.andWhere("EXTRACT(HOUR FROM booking.startTime) BETWEEN :rangeStart AND :rangeEnd", { rangeStart, rangeEnd });
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingsByDateRange(parsedStartDate, parsedEndDate, filters);
+                if (result.success && result.data) {
+                    res.status(200).json({
+                        success: true,
+                        message: result.data.length ? "Bookings retrieved successfully." : "No bookings found for the selected date range.",
+                        data: result.data,
+                    });
                 }
-                if (filterType === "days" && rangeStart && rangeEnd) {
-                    query.andWhere("EXTRACT(DAY FROM booking.startDate) BETWEEN :rangeStart AND :rangeEnd", { rangeStart, rangeEnd });
+                else {
+                    res.status(500).json({ success: false, message: result.message || "Failed to retrieve bookings." });
                 }
-                // If "all" is selected, no extra filtering is applied
-                const bookings = yield query.getMany();
-                if (!bookings.length) {
-                    res.status(404).json({ success: false, message: "Not Found: No bookings found for the selected filter." });
-                    return;
-                }
-                res.status(200).json({ success: true, message: "Bookings retrieved successfully.", data: bookings });
             }
             catch (error) {
-                console.error("Error fetching bookings by date range:", error);
-                res.status(500).json({ success: false, message: "Internal Server Error: An unexpected error occurred." });
+                console.error("Error in getBookingsByDateRange:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
+            }
+        });
+    }
+    /**
+     * Check for duplicate bookings in a specific time range
+     * @route GET /api/bookings/check-duplicates
+     * @access Private (d Users)
+     */
+    static checkDuplicateBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { venueId, startDate, endDate, startTime, endTime } = req.query;
+                if (!req.user || !req.user.userId) {
+                    res.status(401).json({ success: false, message: "Unauthorized: Authentication required." });
+                    return;
+                }
+                if (!venueId || !startDate || !endDate) {
+                    res.status(400).json({ success: false, message: "Venue ID, start date, and end date are required." });
+                    return;
+                }
+                if (!this.UUID_REGEX.test(venueId)) {
+                    res.status(400).json({ success: false, message: "Invalid venue ID format." });
+                    return;
+                }
+                const parsedStartDate = new Date(startDate);
+                const parsedEndDate = new Date(endDate);
+                if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+                    res.status(400).json({ success: false, message: "Invalid date format." });
+                    return;
+                }
+                if (parsedStartDate > parsedEndDate) {
+                    res.status(400).json({ success: false, message: "Start date cannot be after end date." });
+                    return;
+                }
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.checkDuplicateBookings(venueId, parsedStartDate, parsedEndDate, startTime, endTime);
+                if (result.success) {
+                    res.status(200).json({ success: true, message: "No conflicting bookings found.", data: [] });
+                }
+                else {
+                    res.status(200).json({
+                        success: false,
+                        message: result.message || "Conflicting bookings found.",
+                        data: result.conflicts || [],
+                    });
+                }
+            }
+            catch (error) {
+                console.error("Error in checkDuplicateBookings:", error);
+                res.status(500).json({ success: false, message: "Internal Server Error." });
             }
         });
     }
@@ -733,10 +654,7 @@ class VenueBookingController {
      */
     static methodNotAllowed(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            res.status(405).json({
-                success: false,
-                message: 'Method Not Allowed: This HTTP method is not supported for this endpoint.'
-            });
+            res.status(405).json({ success: false, message: "Method Not Allowed: This HTTP method is not supported for this endpoint." });
         });
     }
     /**
@@ -746,24 +664,19 @@ class VenueBookingController {
      */
     static unauthorized(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            res.status(401).json({
-                success: false,
-                message: 'Unauthorized: Authentication is required or has failed.'
-            });
+            res.status(401).json({ success: false, message: "Unauthorized: Authentication is required or has failed." });
         });
     }
     /**
      * Handle Forbidden
      * @route Any route requiring specific permissions
-     * @access Private (Authenticated Users)
+     * @access Private (d Users)
      */
     static forbidden(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            res.status(403).json({
-                success: false,
-                message: 'Forbidden: You do not have permission to perform this action.'
-            });
+            res.status(403).json({ success: false, message: "Forbidden: You do not have permission to perform this action." });
         });
     }
 }
 exports.VenueBookingController = VenueBookingController;
+VenueBookingController.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
