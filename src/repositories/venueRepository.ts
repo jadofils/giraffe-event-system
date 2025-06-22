@@ -5,6 +5,7 @@ import { User } from "../models/User";
 import { Venue } from "../models/Venue";
 import { VenueBooking } from "../models/VenueBooking";
 import { CacheService } from "../services/CacheService";
+import { Request, Response } from "express";
 
 export class VenueRepository {
   private static readonly CACHE_PREFIX = "venue:";
@@ -783,6 +784,5 @@ export class VenueRepository {
     }
   }
 
-
-  
 }
+

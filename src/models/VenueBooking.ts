@@ -72,11 +72,13 @@ export class VenueBooking {
 
   @Column({ nullable: true })
   notes?: string;
-
+@ManyToOne(() => Event, (event) => event.venueBookings) // This now correctly points to the new property in Event
+@JoinColumn({ name: 'eventId' })
+event!: Event;
   // Relationships
-  @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
-  @JoinColumn({ name: 'venueId' })
-  venue!: Venue;
+ @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
+@JoinColumn({ name: 'venueId' })
+venue!: Venue;
 
   @ManyToOne(() => User, (user) => user.bookings, { nullable: false })
   @JoinColumn({ name: 'userId' })
@@ -90,8 +92,7 @@ export class VenueBooking {
   @JoinColumn({ name: 'venueInvoiceId' })
   venueInvoice?: VenueInvoice;
 
-  @ManyToMany(() => Event, (event) => event.venueBookings)
-  events!: Event[];
+
 
   @CreateDateColumn()
   createdAt!: Date;

@@ -1,3 +1,5 @@
+import { VenueStatus } from "../models/Venue";
+
 export class VenueInterface {
   venueId!: string;
   venueName!: string;
@@ -15,6 +17,7 @@ export class VenueInterface {
   contactEmail?: string;
   contactPhone?: string;
   websiteURL?: string;
+  status:VenueStatus = VenueStatus.PENDING;
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;

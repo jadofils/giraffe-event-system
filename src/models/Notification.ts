@@ -1,5 +1,6 @@
 // src/entity/Notification.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Venue } from './Venue';
 import {
   IsUUID,
   IsNotEmpty,
@@ -23,7 +24,15 @@ export class Notification {
 @IsOptional()
 @IsUUID('4', { message: 'eventId must be a valid UUID' })
 eventId!: string | null;
+// Venue relationship
+  @Column({ type: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID('4', { message: 'venueId must be a valid UUID' })
+  venueId?: string | null;
 
+  @ManyToOne(() => Venue, (venue) => venue.notifications, { nullable: true })
+  @JoinColumn({ name: 'venueId' })
+  venue?: Venue;
   @Column()
   @IsNotEmpty({ message: 'message is required' })
   @Length(1, 1000, {
@@ -42,3 +51,4 @@ eventId!: string | null;
   @IsBoolean({ message: 'isRead must be a boolean value' })
   isRead!: boolean;
 }
+

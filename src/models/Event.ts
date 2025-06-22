@@ -137,14 +137,8 @@ export class Event {
   @Length(0, 100, { message: 'Event category must be at most 100 characters' })
   eventCategory?: string;
 
-  @ManyToMany(() => VenueBooking, (venueBooking) => venueBooking.events)
-  @JoinTable({
-    name: 'event_venue_bookings',
-    joinColumn: { name: 'eventId', referencedColumnName: 'eventId' },
-    inverseJoinColumn: { name: 'bookingId', referencedColumnName: 'bookingId' },
-  })
-  venueBookings!: VenueBooking[];
-
+@OneToMany(() => VenueBooking, (venueBooking) => venueBooking.event)
+venueBookings!: VenueBooking[];
   @OneToMany(() => Registration, (registration) => registration.event, { cascade: false })
   registrations!: Registration[];
 

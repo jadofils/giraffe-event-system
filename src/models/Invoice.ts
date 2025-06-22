@@ -12,6 +12,7 @@ import { Event } from './Event';
 import { Payment } from './Payment';
 import { Registration } from './Registration';
 import { InstallmentPlan } from './InstallmentPlan';
+import { Venue } from './Venue';
 
 @Entity('invoices')
 export class Invoice {
@@ -63,6 +64,15 @@ export class Invoice {
     @ManyToOne(() => User, user => user.invoices) // Assuming 'invoices' property exists on User entity
     @JoinColumn({ name: 'userId' })
     user?: User;
+
+    @Column({ type: 'uuid', nullable: true })
+    @IsOptional()
+    @IsUUID()
+    venueId?: string | null;
+
+    @ManyToOne(() => Venue, (venue) => venue.invoices, { nullable: true })
+    @JoinColumn({ name: 'venueId' })
+    venue?: Venue;
 
     @OneToMany(() => Payment, payment => payment.invoice)
     payments?: Payment[];

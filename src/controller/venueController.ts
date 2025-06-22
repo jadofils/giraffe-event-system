@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response} from "express";
 
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
@@ -6,26 +6,54 @@ import { VenueRepository } from "../repositories/venueRepository";
 import { VenueResourceRepository } from "../repositories/VenueResourceRepository";
 
 export class VenueController {
-  // Create a single venue
+  // Create a single venue or multiple venues
   static async create(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
+    const body = req.body;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required." });
+      return;
+    }
+
+    // If body is an array, handle multiple creation
+    if (Array.isArray(body)) {
+      if (body.length === 0) {
+        res.status(400).json({ success: false, message: "Venue array cannot be empty." });
+        return;
+      }
+      // Set managerId from token for each venue
+      const venuesData = body.map((venue: any) => ({ ...venue, managerId: userId }));
+      try {
+        const createResult = await VenueRepository.createMultiple(venuesData);
+        res.status(createResult.success ? 201 : 207).json({
+          success: createResult.success,
+          message: createResult.success
+            ? "All venues created successfully."
+            : "Some venues failed to create.",
+          data: createResult.venues,
+          errors: createResult.errors,
+        });
+      } catch (err) {
+        console.error("Error creating multiple venues:", err);
+        res.status(500).json({
+          success: false,
+          message: "Failed to create venues due to a server error.",
+        });
+      }
+      return;
+    }
+
+    // Otherwise, handle single creation
     const {
       venueName,
       capacity,
       location,
       amount,
-      managerId,
       latitude,
       longitude,
       googleMapsLink,
-    }: Partial<VenueInterface> = req.body;
-
-    if (!userId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
+    }: Partial<VenueInterface> = body;
 
     if (!venueName || !capacity || !location || !amount) {
       res.status(400).json({
@@ -41,7 +69,7 @@ export class VenueController {
         capacity,
         location,
         amount,
-        managerId,
+        managerId: userId, // Always set from token
         latitude,
         longitude,
         googleMapsLink,
@@ -71,45 +99,6 @@ export class VenueController {
       res.status(500).json({
         success: false,
         message: "Failed to create venue due to a server error.",
-      });
-    }
-  }
-
-  // Create multiple venues
-  static async createMultiple(req: Request, res: Response): Promise<void> {
-    const userId = req.user?.userId;
-    const venuesData: Partial<VenueInterface>[] = req.body.venues;
-
-    if (!userId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-
-    if (!venuesData || !Array.isArray(venuesData) || venuesData.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "An array of venue data is required.",
-      });
-      return;
-    }
-
-    try {
-      const createResult = await VenueRepository.createMultiple(venuesData);
-      res.status(createResult.success ? 201 : 207).json({
-        success: createResult.success,
-        message: createResult.success
-          ? "All venues created successfully."
-          : "Some venues failed to create.",
-        data: createResult.venues,
-        errors: createResult.errors,
-      });
-    } catch (err) {
-      console.error("Error creating multiple venues:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to create venues due to a server error.",
       });
     }
   }
@@ -911,4 +900,7 @@ export class VenueController {
         });
     }
   }
+
+
+  
 }

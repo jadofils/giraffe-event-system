@@ -1,8 +1,8 @@
 import { DataSource } from "typeorm";
-import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
-import { SeederFactoryManager } from "typeorm-extension";
-import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
-import { PermissionSeeder } from "../seeds/PermissionSeeder";
+// import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
+// import { SeederFactoryManager } from "typeorm-extension";
+// import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
+// import { PermissionSeeder } from "../seeds/PermissionSeeder";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -22,7 +22,7 @@ export const AppDataSource = new DataSource({
 });
 
 // Track if seeding has been completed
-let isSeedingCompleted = false;
+// let isSeedingCompleted = false;
 
 // Modified initialization function
 export const initializeDatabase = async (): Promise<void> => {
@@ -32,29 +32,29 @@ export const initializeDatabase = async (): Promise<void> => {
      // console.log("Database connection established!");
 
       // Only run seeding if it hasn't been completed yet
-      if (!isSeedingCompleted) {
+      // if (!isSeedingCompleted) {
       //  console.log("\n🌱 Starting database seeding process...");
 
         // Seed permissions first
-        console.log("🔐 Seeding permissions...");
-        await PermissionSeeder.seed();
+        // console.log("🔐 Seeding permissions...");
+        // await PermissionSeeder.seed();
 
         // Seed admin role (with drop logic)
-        await seedAdminRole();
+        // await seedAdminRole();
 
-        await seedDefaultRoles();
-        await runSeeders();
+        // await seedDefaultRoles();
+        // await runSeeders();
        // console.log("Seeding admin role with all permissions...");
-        await AdminRoleSeeder.seed();
+        // await AdminRoleSeeder.seed();
         //console.log("Admin role seeding completed!");
-        isSeedingCompleted = true;
+        // isSeedingCompleted = true;
         // console.log("\n✅ Database seeding completed successfully!");
         // console.log(
         //   "📊 Database is ready for use with all required roles and organizations."
         // );
-      } else {
+      // } else {
         //console.log("\n✅ Database already seeded - skipping seeding process.");
-      }
+      // }
     }
   } catch (error) {
     //console.error("Error during database initialization:", error);
@@ -63,58 +63,57 @@ export const initializeDatabase = async (): Promise<void> => {
 };
 
 // Function to run all seeders
-async function runSeeders() {
-  try {
-    const seeder = new IndependentOrganizationSeeder();
-    const factoryManager = new SeederFactoryManager();
-
-    // Run the independent organization seeder
-    await seeder.run(AppDataSource, factoryManager);
-
-   // console.log("Database seeding completed!");
-  } catch (error) {
-   // console.error("Error during database seeding:", error);
-    throw error; // Re-throw to handle it in the application
-  }
-}
+// async function runSeeders() {
+//   try {
+//     const seeder = new IndependentOrganizationSeeder();
+//     const factoryManager = new SeederFactoryManager();
+//
+//     // Run the independent organization seeder
+//     await seeder.run(AppDataSource, factoryManager);
+//
+//    // console.log("Database seeding completed!");
+//   } catch (error) {
+//    // console.error("Error during database seeding:", error);
+//     throw error; // Re-throw to handle it in the application
+//   }
+// }
 
 // Function to seed default roles
-async function seedDefaultRoles() {
-  try {
-    const roleRepository = AppDataSource.getRepository("Role");
-    // No default roles to seed
-  } catch (error) {
-    //console.error("Error seeding default roles:", error);
-    throw error;
-  }
-}
+// async function seedDefaultRoles() {
+//   try {
+//     const roleRepository = AppDataSource.getRepository("Role");
+//     // No default roles to seed
+//   } catch (error) {
+//     //console.error("Error seeding default roles:", error);
+//     throw error;
+//   }
+// }
 
 // Export a function to check if seeding is completed
-export const isDatabaseSeeded = (): boolean => {
-  return isSeedingCompleted;
-};
+// export const isDatabaseSeeded = (): boolean => {
+//   return isSeedingCompleted;
+// };
 
-
-async function seedAdminRole() {
-  const roleRepository = AppDataSource.getRepository("Role");
-  // Check if ADMIN role exists
-  const adminExists = await roleRepository.findOne({
-    where: { roleName: "ADMIN" },
-  });
-  if (adminExists) {
-  //  console.log("✅ 'ADMIN' role already exists. No deletion performed.");
-  //  console.log(
-  //     "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
-  //   );
-    return;
-  }
-
-  // Create the ADMIN role
-  const adminRole = roleRepository.create({
-    roleName: "ADMIN",
-    permissions: ["read:all", "write:all", "delete:all"],
-    description: "Administrator role",
-  });
-  await roleRepository.save(adminRole);
-  console.log("🎉 'ADMIN' role created successfully!");
-}
+// async function seedAdminRole() {
+//   const roleRepository = AppDataSource.getRepository("Role");
+//   // Check if ADMIN role exists
+//   const adminExists = await roleRepository.findOne({
+//     where: { roleName: "ADMIN" },
+//   });
+//   if (adminExists) {
+//   //  console.log("✅ 'ADMIN' role already exists. No deletion performed.");
+//   //  console.log(
+//   //     "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
+//   //   );
+//     return;
+//   }
+//
+//   // Create the ADMIN role
+//   const adminRole = roleRepository.create({
+//     roleName: "ADMIN",
+//     permissions: ["read:all", "write:all", "delete:all"],
+//     description: "Administrator role",
+//   });
+//   await roleRepository.save(adminRole);
+//   console.log("🎉 'ADMIN' role created successfully!");
+// }

@@ -24,6 +24,7 @@ export class EventInterface {
   imageURL?: string;
   organizerId!: string;
   organizationId!: string;
+  venueOrganizationId?: string;
   venueId!: string;
   organizer?: UserInterface;
   venue?: VenueInterface;
@@ -54,6 +55,7 @@ export class EventInterface {
       imageURL: data.imageURL,
       organizerId: data.organizerId || '',
       organizationId: data.organizationId || '',
+      venueOrganizationId: data.venueOrganizationId,
       venueId: data.venueId || '',
       organizer: data.organizer,
       venue: data.venue,
