@@ -133,6 +133,19 @@ export class VenueRepository {
   // Alias for getById to match EventController expectations
   static async findById(id: string): Promise<Venue | null> {
     const result = await this.getById(id);
+    if (!result.success) {
+      console.error("Error finding venue by ID:", result.message);
+      return null;
+    }
+    //eager load the data if it exists to the reource
+    if (result.data) {
+      const venueResourceRepo = AppDataSource.getRepository("VenueResource");
+      const resources = await venueResourceRepo.find({
+        where: { venue: { venueId: result.data.venueId } },
+        relations: ["resource"]
+      });
+      result.data.resources = resources.map((vr) => vr.resource);
+    }
     return result.success && result.data ? result.data : null;
   }
 
@@ -185,7 +198,7 @@ export class VenueRepository {
         async () => {
           return await AppDataSource.getRepository(Venue).find({
             where: { managerId: managerId, deletedAt: IsNull() },
-            relations: ["manager", "manager.role"],
+            relations: ["manager", "manager.role","resources"],
             order: { venueName: "ASC" },
           });
         },

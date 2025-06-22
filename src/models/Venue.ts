@@ -153,6 +153,9 @@ bookings!: VenueBooking[];
   @OneToMany(() => VenueResource, (venueResource) => venueResource.venue)
   resources!: VenueResource[];
 
+  // For API response: list of Resource entities
+  resourceList?: import("./Resources").Resource[];
+
   // Feedbacks (ensure Feedback entity exists and is related to Venue)
   @OneToMany(() => Feedback, (feedback) => feedback.venue)
   feedbacks!: Feedback[];

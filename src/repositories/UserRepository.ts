@@ -233,17 +233,16 @@ export class UserRepository {
             "updatedAt",
             "deletedAt",
           ],
-          relations: [
-            "role",
-            "role.permissions",
-            "organizations",
-            "venues",
-            "venues.bookings",
-            "venues.resources",
-            "venues.feedbacks",
-           "registrations",
-           
-          ],
+       relations: [
+    "role",
+    "role.permissions",
+    "organizations",
+    "venues",             // <--- This loads the Venues directly managed or associated with the User
+    "venues.bookings",    // <--- This loads the VenueBookings for each of those Venues
+    "venues.resources",   // <--- This loads the VenueResources for each of those Venues
+    "venues.feedbacks",   // <--- This loads the Feedbacks for each of those Venues
+    "registrations",      // <--- This loads the Registrations made by the user
+]
         });
 
         if (!user) {
