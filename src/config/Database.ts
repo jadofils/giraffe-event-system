@@ -1,23 +1,62 @@
 import { DataSource } from "typeorm";
-// import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
-// import { SeederFactoryManager } from "typeorm-extension";
-// import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
-// import { PermissionSeeder } from "../seeds/PermissionSeeder";
+import { Role } from "../models/Role";
+import { User } from "../models/User";
+import { Venue } from "../models/Venue";
+import { TicketType } from "../models/TicketType";
+import { Event } from "../models/Event";
+import { Resource } from "../models/Resources";
+import { VenueResource } from "../models/VenueResource";
+import { EventResource } from "../models/EventResource";
+import { Feedback } from "../models/Feedback";
+import { Permission } from "../models/Permission";
+import { VenuePayment } from "../models/VenuePayment";
+import { Notification } from "../models/Notification";
+import { Organization } from "../models/Organization";
+import { Registration } from "../models/Registration";
+import { Payment } from "../models/Payment";
+import { Invoice } from "../models/Invoice";
+import { InstallmentPlan } from "../models/InstallmentPlan";
+import { Budget } from "../models/Budget";
+import { VenueBooking } from "../models/VenueBooking";
+import { VenueInvoice } from "../models/VenueInvoice";
+
+// Determine if we are in production
+const isProduction = process.env.NODE_ENV === "production";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DB_URL,
   synchronize: true,
   logging: false,
-  entities: ["src/models/**/*.ts"],
-  migrations: ["src/models/migrations/*.ts"],
+  entities: [
+    User,
+    Venue,
+    TicketType,
+    Event,
+    Resource,
+    VenueResource,
+    EventResource,
+    Feedback,
+    Role,
+    Permission,
+    VenuePayment,
+    Notification,
+    Organization,
+    Registration,
+    Payment,
+    Invoice,
+    InstallmentPlan,
+    Budget,
+    VenueBooking,
+    VenueInvoice,
+  ],
+  migrations: [
+    isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",
+  ],
   extra: {
     connectionTimeoutMillis: 30000,
   },
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: true }
-      : false, // Adjust SSL for development
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
   schema: "public",
 });
 
@@ -29,32 +68,7 @@ export const initializeDatabase = async (): Promise<void> => {
   try {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
-     // console.log("Database connection established!");
-
-      // Only run seeding if it hasn't been completed yet
-      // if (!isSeedingCompleted) {
-      //  console.log("\n🌱 Starting database seeding process...");
-
-        // Seed permissions first
-        // console.log("🔐 Seeding permissions...");
-        // await PermissionSeeder.seed();
-
-        // Seed admin role (with drop logic)
-        // await seedAdminRole();
-
-        // await seedDefaultRoles();
-        // await runSeeders();
-       // console.log("Seeding admin role with all permissions...");
-        // await AdminRoleSeeder.seed();
-        //console.log("Admin role seeding completed!");
-        // isSeedingCompleted = true;
-        // console.log("\n✅ Database seeding completed successfully!");
-        // console.log(
-        //   "📊 Database is ready for use with all required roles and organizations."
-        // );
-      // } else {
-        //console.log("\n✅ Database already seeded - skipping seeding process.");
-      // }
+  
     }
   } catch (error) {
     //console.error("Error during database initialization:", error);
@@ -62,58 +76,3 @@ export const initializeDatabase = async (): Promise<void> => {
   }
 };
 
-// Function to run all seeders
-// async function runSeeders() {
-//   try {
-//     const seeder = new IndependentOrganizationSeeder();
-//     const factoryManager = new SeederFactoryManager();
-//
-//     // Run the independent organization seeder
-//     await seeder.run(AppDataSource, factoryManager);
-//
-//    // console.log("Database seeding completed!");
-//   } catch (error) {
-//    // console.error("Error during database seeding:", error);
-//     throw error; // Re-throw to handle it in the application
-//   }
-// }
-
-// Function to seed default roles
-// async function seedDefaultRoles() {
-//   try {
-//     const roleRepository = AppDataSource.getRepository("Role");
-//     // No default roles to seed
-//   } catch (error) {
-//     //console.error("Error seeding default roles:", error);
-//     throw error;
-//   }
-// }
-
-// Export a function to check if seeding is completed
-// export const isDatabaseSeeded = (): boolean => {
-//   return isSeedingCompleted;
-// };
-
-// async function seedAdminRole() {
-//   const roleRepository = AppDataSource.getRepository("Role");
-//   // Check if ADMIN role exists
-//   const adminExists = await roleRepository.findOne({
-//     where: { roleName: "ADMIN" },
-//   });
-//   if (adminExists) {
-//   //  console.log("✅ 'ADMIN' role already exists. No deletion performed.");
-//   //  console.log(
-//   //     "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
-//   //   );
-//     return;
-//   }
-//
-//   // Create the ADMIN role
-//   const adminRole = roleRepository.create({
-//     roleName: "ADMIN",
-//     permissions: ["read:all", "write:all", "delete:all"],
-//     description: "Administrator role",
-//   });
-//   await roleRepository.save(adminRole);
-//   console.log("🎉 'ADMIN' role created successfully!");
-// }

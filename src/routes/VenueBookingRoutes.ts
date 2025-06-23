@@ -1,10 +1,10 @@
 import { Router } from "express";
 
-import {  } from "../middlewares/AuthMiddleware";
+import { authenticate } from "../middlewares/AuthMiddleware";
 import { VenueBookingController } from "../controller/VenueBookingController";
 
 const router = Router();
-
+router.use(authenticate); // This is correct
 router.post("/bookings", VenueBookingController.createVenueBooking);
 router.post("/bookings/bulk", VenueBookingController.createMultipleVenueBookings);
 router.get("/bookings", VenueBookingController.getAllVenueBookings);
