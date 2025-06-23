@@ -180,8 +180,7 @@ export class VenueController {
     }
   }
 
-  // Update venue
-  static async update(req: Request, res: Response): Promise<void> {
+static async update(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const userId = req.user?.userId;
     const {
@@ -193,56 +192,78 @@ export class VenueController {
       latitude,
       longitude,
       googleMapsLink,
+      amenities,
+      venueType,
+      contactPerson,
+      contactEmail,
+      contactPhone,
+      websiteURL,
+      status,
     }: Partial<VenueInterface> = req.body;
 
     if (!id) {
-      res
-        .status(400)
-        .json({ success: false, message: "Venue ID is required." });
+      res.status(400).json({ success: false, message: 'Venue ID is required.' });
       return;
     }
 
     if (!userId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
+      res.status(401).json({ success: false, message: 'Authentication required.' });
+      return;
+    }
+
+    // Log request body for debugging
+    console.log('Update request body:', req.body);
+
+    // Construct update data, omitting undefined fields
+    const updateData: Partial<VenueInterface> = {};
+    if (venueName !== undefined) updateData.venueName = venueName;
+    if (capacity !== undefined) updateData.capacity = capacity;
+    if (location !== undefined) updateData.location = location;
+    if (amount !== undefined) updateData.amount = amount;
+    if (managerId !== undefined) updateData.managerId = managerId;
+    if (latitude !== undefined) updateData.latitude = latitude;
+    if (longitude !== undefined) updateData.longitude = longitude;
+    if (googleMapsLink !== undefined) updateData.googleMapsLink = googleMapsLink;
+    if (amenities !== undefined) updateData.amenities = amenities;
+    if (venueType !== undefined) updateData.venueType = venueType;
+    if (contactPerson !== undefined) updateData.contactPerson = contactPerson;
+    if (contactEmail !== undefined) updateData.contactEmail = contactEmail;
+    if (contactPhone !== undefined) updateData.contactPhone = contactPhone;
+    if (websiteURL !== undefined) updateData.websiteURL = websiteURL;
+    if (status !== undefined) updateData.status = status;
+
+    // Validate update data
+    const validationErrors = VenueInterface.validate(updateData);
+    if (validationErrors.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: `Validation errors: ${validationErrors.join(', ')}`,
+      });
       return;
     }
 
     try {
-      const updateData: Partial<VenueInterface> = {
-        venueName,
-        capacity,
-        location,
-        amount,
-        managerId,
-        latitude,
-        longitude,
-        googleMapsLink,
-      };
-
       const updateResult = await VenueRepository.update(id, updateData);
       if (updateResult.success && updateResult.data) {
         res.status(200).json({
           success: true,
-          message: "Venue updated successfully.",
+          message: 'Venue updated successfully.',
           data: updateResult.data,
         });
       } else {
         res.status(404).json({
           success: false,
-          message: updateResult.message || "Venue not found.",
+          message: updateResult.message || 'Venue not found.',
         });
       }
     } catch (err) {
-      console.error("Error updating venue:", err);
+      console.error('Error updating venue:', err);
       res.status(500).json({
         success: false,
-        message: "Failed to update venue due to a server error.",
+        message: 'Failed to update venue due to a server error.',
       });
     }
   }
-
   // Update venue manager
   static async updateVenueManager(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
@@ -901,6 +922,41 @@ export class VenueController {
     }
   }
 
+  static async checkAvailability(req: Request, res: Response): Promise<void> {
+    try {
+      const {
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        bufferMinutes = 30,
+      } = req.body;
 
+      // Validate required parameters
+      if (!startDate || !endDate || !startTime || !endTime) {
+        res.status(400).json({
+          success: false,
+          message: 'Missing required parameters: startDate, endDate, startTime, or endTime',
+        });
+        return;
+      }
+
+      const result = await VenueRepository.findAvailableVenues(
+        new Date(startDate as string),
+        new Date(endDate as string),
+        startTime as string,
+        endTime as string,
+        parseInt(bufferMinutes as string, 10),
+      );
+
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Controller error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error while checking venue availability.',
+      });
+    }
+  }
   
 }

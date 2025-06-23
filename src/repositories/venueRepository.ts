@@ -2,8 +2,9 @@ import { IsNull, Not } from "typeorm";
 import { AppDataSource } from "../config/Database";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { User } from "../models/User";
-import { Venue } from "../models/Venue";
+import { Venue, VenueStatus } from "../models/Venue";
 import { VenueBooking } from "../models/VenueBooking";
+import { Event as AppEvent } from "../models/Event";
 import { CacheService } from "../services/CacheService";
 import { Request, Response } from "express";
 
@@ -206,80 +207,101 @@ export class VenueRepository {
       };
     }
   }
-
-  // Update venue
-  static async update(
+static async update(
     id: string,
     data: Partial<VenueInterface>
-  ): Promise<{ success: boolean; data?: Venue; message?: string }> {
+  ): Promise<{ success: boolean; data?: Venue; message: string }> {
     if (!id) {
-      return { success: false, message: "Venue ID is required." };
+      return { success: false, message: 'Venue ID is required.' };
     }
 
+    // Validate input data
+    const validationErrors = VenueInterface.validate(data);
+    if (validationErrors.length > 0) {
+      return {
+        success: false,
+        message: `Validation errors: ${validationErrors.join(', ')}`,
+      };
+    }
+
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-      const repo = AppDataSource.getRepository(Venue);
+      const repo = queryRunner.manager.getRepository(Venue);
       const venue = await repo.findOne({
         where: { venueId: id, deletedAt: IsNull() },
       });
 
       if (!venue) {
-        return { success: false, message: "Venue not found or deleted." };
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: 'Venue not found or deleted.' };
       }
 
-      if (
-        (data.venueName && data.venueName !== venue.venueName) ||
-        (data.location && data.location !== venue.location)
-      ) {
-        const existingVenue = await repo.findOne({
+      // Log input data for debugging
+      console.log('Update input data:', data);
+
+      // Check for duplicate name and location
+      const nameChanged = data.venueName && data.venueName !== venue.venueName;
+      const locationChanged = data.location && data.location !== venue.location;
+
+      if (nameChanged && locationChanged) {
+        const existing = await repo.findOne({
           where: {
-            venueName: data.venueName ?? venue.venueName,
-            location: data.location ?? venue.location,
+            venueName: data.venueName,
+            location: data.location,
+            deletedAt: IsNull(),
           },
         });
-        if (existingVenue && existingVenue.venueId !== id) {
+
+        if (existing && existing.venueId !== id) {
+          await queryRunner.rollbackTransaction();
           return {
             success: false,
-            message:
-              "Another venue with the same name and location already exists.",
+            message: 'Another venue with the same name and location already exists.',
           };
         }
       }
 
-      repo.merge(venue, {
-        venueName: data.venueName ?? venue.venueName,
-        capacity: data.capacity ?? venue.capacity,
-        location: data.location ?? venue.location,
-        amount: data.amount ?? venue.amount,
-        managerId: data.managerId ?? venue.managerId,
-        latitude: data.latitude ?? venue.latitude,
-        longitude: data.longitude ?? venue.longitude,
-        googleMapsLink: data.googleMapsLink ?? venue.googleMapsLink,
+      // Merge changes
+      const mergedVenue = repo.merge(venue, {
+        ...data,
+        updatedAt: new Date(), // Explicitly set updatedAt
       });
 
-      const updatedVenue = await repo.save(venue);
+      // Log merged entity for debugging
+      console.log('Merged venue:', mergedVenue);
 
-      // Invalidate caches
+      // Save changes
+      const updatedVenue = await repo.save(mergedVenue);
+
+      // Invalidate cache
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}all`,
         `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}manager:${venue.managerId}`,
         `${this.CACHE_PREFIX}manager:${updatedVenue.managerId}`,
         `${this.CACHE_PREFIX}search:*`,
       ]);
 
+      await queryRunner.commitTransaction();
+
       return {
         success: true,
         data: updatedVenue,
-        message: "Venue updated successfully",
+        message: 'Venue updated successfully.',
       };
     } catch (error) {
-      console.error("Error updating venue:", error);
+      await queryRunner.rollbackTransaction();
+      console.error('Error updating venue:', error);
       return {
         success: false,
         message: `Failed to update venue: ${
-          error instanceof Error ? error.message : "Unknown error"
+          error instanceof Error ? error.message : 'Unknown error'
         }`,
       };
+    } finally {
+      await queryRunner.release();
     }
   }
 
@@ -779,6 +801,207 @@ export class VenueRepository {
         success: false,
         message: `Failed to fetch resources: ${
           error instanceof Error ? error.message : "Unknown error"
+        }`,
+      };
+    }
+  }
+
+
+  static async findAvailableVenues(
+    startDate: Date,
+    endDate: Date,
+    startTime: string,
+    endTime: string,
+    bufferMinutes: number = 30
+  ): Promise<{
+    success: boolean;
+    data?: { availableVenues: Venue[]; isAvailableInFuture: boolean; conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[]; nextAvailableTime?: string };
+    message?: string;
+  }> {
+    const cacheKey = `${this.CACHE_PREFIX}available:${startDate.toISOString()}:${endDate.toISOString()}:${startTime}:${endTime}:${bufferMinutes}`;
+    
+    try {
+      // Combine date and time into full Date objects
+      const parseTime = (date: Date, time: string): Date => {
+        const [hours, minutes] = time.split(':').map(Number);
+        const newDate = new Date(date);
+        newDate.setHours(hours, minutes, 0, 0);
+        return newDate;
+      };
+
+      const eventStart = parseTime(startDate, startTime);
+      const eventEnd = parseTime(endDate, endTime);
+
+      // Validate input
+      if (eventEnd <= eventStart) {
+        return {
+          success: false,
+          message: 'End date/time must be after start date/time.',
+        };
+      }
+
+      // Use cache if available
+      type AvailableVenuesCacheType = {
+        availableVenues: Venue[];
+        isAvailableInFuture: boolean;
+        conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[];
+      };
+      let cachedResult = await CacheService.get<AvailableVenuesCacheType>(cacheKey);
+      if (!cachedResult) {
+        // Get all approved venues
+        const allVenues = await AppDataSource.getRepository(Venue).find({
+          where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
+          relations: ['manager'],
+        });
+
+        const availableVenues: Array<Venue & {
+          previousEvent?: {
+            startDate: string;
+            startTime: string;
+            endDate: string;
+            endTime: string;
+          };
+          nextAvailableTime: string;
+        }> = [];
+        const conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[] = [];
+
+        // Check each venue for availability
+        for (const venue of allVenues) {
+          const conflictingBookings = await AppDataSource.getRepository(VenueBooking)
+            .createQueryBuilder('booking')
+            .leftJoinAndSelect('booking.event', 'event')
+            .where('booking.venueId = :venueId', { venueId: venue.venueId })
+            .andWhere('booking.approvalStatus = :status', { status: 'approved' })
+            .andWhere(
+              '((event.startDate < :eventEnd AND event.endDate > :eventStart) OR ' +
+              '(event.startDate = :eventStart AND event.startTime <= :endTime AND event.endTime >= :startTime))',
+              {
+              eventStart,
+              eventEnd,
+              startTime: typeof startTime === 'string' ? startTime : String(startTime),
+              endTime: typeof endTime === 'string' ? endTime : String(endTime),
+              }
+            )
+            .getMany();
+
+          if (conflictingBookings.length === 0) {
+            // Find the latest event that ends before the requested start time
+            const previousBooking = await AppDataSource.getRepository(VenueBooking)
+              .createQueryBuilder('booking')
+              .leftJoinAndSelect('booking.event', 'event')
+              .where('booking.venueId = :venueId', { venueId: venue.venueId })
+              .andWhere('booking.approvalStatus = :status', { status: 'approved' })
+              .andWhere('((event.endDate < :eventStart) OR (event.endDate = :eventStart AND event.endTime < :startTime))', {
+                eventStart,
+                startTime: typeof startTime === 'string' ? startTime : String(startTime),
+              })
+              .orderBy('event.endDate', 'DESC')
+              .addOrderBy('event.endTime', 'DESC')
+              .getOne();
+
+            let previousEvent = undefined;
+            let nextAvailableTime = eventStart.toISOString();
+            if (previousBooking && previousBooking.event) {
+              previousEvent = {
+                startDate: previousBooking.event.startDate?.toISOString?.() || '',
+                startTime: previousBooking.event.startTime || '',
+                endDate: previousBooking.event.endDate?.toISOString?.() || '',
+                endTime: previousBooking.event.endTime || '',
+              };
+              // Calculate next available time: previous event's end + 15 minutes
+              let prevEndDate = previousBooking.event.endDate instanceof Date
+                ? new Date(previousBooking.event.endDate)
+                : new Date(previousBooking.event.endDate);
+              let [endHour, endMinute] = (previousBooking.event.endTime || '00:00').split(':').map(Number);
+              prevEndDate.setHours(endHour, endMinute, 0, 0);
+              prevEndDate = new Date(prevEndDate.getTime() + 15 * 60 * 1000); // add 15 minutes
+              nextAvailableTime = prevEndDate.toISOString();
+            }
+            availableVenues.push({
+              ...venue,
+              previousEvent,
+              nextAvailableTime,
+            });
+          } else {
+            conflictingVenues.push({
+              venue,
+              conflictingEvents: conflictingBookings.map((booking) => booking.event),
+            });
+          }
+        }
+
+        // Check future availability (e.g., 30 minutes after event start)
+        const futureTime = new Date(eventStart.getTime() + bufferMinutes * 60 * 1000);
+        const futureConflicts = await AppDataSource.getRepository(VenueBooking)
+          .createQueryBuilder('booking')
+          .leftJoin('booking.event', 'event')
+          .where('booking.approvalStatus = :status', { status: 'approved' })
+          .andWhere(
+            '((event.startDate < :futureTime AND event.endDate > :futureTime) OR ' +
+            '(event.startDate = :futureTime AND event.startTime <= :futureTimeStr AND event.endTime >= :futureTimeStr))',
+            { 
+            futureTime, 
+            futureTimeStr: futureTime.toISOString().substring(11, 16) // "HH:mm"
+            }
+          )
+          .getCount();
+
+        cachedResult = {
+          availableVenues,
+          isAvailableInFuture: futureConflicts === 0,
+          conflictingVenues,
+        };
+        await CacheService.set(cacheKey, cachedResult, this.CACHE_TTL);
+      }
+
+      let nextAvailableTime: string | undefined = undefined;
+      if (
+        cachedResult.availableVenues.length === 0 &&
+        cachedResult.isAvailableInFuture
+      ) {
+        // Find the soonest time after the requested slot when any venue is free
+        // Find the earliest end time among all conflicting events, add 15 minutes
+        let minEndDate: Date | null = null;
+        let minEndTime: string | null = null;
+        for (const conflict of cachedResult.conflictingVenues) {
+          for (const event of conflict.conflictingEvents) {
+            const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
+            const endTime = event.endTime || '00:00';
+            let eventEnd = new Date(endDate);
+            const [h, m] = endTime.split(':').map(Number);
+            eventEnd.setHours(h, m, 0, 0);
+            if (!minEndDate || eventEnd < minEndDate) {
+              minEndDate = eventEnd;
+              minEndTime = endTime;
+            }
+          }
+        }
+        if (minEndDate) {
+          // Add 15 minutes to the earliest end time
+          minEndDate = new Date(minEndDate.getTime() + 15 * 60 * 1000);
+          nextAvailableTime = minEndDate.toISOString();
+        } else {
+          // fallback: 15 minutes after requested end
+          const fallback = new Date(eventEnd.getTime() + 15 * 60 * 1000);
+          nextAvailableTime = fallback.toISOString();
+        }
+      }
+      return {
+        success: true,
+        data: {
+          ...cachedResult,
+          nextAvailableTime,
+        },
+        message: cachedResult.availableVenues.length
+          ? `${cachedResult.availableVenues.length} venue(s) available for the requested time slot.`
+          : 'No venues available for the requested time slot.',
+      };
+    } catch (error) {
+      console.error('Error finding available venues:', error);
+      return {
+        success: false,
+        message: `Failed to find available venues: ${
+          error instanceof Error ? error.message : 'Unknown error'
         }`,
       };
     }

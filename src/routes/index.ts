@@ -33,7 +33,7 @@ router.use("/resources", resourceRoutes);
 router.use("/venue", venueRoute); // This makes `/api/v1/venue/*` available
 router.use("/event", EventRoute);
 // Event Booking routes
-router.use("/event-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
+router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
 //routes for registration
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes);

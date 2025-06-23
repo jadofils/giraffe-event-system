@@ -13,6 +13,7 @@ import { Payment } from './Payment';
 import { Registration } from './Registration';
 import { InstallmentPlan } from './InstallmentPlan';
 import { Venue } from './Venue';
+import { VenueBooking } from './VenueBooking';
 
 @Entity('invoices')
 export class Invoice {
@@ -77,6 +78,8 @@ export class Invoice {
     @OneToMany(() => Payment, payment => payment.invoice)
     payments?: Payment[];
     
+      @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.invoice)
+  venueBookings?: VenueBooking[];
   @OneToMany(() => InstallmentPlan, plan => plan.invoice)
 installmentPlans!: InstallmentPlan[];
     @OneToOne(() => Registration, registration => registration.invoice, { nullable: true })

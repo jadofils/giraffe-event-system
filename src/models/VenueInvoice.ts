@@ -85,7 +85,7 @@ export class VenueInvoice {
   @JoinColumn({ name: 'organizationId' })
   organization?: Organization; // Optional relationship
 
-  @OneToMany(() => VenueBooking, venueBooking => venueBooking.venueInvoice)
+  @OneToMany(() => VenueBooking, venueBooking => venueBooking.venueInvoiceId)
   venueBookings!: VenueBooking[]; // An invoice can cover multiple venue bookings
 
   @OneToMany(() => VenuePayment, venuePayment => venuePayment.venueInvoice)

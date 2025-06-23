@@ -530,7 +530,7 @@ static async create(
       if (data.venueBookings && Array.isArray(data.venueBookings)) {
         const bookingIds = data.venueBookings.map((b: VenueBookingInterface) => b.bookingId).filter(Boolean);
         for (const bookingId of bookingIds) {
-          if (!UUID_REGEX.test(bookingId)) {
+          if (!bookingId || !UUID_REGEX.test(bookingId)) {
             return { success: false, message: `Invalid booking ID format: ${bookingId}` };
           }
         }
@@ -668,7 +668,7 @@ static async create(
     }
 
     for (const bookingId of bookingIds) {
-      if (!UUID_REGEX.test(bookingId)) {
+      if (!bookingId || !UUID_REGEX.test(bookingId)) {
         return { success: false, message: `Invalid booking ID format: ${bookingId}` };
       }
     }
@@ -708,7 +708,7 @@ static async create(
     }
 
     for (const bookingId of bookingIds) {
-      if (!UUID_REGEX.test(bookingId)) {
+      if (!bookingId || !UUID_REGEX.test(bookingId)) {
         return { success: false, message: `Invalid booking ID format: ${bookingId}` };
       }
     }
@@ -830,7 +830,7 @@ static async create(
         booking.userId = userId;
         booking.organizationId = organizationId;
         booking.eventId = eventId;
-        booking.totalAmountDue = data.totalAmountDue ?? venue.amount ?? 0;
+        booking.totalAmountDue = (data as any).totalAmountDue ?? venue.amount ?? 0;
         booking.venueInvoiceId = data.venueInvoiceId;
         booking.approvalStatus = ApprovalStatus.PENDING;
         booking.venue = venue;
@@ -889,7 +889,7 @@ static async create(
       return { success: false, message: "Invalid venue ID format" };
     }
 
-    if (data.userId && !UUID_REGEX.test(data.userId)) {
+    if (data.organizerId && !UUID_REGEX.test(data.organizerId)) {
       return { success: false, message: "Invalid user ID format" };
     }
 
@@ -906,9 +906,9 @@ static async create(
 
       repo.merge(booking, {
         venueId: data.venueId ?? booking.venueId,
-        userId: data.userId ?? booking.userId,
+        userId: data.organizerId ?? booking.userId,
         organizationId: data.organizationId ?? booking.organizationId,
-        totalAmountDue: data.totalAmountDue ?? booking.totalAmountDue,
+        totalAmountDue: (data as any).totalAmountDue ?? booking.totalAmountDue,
         venueInvoiceId: data.venueInvoiceId ?? booking.venueInvoiceId,
         approvalStatus: data.approvalStatus ?? ApprovalStatus.PENDING,
       });
