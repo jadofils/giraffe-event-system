@@ -1,30 +1,9 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  Index,
-  JoinColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
-  ManyToMany,
-} from 'typeorm';
-import {
-  IsUUID,
-  IsNotEmpty,
-  Length,
-  IsString,
-  IsEnum,
-  IsNumber,
-  Min,
-  IsOptional,
-} from 'class-validator';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Event } from './Event';
 import { Venue } from './Venue';
-import { Organization } from './Organization';
 import { User } from './User';
-import { VenueInvoice } from './VenueInvoice';
+import { Organization } from './Organization';
+import { Invoice } from './Invoice';
 
 export enum ApprovalStatus {
   PENDING = 'pending',
@@ -33,72 +12,59 @@ export enum ApprovalStatus {
 }
 
 @Entity('venue_bookings')
-@Index(['eventId', 'venueId'], { unique: false })
 export class VenueBooking {
   @PrimaryGeneratedColumn('uuid')
-  @IsUUID('4', { message: 'bookingId must be a valid UUID' })
   bookingId!: string;
 
-  @Column({ type: 'uuid' })
-  @IsUUID('4', { message: 'eventId must be a valid UUID' })
+  @Column('uuid')
+  @JoinColumn({ name: 'event_id' })
   eventId!: string;
 
-  @Column({ type: 'uuid' })
-  @IsUUID('4', { message: 'venueId must be a valid UUID' })
+  @ManyToOne(() => Event, (event) => event.venueBookings, { nullable: false })
+  event!: Event;
+
+  @Column('uuid')
+  @JoinColumn({ name: 'venue_id' })
   venueId!: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  @IsOptional()
-  @IsUUID('4', { message: 'organizationId must be a valid UUID' })
-  organizationId?: string;
+  @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
+  venue!: Venue;
 
-  @Column({ type: 'uuid' })
-  @IsUUID('4', { message: 'userId must be a valid UUID' })
+  @Column('uuid')
+  @JoinColumn({ name: 'user_id' })
   userId!: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00 })
-  @IsNumber({}, { message: 'totalAmountDue must be a number' })
-  @Min(0, { message: 'totalAmountDue cannot be negative' })
-  totalAmountDue!: number;
-
-  @Column({ type: 'uuid', nullable: true })
-  @IsOptional()
-  @IsUUID('4', { message: 'venueInvoiceId must be a valid UUID' })
-  venueInvoiceId?: string;
-
-  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.PENDING })
-  @IsEnum(ApprovalStatus, { message: 'Invalid approval status' })
-  approvalStatus!: ApprovalStatus;
-
-  @Column({ nullable: true })
-  notes?: string;
-@ManyToOne(() => Event, (event) => event.venueBookings) // This now correctly points to the new property in Event
-@JoinColumn({ name: 'eventId' })
-event!: Event;
-  // Relationships
- @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
-@JoinColumn({ name: 'venueId' })
-venue!: Venue;
-
-  @ManyToOne(() => User, (user) => user.bookings, { nullable: false })
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => User, { nullable: false })
   user!: User;
 
-  @ManyToOne(() => Organization, (organization) => organization.bookings, { nullable: true })
-  @JoinColumn({ name: 'organizationId' })
+  @Column('uuid', { nullable: true })
+  @JoinColumn({ name: 'organization_id' })
+  organizationId?: string;
+
+  @ManyToOne(() => Organization, { nullable: true })
   organization?: Organization;
 
-  @ManyToOne(() => VenueInvoice, (venueInvoice) => venueInvoice.venueBookings)
-  @JoinColumn({ name: 'venueInvoiceId' })
-  venueInvoice?: VenueInvoice;
+  @Column('uuid', { nullable: true })
+  @JoinColumn({ name: 'venue_invoice_id' })
+  venueInvoiceId?: string;
 
+  @ManyToOne(() => Invoice, (invoice) => invoice.venueBookings, { nullable: true })
+  invoice?: Invoice;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  totalAmountDue!: number;
+
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.PENDING })
+  approvalStatus!: ApprovalStatus;
+
+  @Column({ type: 'text', nullable: true })
+  notes?: string;
 
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt!: Date;
+  updatedAt?: Date;
 
   @DeleteDateColumn()
   deletedAt?: Date;

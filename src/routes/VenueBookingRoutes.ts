@@ -3,26 +3,33 @@ import { Router } from "express";
 import { authenticate } from "../middlewares/AuthMiddleware";
 import { VenueBookingController } from "../controller/VenueBookingController";
 
-const router = Router();
-router.use(authenticate); // This is correct
-router.post("/bookings", VenueBookingController.createVenueBooking);
-router.post("/bookings/bulk", VenueBookingController.createMultipleVenueBookings);
-router.get("/bookings", VenueBookingController.getAllVenueBookings);
-router.get("/bookings/:id", VenueBookingController.getVenueBookingById);
-router.put("/bookings/:id" , VenueBookingController.updateVenueBooking);
-router.patch("/bookings/:id/status", VenueBookingController.updateVenueBookingStatus);
-router.delete("/bookings/:id", VenueBookingController.deleteVenueBooking);
-router.get("/events/:eventId/bookings", VenueBookingController.getBookingsByEventId);
-router.get("/venues/:venueId/bookings", VenueBookingController.getBookingsByVenueId);
-router.get("/bookings/organizer", VenueBookingController.getBookingsByOrganizerId);
-router.get("/organizations/:organizationId/bookings", VenueBookingController.getBookingsByOrganizationId);
-router.get("/bookings/status/:status", VenueBookingController.getBookingsByStatus);
-router.get("/bookings/date-range", VenueBookingController.getBookingsByDateRange);
-router.get("/bookings/check-duplicates", VenueBookingController.checkDuplicateBookings);
+function venueBookingRouter(): Router {
+    const router = Router();
 
-// Error handlers
-//router.all("*", VenueBookingController.methodNotAllowed);
-router.get("/unauthorized", VenueBookingController.unauthorized);
-router.get("/forbidden", VenueBookingController.forbidden);
+    // Apply authentication middleware to all routes
+    router.use(authenticate);
 
-export default router;
+    // CRUD Routes
+    router.post('/', VenueBookingController.createBooking);
+    router.post('/bulk', VenueBookingController.createMultipleBookings);
+    router.get('/', VenueBookingController.getAllBookings);
+    router.get('/:id', VenueBookingController.getBookingById);
+    router.put('/:id', VenueBookingController.updateBooking);
+    router.delete('/:id', VenueBookingController.deleteBooking);
+    // Status Update Route
+    router.patch('/:id/status', VenueBookingController.updateBookingStatus);
+    // Query Routes
+    router.get('/event/:eventId', VenueBookingController.getBookingsByEventId);
+    router.get('/venue/:venueId', VenueBookingController.getBookingsByVenueId);
+    router.get('/organizer/:organizerId', VenueBookingController.getBookingsByOrganizerId);
+    router.get('/organization/:organizationId', VenueBookingController.getBookingsByOrganizationId);
+    router.get('/status/:status', VenueBookingController.getBookingsByStatus);
+    router.get('/date-range/:startDate/:endDate', VenueBookingController.getBookingsByDateRange);
+
+    // Total Amount Route
+    router.get('/total/:eventId', VenueBookingController.getTotalBookingAmountForEvent);
+
+    return router;
+}
+
+export default venueBookingRouter();

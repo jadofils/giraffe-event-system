@@ -1,7 +1,8 @@
+
 import { Router } from "express";
 import { VenueController } from "../controller/venueController";
 import { isAdmin } from "../middlewares/IsAdmin";
-import checkAbsenceRoutes from "./CheckAbsenceRoutes";
+// import checkAbsenceRoutes from "./CheckAbsenceRoutes";
 import { authenticate } from "../middlewares/AuthMiddleware";
 
 const router = Router();
@@ -21,6 +22,13 @@ router.get(":venueId/resources", authenticate, VenueController.getVenueResources
 router.post('/add-with-resources', authenticate, VenueController.createVenueWithResources);
 router.put("/update-manager/:id", authenticate, VenueController.updateVenueManager);
 router.put("/remove-manager/:id",authenticate, isAdmin, VenueController.removeVenueManager);
-router.use("/", checkAbsenceRoutes);
+
+
+router.post(
+  '/available-venues',
+  authenticate,
+  VenueController.checkAvailability
+);
+// router.use("/", checkAbsenceRoutes);
 
 export const venueRoute = router;

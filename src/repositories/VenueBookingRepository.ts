@@ -1,15 +1,17 @@
-import { AppDataSource } from "../config/Database";
-import { Repository, LessThanOrEqual, MoreThanOrEqual } from "typeorm";
-import { Event } from "../models/Event";
-import { Organization } from "../models/Organization";
-import { Venue } from "../models/Venue";
-import { User } from "../models/User";
-import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
-import { VenueBooking } from "../models/VenueBooking";
-import { CacheService } from "../services/CacheService";
+import { AppDataSource } from '../config/Database';
+import { Repository } from 'typeorm';
+import { Event } from '../models/Event';
+import { Organization } from '../models/Organization';
+import { Venue } from '../models/Venue';
+import { User } from '../models/User';
+import { VenueBookingInterface } from '../interfaces/VenueBookingInterface';
+import { ApprovalStatus, VenueBooking } from '../models/VenueBooking';
+import { CacheService } from '../services/CacheService';
+import { Invoice } from '../models/Invoice';
+import { CheckAbsenceService } from '../services/bookings/CheckAbsenceService';
 
 export class VenueBookingRepository {
-  private static readonly CACHE_PREFIX = "booking:";
+  private static readonly CACHE_PREFIX = 'booking:';
   private static readonly CACHE_TTL = 3600; // 1 hour, consistent with VenueRepository
 
   private static venueBookingRepository: Repository<VenueBooking>;
@@ -22,7 +24,7 @@ export class VenueBookingRepository {
   static getVenueBookingRepository(): Repository<VenueBooking> {
     if (!this.venueBookingRepository) {
       if (!AppDataSource.isInitialized) {
-        throw new Error("Database not initialized.");
+        throw new Error('Database not initialized.');
       }
       this.venueBookingRepository = AppDataSource.getRepository(VenueBooking);
     }
@@ -66,145 +68,147 @@ export class VenueBookingRepository {
     venueId: string,
     startDate: Date,
     endDate: Date,
-    startTime?: string,
-    endTime?: string,
+    startTime: string | undefined,
+    endTime: string | undefined,
     excludeBookingId?: string
   ): Promise<{ success: boolean; message?: string; conflicts?: VenueBooking[] }> {
     try {
       if (!venueId || !startDate || !endDate) {
-        return { success: false, message: "Venue ID, start date, and end date are required." };
+        return { success: false, message: 'Venue ID, start date, and end date are required.' };
       }
 
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return { success: false, message: "Invalid date format." };
+        return { success: false, message: 'Invalid date format.' };
       }
 
       if (startDate > endDate) {
-        return { success: false, message: "Start date cannot be after end date." };
+        return { success: false, message: 'Start date cannot be after end date.' };
       }
 
       const bookingRepo = this.getVenueBookingRepository();
-      const query = bookingRepo.createQueryBuilder("booking")
-        .leftJoinAndSelect("booking.event", "event")
-        .leftJoinAndSelect("booking.venue", "venue")
-        .where("booking.venueId = :venueId", { venueId })
-        .andWhere("booking.approvalStatus = :status", { status: "approved" });
+      const query = bookingRepo
+        .createQueryBuilder('booking')
+        .leftJoinAndSelect('booking.event', 'event')
+        .where('booking.venueId = :venueId', { venueId })
+        .andWhere('booking.approvalStatus = :status', { status: 'approved' })
+        .andWhere(
+          '((event.startDate <= :endDate AND event.endDate >= :startDate) AND ' +
+          '((CAST(:startTime AS text) IS NULL AND CAST(:endTime AS text) IS NULL) OR (event.startTime <= CAST(:endTime AS text) AND event.endTime >= CAST(:startTime AS text))))',
+          {
+            startDate,
+            endDate,
+            startTime: typeof startTime === 'string' ? startTime : (startTime ? String(startTime) : null),
+            endTime: typeof endTime === 'string' ? endTime : (endTime ? String(endTime) : null)
+          }
+        );
 
       if (excludeBookingId) {
-        query.andWhere("booking.bookingId != :excludeBookingId", { excludeBookingId });
+        query.andWhere('booking.bookingId != :excludeBookingId', { excludeBookingId });
       }
 
-      const bookings = await query.getMany();
-
-      const conflicts = bookings.filter(booking => {
-        if (!booking.event) return false;
-        const event = booking.event;
-        const eventStart = event.startTime
-          ? new Date(`${event.startDate.toISOString().split("T")[0]}T${event.startTime}:00Z`)
-          : event.startDate;
-        const eventEnd = event.endTime
-          ? new Date(`${event.endDate.toISOString().split("T")[0]}T${event.endTime}:00Z`)
-          : event.endDate;
-        const proposedStart = startTime
-          ? new Date(`${startDate.toISOString().split("T")[0]}T${startTime}:00Z`)
-          : startDate;
-        const proposedEnd = endTime
-          ? new Date(`${endDate.toISOString().split("T")[0]}T${endTime}:00Z`)
-          : endDate;
-        return eventStart <= proposedEnd && eventEnd >= proposedStart;
-      });
+      const conflicts = await query.getMany();
 
       if (conflicts.length > 0) {
         return {
           success: false,
-          message: "Conflicting bookings found for the requested period.",
+          message: 'Conflicting bookings found for the requested period.',
           conflicts,
         };
       }
 
-      return { success: true, message: "No conflicting bookings found." };
+      return { success: true, message: 'No conflicting bookings found.' };
     } catch (error) {
-      console.error("Error checking duplicate bookings:", error);
-      return { success: false, message: `Failed to check duplicate bookings: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error checking duplicate bookings:', error);
+      return {
+        success: false,
+        message: `Failed to check duplicate bookings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
-  // Create a single booking
-  static async createBooking(
+ 
+ static async createBooking(
     bookingData: VenueBookingInterface
   ): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
       // Validate required fields
-      if (
-        !bookingData.eventId ||
-        !bookingData.venueId ||
-        !bookingData.organizerId ||
-        !bookingData.organizationId ||
-        !bookingData.event?.startDate ||
-        !bookingData.event?.endDate ||
-        !bookingData.event?.startTime ||
-        !bookingData.event?.endTime
-      ) {
-        return { success: false, message: "Missing required booking fields: eventId, venueId, organizerId, organizationId, startDate, endDate, startTime, endTime." };
-      }
-
-      // Parse and validate dates
-      const startDate = new Date(bookingData.event.startDate);
-      const endDate = new Date(bookingData.event.endDate);
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate > endDate) {
-        return { success: false, message: "Invalid or inconsistent date format." };
+      if (!bookingData.eventId || !bookingData.venueId || !bookingData.organizerId || !bookingData.userId) {
+        return { success: false, message: 'Missing required booking fields: eventId, venueId, organizerId, userId.' };
       }
 
       // Initialize repositories
-      const eventRepo = this.getEventRepository();
-      const venueRepo = this.getVenueRepository();
-      const userRepo = this.getUserRepository();
-      const orgRepo = this.getOrganizationRepository();
-      const bookingRepo = this.getVenueBookingRepository();
+      const eventRepo = queryRunner.manager.getRepository(Event);
+      const venueRepo = queryRunner.manager.getRepository(Venue);
+      const userRepo = queryRunner.manager.getRepository(User);
+      const orgRepo = queryRunner.manager.getRepository(Organization);
+      const bookingRepo = queryRunner.manager.getRepository(VenueBooking);
+      const invoiceRepo = queryRunner.manager.getRepository(Invoice);
 
       // Fetch related entities
       const event = await eventRepo.findOne({ where: { eventId: bookingData.eventId } });
-      if (!event) return { success: false, message: "Event does not exist." };
+      if (!event) return { success: false, message: 'Event does not exist.' };
 
       const venue = await venueRepo.findOne({ where: { venueId: bookingData.venueId } });
-      if (!venue) return { success: false, message: "Venue does not exist." };
+      if (!venue) return { success: false, message: 'Venue does not exist.' };
 
       if (event.maxAttendees && event.maxAttendees > venue.capacity) {
-        return { success: false, message: "Venue capacity is insufficient for the expected attendance." };
+        return {
+          success: false,
+          message: `Venue capacity is insufficient for the expected attendance. Venue capacity: ${venue.capacity}, requested: ${event.maxAttendees}`,
+        };
       }
 
-      const user = await userRepo.findOne({ where: { userId: bookingData.organizerId } });
-      if (!user) return { success: false, message: "Organizer does not exist." };
+      const user = await userRepo.findOne({ where: { userId: bookingData.userId } });
+      if (!user) return { success: false, message: 'User does not exist.' };
 
-      const organization = await orgRepo.findOne({ where: { organizationId: bookingData.organizationId } });
-      if (!organization) return { success: false, message: "Organization does not exist." };
-
-      // Check for duplicate bookings
-      const conflictCheck = await this.checkDuplicateBookings(
-        bookingData.venueId,
-        startDate,
-        endDate,
-        bookingData.event.startTime,
-        bookingData.event.endTime
-      );
-      if (!conflictCheck.success) {
-        return { success: false, message: conflictCheck.message, data: conflictCheck.conflicts?.[0] };
+      const organization = bookingData.organizationId
+        ? await orgRepo.findOne({ where: { organizationId: bookingData.organizationId } })
+        : undefined;
+      if (bookingData.organizationId && !organization) {
+        return { success: false, message: 'Organization does not exist.' };
       }
 
-      // Set default approval status
-      bookingData.approvalStatus = bookingData.approvalStatus || "pending";
+      const invoice = bookingData.venueInvoiceId
+        ? await invoiceRepo.findOne({ where: { invoiceId: bookingData.venueInvoiceId } })
+        : undefined;
+      if (bookingData.venueInvoiceId && !invoice) {
+        return { success: false, message: 'Invoice does not exist.' };
+      }
+
+      // Check availability and conflicts
+      const req = { user: { userId: bookingData.userId } } as any;
+      const validation = await CheckAbsenceService.validateBooking(req, bookingData);
+      if (!validation.success) {
+        return { success: false, message: validation.message };
+      }
 
       // Create booking entity
       const newBooking = bookingRepo.create({
-        event: event,
-        venue,
-        user,
-        organization,
-        approvalStatus: bookingData.approvalStatus as any, // Enum compatibility
+        eventId: bookingData.eventId,
+        event: event, // already loaded Event entity
+        venueId: bookingData.venueId,
+        venue: venue, // already loaded Venue entity
+        userId: bookingData.organizerId, // foreign key
+        user: user, // <-- set the user relation
+        organizationId: bookingData.organizationId,
+        venueInvoiceId: bookingData.venueInvoiceId,
+        totalAmountDue: venue.amount,
+        approvalStatus: bookingData.approvalStatus || ApprovalStatus.PENDING,
+        notes: bookingData.notes,
       });
 
       // Save booking
       const savedBooking = await bookingRepo.save(newBooking);
+
+      // Sync with event_venues table
+      await queryRunner.query(
+      'INSERT INTO event_venues ("eventId", "venueId") VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [bookingData.eventId, bookingData.venueId]
+      );
 
       // Invalidate caches
       await CacheService.invalidateMultiple([
@@ -213,14 +217,337 @@ export class VenueBookingRepository {
         `${this.CACHE_PREFIX}event:${bookingData.eventId}`,
         `${this.CACHE_PREFIX}venue:${bookingData.venueId}`,
         `${this.CACHE_PREFIX}organizer:${bookingData.organizerId}`,
-        `${this.CACHE_PREFIX}organization:${bookingData.organizationId}`,
+        `${this.CACHE_PREFIX}organization:${bookingData.organizationId || ''}`,
         `${this.CACHE_PREFIX}status:*`,
       ]);
 
-      return { success: true, data: savedBooking, message: "Booking created successfully." };
+      await queryRunner.commitTransaction();
+
+      return { success: true, data: savedBooking, message: 'Booking created successfully.' };
     } catch (error) {
-      console.error("Error creating booking:", error);
-      return { success: false, message: `Failed to create booking: ${error instanceof Error ? error.message : "Unknown error"}` };
+      await queryRunner.rollbackTransaction();
+      console.error('Error creating booking:', error);
+      return {
+        success: false,
+        message: `Failed to create booking: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+  // Update a single booking
+  static async updateBooking(
+    id: string,
+    bookingData: Partial<VenueBookingInterface>
+  ): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      if (!id) {
+        return { success: false, message: 'Booking ID is required.' };
+      }
+
+      const bookingRepo = queryRunner.manager.getRepository(VenueBooking);
+      const existingBooking = await bookingRepo.findOne({
+        where: { bookingId: id },
+        relations: ['event', 'venue', 'user', 'organization'],
+      });
+
+      if (!existingBooking) {
+        return { success: false, message: 'Booking not found.' };
+      }
+
+      // Validate input
+      const validationErrors = VenueBookingInterface.validate(bookingData);
+      if (validationErrors.length > 0) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: `Validation errors: ${validationErrors.join(', ')}` };
+      }
+
+      // Store old values for cache invalidation
+      const oldEventId = existingBooking.eventId;
+      const oldVenueId = existingBooking.venueId;
+      const oldUserId = existingBooking.userId;
+      const oldOrganizationId = existingBooking.organizationId;
+      const oldApprovalStatus = existingBooking.approvalStatus;
+
+      // Validate new entities if provided
+      let event = existingBooking.event;
+      if (bookingData.eventId && bookingData.eventId !== existingBooking.eventId) {
+        const foundEvent = await queryRunner.manager.getRepository(Event).findOne({ where: { eventId: bookingData.eventId } });
+        if (!foundEvent) {
+          await queryRunner.rollbackTransaction();
+          return { success: false, message: 'Event does not exist.' };
+        }
+        event = foundEvent;
+        existingBooking.eventId = bookingData.eventId;
+        existingBooking.event = event;
+      }
+
+      let venue = existingBooking.venue;
+      if (bookingData.venueId && bookingData.venueId !== existingBooking.venueId) {
+        return { success: false, message: "Venue cannot be changed for an existing booking." };
+      }
+
+      if (bookingData.organizerId && bookingData.organizerId !== existingBooking.userId) {
+        const user = await queryRunner.manager.getRepository(User).findOne({ where: { userId: bookingData.organizerId } });
+        if (!user) {
+          await queryRunner.rollbackTransaction();
+          return { success: false, message: 'Organizer does not exist.' };
+        }
+        existingBooking.userId = bookingData.organizerId;
+        existingBooking.user = user;
+      }
+
+      if (bookingData.organizationId && bookingData.organizationId !== existingBooking.organizationId) {
+        const org = await queryRunner.manager.getRepository(Organization).findOne({ where: { organizationId: bookingData.organizationId } });
+        if (!org) {
+          await queryRunner.rollbackTransaction();
+          return { success: false, message: 'Organization does not exist.' };
+        }
+        existingBooking.organizationId = bookingData.organizationId;
+        existingBooking.organization = org;
+      }
+
+      // Validate approval status
+      if (bookingData.approvalStatus && !Object.values(ApprovalStatus).includes(bookingData.approvalStatus)) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: 'Invalid approval status.' };
+      }
+
+      // Check conflicts if eventId or venueId changes
+      if (bookingData.eventId || bookingData.venueId) {
+        const checkEvent = bookingData.eventId ? event : existingBooking.event;
+        const checkVenueId = bookingData.venueId || existingBooking.venueId;
+        const conflictCheck = await this.checkDuplicateBookings(
+          checkVenueId,
+          new Date(checkEvent.startDate),
+          new Date(checkEvent.endDate),
+          checkEvent.startTime,
+          checkEvent.endTime,
+          id
+        );
+        if (!conflictCheck.success) {
+          await queryRunner.rollbackTransaction();
+          return { success: false, message: conflictCheck.message };
+        }
+      }
+
+      // Merge updates
+      if (bookingData.approvalStatus) {
+        existingBooking.approvalStatus = bookingData.approvalStatus;
+      }
+      if (bookingData.notes !== undefined) {
+        existingBooking.notes = bookingData.notes;
+      }
+
+      // Save updated booking
+      const updatedBooking = await bookingRepo.save(existingBooking);
+
+      // Sync with event_venues table if eventId or venueId changed
+      if (bookingData.eventId || bookingData.venueId) {
+        await queryRunner.query(
+          'INSERT INTO event_venues (event_id, venue_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [updatedBooking.eventId, updatedBooking.venueId]
+        );
+        // Optionally remove old event_venues entry
+        if (bookingData.eventId || bookingData.venueId) {
+          await queryRunner.query(
+            'DELETE FROM event_venues WHERE eventId = $1 AND venueId = $2',
+            [oldEventId, oldVenueId]
+          );
+        }
+      }
+
+      // Invalidate caches
+      await CacheService.invalidateMultiple([
+        `${this.CACHE_PREFIX}all`,
+        `${this.CACHE_PREFIX}${id}`,
+        `${this.CACHE_PREFIX}event:${oldEventId}`,
+        `${this.CACHE_PREFIX}event:${updatedBooking.eventId}`,
+        `${this.CACHE_PREFIX}venue:${oldVenueId}`,
+        `${this.CACHE_PREFIX}venue:${updatedBooking.venueId}`,
+        `${this.CACHE_PREFIX}organizer:${oldUserId}`,
+        `${this.CACHE_PREFIX}organizer:${updatedBooking.userId}`,
+        `${this.CACHE_PREFIX}organization:${oldOrganizationId || ''}`,
+        `${this.CACHE_PREFIX}organization:${updatedBooking.organizationId || ''}`,
+        `${this.CACHE_PREFIX}status:${oldApprovalStatus}`,
+        `${this.CACHE_PREFIX}status:${updatedBooking.approvalStatus}`,
+      ]);
+
+      await queryRunner.commitTransaction();
+
+      return { success: true, data: updatedBooking, message: 'Booking updated successfully.' };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error updating booking:', error);
+      return {
+        success: false,
+        message: `Failed to update booking: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+// Update booking status
+  static async updateBookingStatus(
+    id: string,
+    status: ApprovalStatus
+  ): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      if (!id) {
+        return { success: false, message: 'Booking ID is required.' };
+      }
+
+      if (!Object.values(ApprovalStatus).includes(status)) {
+        return { success: false, message: 'Invalid approval status.' };
+      }
+
+      const bookingRepo = queryRunner.manager.getRepository(VenueBooking);
+      const existingBooking = await bookingRepo.findOne({
+        where: { bookingId: id },
+        relations: ['event', 'venue', 'user', 'organization'],
+      });
+
+      if (!existingBooking) {
+        return { success: false, message: 'Booking not found.' };
+      }
+
+      const oldStatus = existingBooking.approvalStatus;
+      existingBooking.approvalStatus = status;
+
+      // Check conflicts if status is changing to approved
+      if (status === ApprovalStatus.APPROVED) {
+        const conflictCheck = await this.checkDuplicateBookings(
+          existingBooking.venueId,
+          new Date(existingBooking.event.startDate),
+          new Date(existingBooking.event.endDate),
+          existingBooking.event.startTime,
+          existingBooking.event.endTime,
+          id
+        );
+        if (!conflictCheck.success) {
+          await queryRunner.rollbackTransaction();
+          return { success: false, message: conflictCheck.message };
+        }
+      }
+
+      const updatedBooking = await bookingRepo.save(existingBooking);
+
+      // Invalidate caches
+      await CacheService.invalidateMultiple([
+        `${this.CACHE_PREFIX}all`,
+        `${this.CACHE_PREFIX}${id}`,
+        `${this.CACHE_PREFIX}event:${existingBooking.eventId}`,
+        `${this.CACHE_PREFIX}venue:${existingBooking.venueId}`,
+        `${this.CACHE_PREFIX}organizer:${existingBooking.userId}`,
+        `${this.CACHE_PREFIX}organization:${existingBooking.organizationId || ''}`,
+        `${this.CACHE_PREFIX}status:${oldStatus}`,
+        `${this.CACHE_PREFIX}status:${status}`,
+      ]);
+
+      await queryRunner.commitTransaction();
+
+      return { success: true, data: updatedBooking, message: 'Booking status updated successfully.' };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error updating booking status:', error);
+      return {
+        success: false,
+        message: `Failed to update booking status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  
+  // Delete booking
+  static async deleteBooking(id: string): Promise<{ success: boolean; message?: string }> {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      if (!id) {
+        return { success: false, message: 'Booking ID is required.' };
+      }
+
+      const bookingRepo = queryRunner.manager.getRepository(VenueBooking);
+      const existingBooking = await bookingRepo.findOne({
+        where: { bookingId: id },
+        relations: ['event', 'venue', 'user', 'organization'],
+      });
+
+      if (!existingBooking) {
+        return { success: false, message: 'Booking not found.' };
+      }
+
+      await bookingRepo.delete(id);
+
+      // Remove from event_venues table
+      await queryRunner.query(
+        'DELETE FROM event_venues WHERE eventId = $1 AND venueId = $2',
+        [existingBooking.eventId, existingBooking.venueId]
+      );
+
+      // Invalidate caches
+      await CacheService.invalidateMultiple([
+        `${this.CACHE_PREFIX}all`,
+        `${this.CACHE_PREFIX}${id}`,
+        `${this.CACHE_PREFIX}event:${existingBooking.eventId}`,
+        `${this.CACHE_PREFIX}venue:${existingBooking.venueId}`,
+        `${this.CACHE_PREFIX}organizer:${existingBooking.userId}`,
+        `${this.CACHE_PREFIX}organization:${existingBooking.organizationId || ''}`,
+        `${this.CACHE_PREFIX}status:${existingBooking.approvalStatus}`,
+      ]);
+
+      await queryRunner.commitTransaction();
+
+      return { success: true, message: 'Booking deleted successfully.' };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error deleting booking:', error);
+      return {
+        success: false,
+        message: `Failed to delete booking: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // Get total booking amount for an event
+  static async getTotalBookingAmountForEvent(
+    eventId: string
+  ): Promise<{ success: boolean; message?: string; totalAmount?: number }> {
+    try {
+      const bookingRepo = this.getVenueBookingRepository();
+      const result = await bookingRepo
+        .createQueryBuilder('booking')
+        .where('booking.eventId = :eventId', { eventId })
+        .andWhere('booking.approvalStatus = :status', { status: ApprovalStatus.APPROVED })
+        .select('SUM(booking.totalAmountDue)', 'total')
+        .getRawOne();
+
+      const totalAmount = parseFloat(result?.total || '0');
+      return {
+        success: true,
+        totalAmount,
+        message: `Total booking amount for event ${eventId}: ${totalAmount}`,
+      };
+    } catch (error) {
+      console.error('Error calculating total booking amount:', error);
+      return {
+        success: false,
+        message: `Failed to calculate total: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
@@ -228,32 +555,41 @@ export class VenueBookingRepository {
   static async createMultipleBookings(
     bookingsData: VenueBookingInterface[]
   ): Promise<{ success: boolean; bookings: VenueBooking[]; errors: { data: VenueBookingInterface; message: string }[] }> {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     const bookings: VenueBooking[] = [];
     const errors: { data: VenueBookingInterface; message: string }[] = [];
 
-    for (const bookingData of bookingsData) {
-      try {
+    try {
+      for (const bookingData of bookingsData) {
         const createResult = await this.createBooking(bookingData);
         if (createResult.success && createResult.data) {
           bookings.push(createResult.data);
         } else {
-          errors.push({ data: bookingData, message: createResult.message || "Failed to create booking." });
+          errors.push({ data: bookingData, message: createResult.message || 'Failed to create booking.' });
         }
-      } catch (error) {
-        errors.push({
-          data: bookingData,
-          message: `Failed to create booking: ${error instanceof Error ? error.message : "Unknown error"}`,
-        });
       }
+
+      if (errors.length > 0) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, bookings, errors };
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true, bookings, errors };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creating multiple bookings:', error);
+      errors.push({
+        data: {} as VenueBookingInterface,
+        message: `Failed to create bookings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+      return { success: false, bookings, errors };
+    } finally {
+      await queryRunner.release();
     }
-
-    // Invalidate cache for all bookings
-    await CacheService.invalidateMultiple([
-      `${this.CACHE_PREFIX}all`,
-      `${this.CACHE_PREFIX}status:*`,
-    ]);
-
-    return { success: errors.length === 0, bookings, errors };
   }
 
   // Get all bookings
@@ -265,8 +601,8 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            relations: ["event", "venue", "user", "organization"],
-            order: { createdAt: "DESC" },
+            relations: ['event', 'venue', 'user', 'organization'],
+            order: { createdAt: 'DESC' },
           });
         },
         this.CACHE_TTL
@@ -275,18 +611,21 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found.",
+        message: bookings.length ? undefined : 'No bookings found.',
       };
     } catch (error) {
-      console.error("Error fetching all bookings:", error);
-      return { success: false, message: `Failed to get all bookings: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching all bookings:', error);
+      return {
+        success: false,
+        message: `Failed to get all bookings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get booking by ID
   static async getBookingById(id: string): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
     if (!id) {
-      return { success: false, message: "Booking ID is required." };
+      return { success: false, message: 'Booking ID is required.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}${id}`;
@@ -297,219 +636,30 @@ export class VenueBookingRepository {
         async () => {
           return await this.getVenueBookingRepository().findOne({
             where: { bookingId: id },
-            relations: ["event", "venue", "user", "organization"],
+            relations: ['event', 'venue', 'user', 'organization'],
           });
         },
         this.CACHE_TTL
       );
 
       if (!booking) {
-        return { success: false, message: "Booking not found." };
+        return { success: false, message: 'Booking not found.' };
       }
 
       return { success: true, data: booking };
     } catch (error) {
-      console.error("Error fetching booking by ID:", error);
-      return { success: false, message: `Failed to get booking by ID: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  }
-
-  // Update booking
-  static async updateBooking(
-    id: string,
-    bookingData: Partial<VenueBookingInterface>
-  ): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
-    try {
-      if (!id) {
-        return { success: false, message: "Booking ID is required." };
-      }
-
-      const bookingRepo = this.getVenueBookingRepository();
-      const existingBooking = await bookingRepo.findOne({
-        where: { bookingId: id },
-        relations: ["event", "venue", "user", "organization"],
-      });
-
-      if (!existingBooking) {
-        return { success: false, message: "Booking not found." };
-      }
-
-      // Validate new entities if provided
-      if (bookingData.eventId && (!existingBooking.event || bookingData.eventId !== existingBooking.event.eventId)) {
-        const event = await this.getEventRepository().findOne({ where: { eventId: bookingData.eventId } });
-        if (!event) return { success: false, message: "Event does not exist." };
-        existingBooking.event = event;
-      }
-
-      if (bookingData.venueId && bookingData.venueId !== existingBooking.venue.venueId) {
-        const venue = await this.getVenueRepository().findOne({ where: { venueId: bookingData.venueId } });
-        if (!venue) return { success: false, message: "Venue does not exist." };
-        if (existingBooking.event?.maxAttendees && existingBooking.event.maxAttendees > venue.capacity) {
-          return { success: false, message: "Venue capacity is insufficient for the expected attendance." };
-        }
-        existingBooking.venue = venue;
-      }
-
-      if (bookingData.organizerId && bookingData.organizerId !== existingBooking.user.userId) {
-        const user = await this.getUserRepository().findOne({ where: { userId: bookingData.organizerId } });
-        if (!user) return { success: false, message: "Organizer does not exist." };
-        existingBooking.user = user;
-      }
-
-      if (bookingData.organizationId && bookingData.organizationId !== existingBooking.organization!.organizationId) {
-        const org = await this.getOrganizationRepository().findOne({ where: { organizationId: bookingData.organizationId } });
-        if (!org) return { success: false, message: "Organization does not exist." };
-        existingBooking.organization = org;
-      }
-
-      // Validate approval status
-      if (
-        bookingData.approvalStatus &&
-        !["pending", "approved", "rejected"].includes(bookingData.approvalStatus)
-      ) {
-        return { success: false, message: "Invalid approval status." };
-      }
-
-      // Check conflicts if event dates/times change
-      if (bookingData.event?.startDate || bookingData.event?.endDate || bookingData.event?.startTime || bookingData.event?.endTime) {
-        const startDate = bookingData.event?.startDate
-          ? new Date(bookingData.event.startDate)
-          : existingBooking.event?.startDate;
-        const endDate = bookingData.event?.endDate
-          ? new Date(bookingData.event.endDate)
-          : existingBooking.event?.endDate;
-        const startTime = bookingData.event?.startTime || existingBooking.event?.startTime;
-        const endTime = bookingData.event?.endTime || existingBooking.event?.endTime;
-        if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate > endDate) {
-          return { success: false, message: "Invalid or inconsistent date format." };
-        }
-        const conflictCheck = await this.checkDuplicateBookings(
-          bookingData.venueId || existingBooking.venue.venueId,
-          startDate,
-          endDate,
-          startTime,
-          endTime,
-          id
-        );
-        if (!conflictCheck.success) {
-          return { success: false, message: conflictCheck.message };
-        }
-      }
-
-      // Merge updates
-      if (bookingData.approvalStatus) {
-        existingBooking.approvalStatus = bookingData.approvalStatus as any;
-      }
-
-      const updatedBooking = await bookingRepo.save(existingBooking);
-
-      // Invalidate caches
-      await CacheService.invalidateMultiple([
-        `${this.CACHE_PREFIX}all`,
-        `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
-        `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
-        `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
-        `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
-        `${this.CACHE_PREFIX}status:${existingBooking.approvalStatus}`,
-        `${this.CACHE_PREFIX}status:${updatedBooking.approvalStatus}`,
-      ]);
-
-      return { success: true, data: updatedBooking, message: "Booking updated successfully." };
-    } catch (error) {
-      console.error("Error updating booking:", error);
-      return { success: false, message: `Failed to update booking: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  }
-
-  // Update booking status
-  static async updateBookingStatus(
-    id: string,
-    status: "pending" | "approved" | "rejected"
-  ): Promise<{ success: boolean; message?: string; data?: VenueBooking }> {
-    try {
-      if (!id) {
-        return { success: false, message: "Booking ID is required." };
-      }
-
-      if (!["pending", "approved", "rejected"].includes(status)) {
-        return { success: false, message: "Invalid approval status." };
-      }
-
-      const bookingRepo = this.getVenueBookingRepository();
-      const existingBooking = await bookingRepo.findOne({
-        where: { bookingId: id },
-        relations: ["event", "venue", "user", "organization"],
-      });
-
-      if (!existingBooking) {
-        return { success: false, message: "Booking not found." };
-      }
-
-      const oldStatus = existingBooking.approvalStatus;
-      existingBooking.approvalStatus = status as any;
-      const updatedBooking = await bookingRepo.save(existingBooking);
-
-      // Invalidate caches
-      await CacheService.invalidateMultiple([
-        `${this.CACHE_PREFIX}all`,
-        `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
-        `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
-        `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
-        `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
-        `${this.CACHE_PREFIX}status:${oldStatus}`,
-        `${this.CACHE_PREFIX}status:${status}`,
-      ]);
-
-      return { success: true, data: updatedBooking, message: "Booking status updated successfully." };
-    } catch (error) {
-      console.error("Error updating booking status:", error);
-      return { success: false, message: `Failed to update booking status: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  }
-
-  // Delete booking
-  static async deleteBooking(id: string): Promise<{ success: boolean; message?: string }> {
-    try {
-      if (!id) {
-        return { success: false, message: "Booking ID is required." };
-      }
-
-      const bookingRepo = this.getVenueBookingRepository();
-      const existingBooking = await bookingRepo.findOne({
-        where: { bookingId: id },
-        relations: ["event", "venue", "user", "organization"],
-      });
-
-      if (!existingBooking) {
-        return { success: false, message: "Booking not found." };
-      }
-
-      await bookingRepo.delete(id);
-
-      // Invalidate caches
-      await CacheService.invalidateMultiple([
-        `${this.CACHE_PREFIX}all`,
-        `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
-        `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
-        `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
-        `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
-        `${this.CACHE_PREFIX}status:${existingBooking.approvalStatus}`,
-      ]);
-
-      return { success: true, message: "Booking deleted successfully." };
-    } catch (error) {
-      console.error("Error deleting booking:", error);
-      return { success: false, message: `Failed to delete booking: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching booking by ID:', error);
+      return {
+        success: false,
+        message: `Failed to get booking by ID: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get bookings by event ID
   static async getBookingsByEventId(eventId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     if (!eventId) {
-      return { success: false, message: "Event ID is required." };
+      return { success: false, message: 'Event ID is required.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}event:${eventId}`;
@@ -520,18 +670,17 @@ export class VenueBookingRepository {
         async () => {
           const event = await this.getEventRepository().findOne({ where: { eventId } });
           if (!event) {
-            throw new Error("Event does not exist.");
+            throw new Error('Event does not exist.');
           }
-          const bookings = await this.getVenueBookingRepository()
-            .createQueryBuilder("booking")
-            .leftJoinAndSelect("booking.event", "event")
-            .leftJoinAndSelect("booking.venue", "venue")
-            .leftJoinAndSelect("booking.user", "user")
-            .leftJoinAndSelect("booking.organization", "organization")
-            .where("event.eventId = :eventId", { eventId })
-            .orderBy("booking.createdAt", "DESC")
+          return await this.getVenueBookingRepository()
+            .createQueryBuilder('booking')
+            .leftJoinAndSelect('booking.event', 'event')
+            .leftJoinAndSelect('booking.venue', 'venue')
+            .leftJoinAndSelect('booking.user', 'user')
+            .leftJoinAndSelect('booking.organization', 'organization')
+            .where('booking.eventId = :eventId', { eventId })
+            .orderBy('booking.createdAt', 'DESC')
             .getMany();
-          return bookings;
         },
         this.CACHE_TTL
       );
@@ -539,18 +688,21 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found for this event.",
+        message: bookings.length ? undefined : 'No bookings found for this event.',
       };
     } catch (error) {
-      console.error("Error fetching bookings by event ID:", error);
-      return { success: false, message: `Failed to get bookings by event ID: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by event ID:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by event ID: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get bookings by venue ID
   static async getBookingsByVenueId(venueId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     if (!venueId) {
-      return { success: false, message: "Venue ID is required." };
+      return { success: false, message: 'Venue ID is required.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}venue:${venueId}`;
@@ -560,9 +712,9 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            where: { venue: { venueId } },
-            relations: ["event", "venue", "user", "organization"],
-            order: { createdAt: "DESC" },
+            where: { venueId },
+            relations: ['event', 'venue', 'user', 'organization'],
+            order: { createdAt: 'DESC' },
           });
         },
         this.CACHE_TTL
@@ -571,18 +723,21 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found for this venue.",
+        message: bookings.length ? undefined : 'No bookings found for this venue.',
       };
     } catch (error) {
-      console.error("Error fetching bookings by venue ID:", error);
-      return { success: false, message: `Failed to get bookings by venue ID: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by venue ID:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by venue ID: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get bookings by organizer ID
   static async getBookingsByOrganizerId(organizerId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     if (!organizerId) {
-      return { success: false, message: "Organizer ID is required." };
+      return { success: false, message: 'Organizer ID is required.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}organizer:${organizerId}`;
@@ -592,9 +747,9 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            where: { user: { userId: organizerId } },
-            relations: ["event", "venue", "user", "organization"],
-            order: { createdAt: "DESC" },
+            where: { userId: organizerId },
+            relations: ['event', 'venue', 'user', 'organization'],
+            order: { createdAt: 'DESC' },
           });
         },
         this.CACHE_TTL
@@ -603,18 +758,21 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found for this organizer.",
+        message: bookings.length ? undefined : 'No bookings found for this organizer.',
       };
     } catch (error) {
-      console.error("Error fetching bookings by organizer ID:", error);
-      return { success: false, message: `Failed to get bookings by organizer ID: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by organizer ID:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by organizer ID: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get bookings by organization ID
   static async getBookingsByOrganizationId(organizationId: string): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     if (!organizationId) {
-      return { success: false, message: "Organization ID is required." };
+      return { success: false, message: 'Organization ID is required.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}organization:${organizationId}`;
@@ -624,9 +782,9 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            where: { organization: { organizationId } },
-            relations: ["events", "venue", "user", "organization"],
-            order: { createdAt: "DESC" },
+            where: { organizationId },
+            relations: ['event', 'venue', 'user', 'organization'],
+            order: { createdAt: 'DESC' },
           });
         },
         this.CACHE_TTL
@@ -635,20 +793,23 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found for this organization.",
+        message: bookings.length ? undefined : 'No bookings found for this organization.',
       };
     } catch (error) {
-      console.error("Error fetching bookings by organization ID:", error);
-      return { success: false, message: `Failed to get bookings by organization ID: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by organization ID:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by organization ID: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   // Get bookings by approval status
   static async getBookingsByStatus(
-    approvalStatus: "pending" | "approved" | "rejected"
+    approvalStatus: ApprovalStatus
   ): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
-    if (!["pending", "approved", "rejected"].includes(approvalStatus)) {
-      return { success: false, message: "Invalid approval status." };
+    if (!Object.values(ApprovalStatus).includes(approvalStatus)) {
+      return { success: false, message: 'Invalid approval status.' };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}status:${approvalStatus}`;
@@ -658,9 +819,9 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            where: { approvalStatus: approvalStatus as any },
-            relations: ["events", "venue", "user", "organization"],
-            order: { createdAt: "DESC" },
+            where: { approvalStatus },
+            relations: ['event', 'venue', 'user', 'organization'],
+            order: { createdAt: 'DESC' },
           });
         },
         this.CACHE_TTL
@@ -672,8 +833,11 @@ export class VenueBookingRepository {
         message: bookings.length ? undefined : `No bookings found with status: ${approvalStatus}.`,
       };
     } catch (error) {
-      console.error("Error fetching bookings by status:", error);
-      return { success: false, message: `Failed to get bookings by status: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by status:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
@@ -681,42 +845,43 @@ export class VenueBookingRepository {
   static async getBookingsByDateRange(
     startDate: Date,
     endDate: Date,
-    filterOptions: ("min" | "hours" | "days" | "all")[]
+    filterOptions: ('min' | 'hours' | 'days' | 'all')[]
   ): Promise<{ success: boolean; message?: string; data?: VenueBooking[] }> {
     try {
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return { success: false, message: "Invalid date format." };
+        return { success: false, message: 'Invalid date format.' };
       }
 
       if (startDate > endDate) {
-        return { success: false, message: "Start date cannot be after end date." };
+        return { success: false, message: 'Start date cannot be after end date.' };
       }
 
-      const cacheKey = `${this.CACHE_PREFIX}date:${startDate.toISOString()}:${endDate.toISOString()}:${filterOptions.join(",")}`;
+      const cacheKey = `${this.CACHE_PREFIX}date:${startDate.toISOString()}:${endDate.toISOString()}:${filterOptions.join(',')}`;
       const bookingRepo = this.getVenueBookingRepository();
       const bookings = await CacheService.getOrSetMultiple(
         cacheKey,
         bookingRepo,
         async () => {
-          let query = bookingRepo.createQueryBuilder("booking")
-            .leftJoinAndSelect("booking.event", "event")
-            .leftJoinAndSelect("booking.venue", "venue")
-            .leftJoinAndSelect("booking.user", "user")
-            .leftJoinAndSelect("booking.organization", "organization")
-            .where("event.startDate <= :endDate", { endDate })
-            .andWhere("event.endDate >= :startDate", { startDate });
+          let query = bookingRepo
+            .createQueryBuilder('booking')
+            .leftJoinAndSelect('booking.event', 'event')
+            .leftJoinAndSelect('booking.venue', 'venue')
+            .leftJoinAndSelect('booking.user', 'user')
+            .leftJoinAndSelect('booking.organization', 'organization')
+            .where('event.startDate <= :endDate', { endDate })
+            .andWhere('event.endDate >= :startDate', { startDate });
 
-          if (filterOptions.includes("min") && !filterOptions.includes("all")) {
+          if (filterOptions.includes('min') && !filterOptions.includes('all')) {
             query.andWhere("EXTRACT(MINUTE FROM event.startTime) >= 0");
           }
-          if (filterOptions.includes("hours") && !filterOptions.includes("all")) {
+          if (filterOptions.includes('hours') && !filterOptions.includes('all')) {
             query.andWhere("EXTRACT(HOUR FROM event.startTime) >= 0");
           }
-          if (filterOptions.includes("days") && !filterOptions.includes("all")) {
+          if (filterOptions.includes('days') && !filterOptions.includes('all')) {
             query.andWhere("EXTRACT(DAY FROM event.startDate) >= 0");
           }
 
-          return await query.orderBy("booking.createdAt", "DESC").getMany();
+          return await query.orderBy('booking.createdAt', 'DESC').getMany();
         },
         this.CACHE_TTL
       );
@@ -724,17 +889,14 @@ export class VenueBookingRepository {
       return {
         success: true,
         data: bookings,
-        message: bookings.length ? undefined : "No bookings found in this date range.",
+        message: bookings.length ? undefined : 'No bookings found in this date range.',
       };
     } catch (error) {
-      console.error("Error fetching bookings by date range:", error);
-      return { success: false, message: `Failed to get bookings by date range: ${error instanceof Error ? error.message : "Unknown error"}` };
+      console.error('Error fetching bookings by date range:', error);
+      return {
+        success: false,
+        message: `Failed to get bookings by date range: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
-  }
-
-  // Helper method to convert time string (HH:MM or HH:MM:SS) to minutes
-  private static timeToMinutes(timeStr: string): number {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    return hours * 60 + minutes;
   }
 }
