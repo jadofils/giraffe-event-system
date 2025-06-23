@@ -7,31 +7,51 @@ import { EventRepository } from '../repositories/eventRepository';
 import { AppDataSource } from '../config/Database';
 import { Venue } from '../models/Venue';
 import { In } from "typeorm";
+import { UUID_REGEX } from '../utils/constants';
 
 export class EventController {
-  private static eventRepository = new EventRepository();
+private static eventRepository = new EventRepository();
 
   static async createEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Validate authentication
+      if (!req.user || !req.user.userId || !req.user.organizationId) {
+        res.status(401).json({ success: false, message: "Unauthorized: User is not properly authenticated." });
+        return;
+      }
+
+      // Validate UUID format for organizationId and organizerId
+      if (!UUID_REGEX.test(req.user.organizationId)) {
+        res.status(400).json({ success: false, message: "Invalid organization ID format in token." });
+        return;
+      }
+      if (!UUID_REGEX.test(req.user.userId)) {
+        res.status(400).json({ success: false, message: "Invalid user ID format in token." });
+        return;
+      }
+
       const eventData: Partial<EventInterface> = {
         ...req.body,
+        organizerId: req.user.userId,
         status: EventStatus.PENDING,
       };
 
-      const createResult = await EventRepository.create(eventData);
+      // Create event with organizationId from token
+      const createResult = await EventRepository.create(eventData, req.user.organizationId);
       if (!createResult.success || !createResult.data) {
-        res.status(400).json({ message: createResult.message });
+        res.status(400).json({ success: false, message: createResult.message });
         return;
       }
 
-      const saveResult = await EventRepository.save(createResult.data);
-      if (!saveResult.success || !saveResult.data) {
-        res.status(500).json({ message: saveResult.message });
-        return;
-      }
+      // Sanitize the event and venues to avoid circular structure
+      const sanitizedData = {
+        event: sanitizeEvent(createResult.data.event),
+        venues: createResult.data.venues?.map(sanitizeVenue),
+      };
 
-      res.status(201).json(saveResult.data);
+      res.status(201).json({ success: true, data: sanitizedData, message: "Event and venues associated successfully." });
     } catch (error) {
+      console.error("Error in createEvent:", error);
       next(error);
     }
   }
@@ -281,8 +301,24 @@ static async bulkCreateVenueBookings(req: Request, res: Response, next: NextFunc
     const errors: string[] = [];
     if (!data.eventId) errors.push('eventId is required');
     if (!data.venueId) errors.push('venueId is required');
-    if (!data.organizerId) errors.push('organizerId is required');
+    // organizerId is set from the token, not required in request body
     if (!data.organizationId) errors.push('organizationId is required');
     return errors;
   }
+}
+
+function sanitizeVenue(venue: any) {
+  if (!venue) return venue;
+  const { events, ...venueWithoutEvents } = venue;
+  return venueWithoutEvents;
+}
+
+function sanitizeEvent(event: any) {
+  if (!event) return event;
+  // Remove circular references for venues
+  const sanitizedVenues = event.venues?.map(sanitizeVenue);
+  return {
+    ...event,
+    venues: sanitizedVenues,
+  };
 }

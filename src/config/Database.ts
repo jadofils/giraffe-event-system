@@ -68,9 +68,11 @@ export const initializeDatabase = async (): Promise<void> => {
   try {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
+  
     }
   } catch (error) {
     //console.error("Error during database initialization:", error);
     throw error; // Re-throw to handle it in the application
   }
 };
+

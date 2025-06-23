@@ -7,10 +7,10 @@ export class VenueResource {
   @PrimaryGeneratedColumn("uuid")
   venueResourceId!: string;
 
-  @ManyToOne(() => Venue, (venue) => venue.venueResources)
+  @ManyToOne(() => Venue, (venue) => venue.resources)
   venue!: Venue;
 
-  @ManyToOne(() => Resource, (resource) => resource.venueResources)
+  @ManyToOne(() => Resource, (resource) => resource.resources)
   resource!: Resource;
 
   @Column({ type: "int", default: 1 })

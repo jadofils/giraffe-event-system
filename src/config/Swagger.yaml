@@ -1,0 +1,354 @@
+openapi: 3.0.0
+info:
+  title: Event Management System API
+  description: API for managing authentication and roles in the event management system.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserRegistration:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        password:
+          type: string
+        confirmPassword:
+          type: string
+        roleId:
+          type: string
+          format: uuid
+        phoneNumber:
+          type: string
+        bio:
+          type: string
+        profilePictureURL:
+          type: string
+          format: uri
+        preferredLanguage:
+          type: string
+        timezone:
+          type: string
+        emailNotificationsEnabled:
+          type: boolean
+        smsNotificationsEnabled:
+          type: boolean
+        socialMediaLinks:
+          type: object
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+        addressLine1:
+          type: string
+        addressLine2:
+          type: string
+        city:
+          type: string
+        stateProvince:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+      required:
+        - username
+        - email
+        - password
+        - confirmPassword
+        - roleId
+    Role:
+      type: object
+      properties:
+        roleName:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+      required:
+        - roleName
+        - permissions
+paths:
+  /users/auth/register:
+    post:
+      summary: Register a new user
+      description: Registers a new user with the provided details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Bad request, e.g., user already exists
+  /login:
+    post:
+      summary: Login with default password
+      description: Logs in a user using a default password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '200':
+          description: Successful login
+        '401':
+          description: Unauthorized
+  /login-default-password:
+    post:
+      summary: Login with default password
+      description: Logs in a user with a default password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '200':
+          description: Successful login
+        '401':
+          description: Unauthorized
+  /reset-default-password:
+    post:
+      summary: Reset default password
+      description: Resets a user's default password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '200':
+          description: Password reset successfully
+        '400':
+          description: Bad request
+  /request-forget:
+    post:
+      summary: Request password reset
+      description: Requests a password reset link for the user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset link sent
+        '404':
+          description: User not found
+  /resend-reset-link:
+    post:
+      summary: Resend password reset link
+      description: Resends the password reset link to the user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset link resent
+        '404':
+          description: User not found
+  /users:
+    get:
+      summary: Get all users
+      description: Retrieves a list of all users.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+        '401':
+          description: Unauthorized
+  /users/{userId}:
+    get:
+      summary: Get user by ID
+      description: Retrieves a user by their ID.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+        '404':
+          description: User not found
+    put:
+      summary: Update user by ID
+      description: Updates a user by their ID.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User updated successfully
+        '400':
+          description: Bad request
+    delete:
+      summary: Delete user by ID
+      description: Deletes a user by their ID.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User deleted successfully
+        '404':
+          description: User not found
+  /roles:
+    get:
+      summary: Get all roles
+      description: Retrieves a list of all roles.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+        '401':
+          description: Unauthorized
+    post:
+      summary: Add a new role
+      description: Creates a new role with the provided details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Role'
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Role created successfully
+        '400':
+          description: Bad request
+    put:
+      summary: Update role by ID
+      description: Updates a role by its ID.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Role'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Role updated successfully
+        '404':
+          description: Role not found
+    delete:
+      summary: Delete role by ID
+      description: Deletes a role by its ID.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Role deleted successfully
+        '404':
+          description: Role not found
+  /roles/search-by-name:
+    post:
+      summary: Get role by name
+      description: Retrieves a role by its name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleName:
+                  type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+        '404':
+          description: Role not found
+  /permissions:
+    get:
+      summary: Get all permissions
+      description: Retrieves a list of all permissions.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+        '401':
+          description: Unauthorized

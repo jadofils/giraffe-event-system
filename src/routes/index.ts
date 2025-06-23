@@ -1,6 +1,9 @@
 // src/routes/apiRoutes.ts
 import express, { Router } from "express";
 import path from "path";
+// Swagger UI setup
+import swaggerUi from "swagger-ui-express";
+import YAML from "yamljs";
 import { userRoutes } from "./UserRoutes";
 import roleRoutes from "./RoleRoutes";
 import { organizationRoutes } from "./OrganizationRoutes";
@@ -12,7 +15,6 @@ import InvoiceRoutes from "./InvoiceRoutes";
 import PaymentRoutes from "./PaymentRoutes";
 import InstallmentPlanRoutes from "./InstallmentPlanRoutes";
 import EventRoute from "./EventRoutes";
-import { isAdmin } from "../middlewares/IsAdmin";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./Venue";
 const router = Router();
@@ -44,5 +46,9 @@ router.use("/installments", InstallmentPlanRoutes);
 
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes);
+
+
+const swaggerDocument = YAML.load(path.join(__dirname, "../config/Swagger.yaml"));
+router.use("/giraffe-space/swagger-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 export default router;

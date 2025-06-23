@@ -49,5 +49,5 @@ export class Resource {
   eventResources!: EventResource[];
 
   @OneToMany(() => VenueResource, (venueResource) => venueResource.resource)
-  venueResources!: VenueResource[];
+  resources!: VenueResource[];
 }

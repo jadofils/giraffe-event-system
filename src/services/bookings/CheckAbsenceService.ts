@@ -64,29 +64,28 @@ export class CheckAbsenceService {
       while (currentDate.getTime() <= endBoundaryDate.getTime()) {
         const currentDateStr = currentDate.toISOString().slice(0, 10);
         const dailyBookings = bookedSlots.filter(
-          (booking) =>
-            booking.events && booking.events[0]?.startDate?.toISOString().slice(0, 10) === currentDateStr
+        (booking) =>
+        booking.event && booking.event.startDate?.toISOString().slice(0, 10) === currentDateStr
         );
-
+        
         if (dailyBookings.length === 0) {
-          availableDays.push(currentDateStr); // Mark day as fully available
+        availableDays.push(currentDateStr); // Mark day as fully available
         } else {
-          let previousEndTime = '00:00'; // Start of the day
-
-          // Sort bookings by event start time
+        let previousEndTime = '00:00'; // Start of the day
+        
+        // Sort bookings by event start time
         dailyBookings.sort((a, b) => {
-    const startA = a.events[0]?.startTime ?? ""; // Default to empty string if undefined
-    const startB = b.events[0]?.startTime ?? ""; 
-
-    return startA.localeCompare(startB);
-});
+        const startA = a.event?.startTime ?? ""; // Default to empty string if undefined
+        const startB = b.event?.startTime ?? "";
+        return startA.localeCompare(startB);
+        });
 
           for (const booking of dailyBookings) {
-            if (!booking.events || !booking.events[0] || !booking.events[0].endTime) {
+            if (!booking.event || !booking.event.endTime) {
               continue; // Skip bookings with incomplete event data
             }
 
-            const { startTime, endTime } = booking.events[0];
+            const { startTime, endTime } = booking.event;
 
             // Identify gaps before the current booking
             if (previousEndTime < startTime) {

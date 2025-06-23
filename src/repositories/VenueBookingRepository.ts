@@ -85,7 +85,7 @@ export class VenueBookingRepository {
 
       const bookingRepo = this.getVenueBookingRepository();
       const query = bookingRepo.createQueryBuilder("booking")
-        .leftJoinAndSelect("booking.events", "event")
+        .leftJoinAndSelect("booking.event", "event")
         .leftJoinAndSelect("booking.venue", "venue")
         .where("booking.venueId = :venueId", { venueId })
         .andWhere("booking.approvalStatus = :status", { status: "approved" });
@@ -97,8 +97,8 @@ export class VenueBookingRepository {
       const bookings = await query.getMany();
 
       const conflicts = bookings.filter(booking => {
-        if (!booking.events || !booking.events[0]) return false;
-        const event = booking.events[0];
+        if (!booking.event) return false;
+        const event = booking.event;
         const eventStart = event.startTime
           ? new Date(`${event.startDate.toISOString().split("T")[0]}T${event.startTime}:00Z`)
           : event.startDate;
@@ -196,7 +196,7 @@ export class VenueBookingRepository {
 
       // Create booking entity
       const newBooking = bookingRepo.create({
-        events: [event],
+        event: event,
         venue,
         user,
         organization,
@@ -265,7 +265,7 @@ export class VenueBookingRepository {
         this.getVenueBookingRepository(),
         async () => {
           return await this.getVenueBookingRepository().find({
-            relations: ["events", "venue", "user", "organization"],
+            relations: ["event", "venue", "user", "organization"],
             order: { createdAt: "DESC" },
           });
         },
@@ -297,7 +297,7 @@ export class VenueBookingRepository {
         async () => {
           return await this.getVenueBookingRepository().findOne({
             where: { bookingId: id },
-            relations: ["events", "venue", "user", "organization"],
+            relations: ["event", "venue", "user", "organization"],
           });
         },
         this.CACHE_TTL
@@ -327,7 +327,7 @@ export class VenueBookingRepository {
       const bookingRepo = this.getVenueBookingRepository();
       const existingBooking = await bookingRepo.findOne({
         where: { bookingId: id },
-        relations: ["events", "venue", "user", "organization"],
+        relations: ["event", "venue", "user", "organization"],
       });
 
       if (!existingBooking) {
@@ -335,16 +335,16 @@ export class VenueBookingRepository {
       }
 
       // Validate new entities if provided
-      if (bookingData.eventId && (!existingBooking.events[0] || bookingData.eventId !== existingBooking.events[0].eventId)) {
+      if (bookingData.eventId && (!existingBooking.event || bookingData.eventId !== existingBooking.event.eventId)) {
         const event = await this.getEventRepository().findOne({ where: { eventId: bookingData.eventId } });
         if (!event) return { success: false, message: "Event does not exist." };
-        existingBooking.events = [event];
+        existingBooking.event = event;
       }
 
       if (bookingData.venueId && bookingData.venueId !== existingBooking.venue.venueId) {
         const venue = await this.getVenueRepository().findOne({ where: { venueId: bookingData.venueId } });
         if (!venue) return { success: false, message: "Venue does not exist." };
-        if (existingBooking.events[0]?.maxAttendees && existingBooking.events[0].maxAttendees > venue.capacity) {
+        if (existingBooking.event?.maxAttendees && existingBooking.event.maxAttendees > venue.capacity) {
           return { success: false, message: "Venue capacity is insufficient for the expected attendance." };
         }
         existingBooking.venue = venue;
@@ -374,12 +374,12 @@ export class VenueBookingRepository {
       if (bookingData.event?.startDate || bookingData.event?.endDate || bookingData.event?.startTime || bookingData.event?.endTime) {
         const startDate = bookingData.event?.startDate
           ? new Date(bookingData.event.startDate)
-          : existingBooking.events[0]?.startDate;
+          : existingBooking.event?.startDate;
         const endDate = bookingData.event?.endDate
           ? new Date(bookingData.event.endDate)
-          : existingBooking.events[0]?.endDate;
-        const startTime = bookingData.event?.startTime || existingBooking.events[0]?.startTime;
-        const endTime = bookingData.event?.endTime || existingBooking.events[0]?.endTime;
+          : existingBooking.event?.endDate;
+        const startTime = bookingData.event?.startTime || existingBooking.event?.startTime;
+        const endTime = bookingData.event?.endTime || existingBooking.event?.endTime;
         if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate > endDate) {
           return { success: false, message: "Invalid or inconsistent date format." };
         }
@@ -407,7 +407,7 @@ export class VenueBookingRepository {
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}all`,
         `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.events[0]?.eventId}`,
+        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
         `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
         `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
         `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
@@ -439,7 +439,7 @@ export class VenueBookingRepository {
       const bookingRepo = this.getVenueBookingRepository();
       const existingBooking = await bookingRepo.findOne({
         where: { bookingId: id },
-        relations: ["events", "venue", "user", "organization"],
+        relations: ["event", "venue", "user", "organization"],
       });
 
       if (!existingBooking) {
@@ -454,7 +454,7 @@ export class VenueBookingRepository {
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}all`,
         `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.events[0]?.eventId}`,
+        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
         `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
         `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
         `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
@@ -479,7 +479,7 @@ export class VenueBookingRepository {
       const bookingRepo = this.getVenueBookingRepository();
       const existingBooking = await bookingRepo.findOne({
         where: { bookingId: id },
-        relations: ["events", "venue", "user", "organization"],
+        relations: ["event", "venue", "user", "organization"],
       });
 
       if (!existingBooking) {
@@ -492,7 +492,7 @@ export class VenueBookingRepository {
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}all`,
         `${this.CACHE_PREFIX}${id}`,
-        `${this.CACHE_PREFIX}event:${existingBooking.events[0]?.eventId}`,
+        `${this.CACHE_PREFIX}event:${existingBooking.event?.eventId}`,
         `${this.CACHE_PREFIX}venue:${existingBooking.venue.venueId}`,
         `${this.CACHE_PREFIX}organizer:${existingBooking.user.userId}`,
         `${this.CACHE_PREFIX}organization:${existingBooking.organization!.organizationId}`,
@@ -524,7 +524,7 @@ export class VenueBookingRepository {
           }
           const bookings = await this.getVenueBookingRepository()
             .createQueryBuilder("booking")
-            .leftJoinAndSelect("booking.events", "event")
+            .leftJoinAndSelect("booking.event", "event")
             .leftJoinAndSelect("booking.venue", "venue")
             .leftJoinAndSelect("booking.user", "user")
             .leftJoinAndSelect("booking.organization", "organization")
@@ -561,7 +561,7 @@ export class VenueBookingRepository {
         async () => {
           return await this.getVenueBookingRepository().find({
             where: { venue: { venueId } },
-            relations: ["events", "venue", "user", "organization"],
+            relations: ["event", "venue", "user", "organization"],
             order: { createdAt: "DESC" },
           });
         },
@@ -593,7 +593,7 @@ export class VenueBookingRepository {
         async () => {
           return await this.getVenueBookingRepository().find({
             where: { user: { userId: organizerId } },
-            relations: ["events", "venue", "user", "organization"],
+            relations: ["event", "venue", "user", "organization"],
             order: { createdAt: "DESC" },
           });
         },
@@ -699,7 +699,7 @@ export class VenueBookingRepository {
         bookingRepo,
         async () => {
           let query = bookingRepo.createQueryBuilder("booking")
-            .leftJoinAndSelect("booking.events", "event")
+            .leftJoinAndSelect("booking.event", "event")
             .leftJoinAndSelect("booking.venue", "venue")
             .leftJoinAndSelect("booking.user", "user")
             .leftJoinAndSelect("booking.organization", "organization")

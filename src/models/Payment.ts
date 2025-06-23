@@ -13,6 +13,7 @@ import { Registration } from './Registration';
 import { InstallmentPlan } from './InstallmentPlan';
 import { Event } from './Event';
 import { PaymentStatus } from '../interfaces/Enums/PaymentStatusEnum';
+import { Venue } from './Venue';
 
 @Entity()
 export class Payment {
@@ -39,6 +40,13 @@ export class Payment {
   @ManyToOne(() => Event, (event) => event.payments, { eager: true })
   @JoinColumn({ name: 'eventId' })
   event?: Event;
+
+  @Column({ type: 'uuid', nullable: true })
+  venueId?: string | null;
+
+  @ManyToOne(() => Venue, (venue) => venue.payments, { nullable: true })
+  @JoinColumn({ name: 'venueId' })
+  venue?: Venue;
 
   @Column()
   paymentDate!: Date;

@@ -26,6 +26,10 @@ import { VenueBooking } from "./VenueBooking";
 import { Event } from "./Event";
 import { Registration } from "./Registration";
 import { VenueResource } from "./VenueResource";
+import { Feedback } from "./Feedback";
+import { Invoice } from "./Invoice";
+import { Payment } from "./Payment";
+import { Notification } from "./Notification";
 
 export enum VenueStatus {
   PENDING = "PENDING",
@@ -107,8 +111,8 @@ export class Venue {
   })
   users!: User[];
 
-  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
-  bookings!: VenueBooking[];
+@OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
+bookings!: VenueBooking[];
 
   @ManyToMany(() => Event, (event) => event.venues)
   @JoinTable({
@@ -147,7 +151,27 @@ export class Venue {
   websiteURL?: string;
 
   @OneToMany(() => VenueResource, (venueResource) => venueResource.venue)
-  venueResources!: VenueResource[];
+  resources!: VenueResource[];
+
+  // Feedbacks (ensure Feedback entity exists and is related to Venue)
+  @OneToMany(() => Feedback, (feedback) => feedback.venue)
+  feedbacks!: Feedback[];
+
+  // Notifications (ensure Notification entity exists and is related to Venue)
+  @OneToMany(() => Notification, (notification) => notification.venue)
+  notifications!: Notification[];
+
+  // EventVenueBookings (ensure VenueBooking entity supports this if different from bookings)
+  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
+  eventVenueBookings!: VenueBooking[];
+
+  // Payments (ensure Payment entity exists and is related to Venue)
+  @OneToMany(() => Payment, (payment) => payment.venue)
+  payments!: Payment[];
+
+  // Invoices (ensure Invoice entity exists and is related to Venue)
+  @OneToMany(() => Invoice, (invoice) => invoice.venue)
+  invoices!: Invoice[];
 
   @Column({
     type: "enum",

@@ -1,5 +1,6 @@
 // src/entity/Feedback.ts
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Venue } from './Venue';
 import {
   IsUUID,
   IsNotEmpty,
@@ -32,6 +33,15 @@ export class Feedback {
   @Min(1, { message: 'rating must be at least $constraint1' })
   @Max(5, { message: 'rating must be at most $constraint1' })
   rating!: number;
+
+  @Column({ type: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID('4', { message: 'venueId must be a valid UUID' })
+  venueId?: string;
+
+  @ManyToOne(() => Venue, (venue) => venue.feedbacks, { nullable: true })
+  @JoinColumn({ name: 'venueId' })
+  venue?: Venue;
 
   @Column({ nullable: true })
   @IsOptional()

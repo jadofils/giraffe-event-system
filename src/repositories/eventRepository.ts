@@ -11,81 +11,239 @@ import { In, Between } from "typeorm";
 import { ApprovalStatus } from "../models/VenueBooking";
 import { User } from "../models/User";
 import { Organization } from "../models/Organization";
+import { UUID_REGEX } from "../utils/constants";
 
 export class EventRepository {
   private static readonly CACHE_PREFIX = 'event:';
   private static readonly CACHE_TTL = 1800; // 30 minutes in seconds
 
-  static async create(data: Partial<EventInterface>): Promise<{ success: boolean; data?: Event; message?: string }> {
-    try {
-      if (!data.eventTitle || !data.eventType || !data.organizerId || !data.organizationId || !data.startDate || !data.endDate) {
-        return { success: false, message: "Missing required fields: eventTitle, eventType, organizerId, organizationId, startDate, endDate" };
-      }
-
-      const eventTypeMap: Record<string, EventType> = {
-        public: EventType.PUBLIC,
-        private: EventType.PRIVATE,
-      };
-      const mappedEventType = eventTypeMap[data.eventType.toLowerCase()];
-      if (!mappedEventType) {
-        return { success: false, message: "Invalid event type" };
-      }
-
-      const eventStatusMap: Record<string, EventStatus> = {
-        pending: EventStatus.PENDING,
-        approved: EventStatus.APPROVED,
-        cancelled: EventStatus.CANCELLED,
-        completed: EventStatus.COMPLETED,
-      };
-      const mappedStatus = data.status ? eventStatusMap[data.status.toLowerCase()] : EventStatus.PENDING;
-      if (data.status && !mappedStatus) {
-        return { success: false, message: "Invalid event status" };
-      }
-
-      const event = new Event();
-      event.eventTitle = data.eventTitle;
-      event.eventType = mappedEventType;
-      event.organizerId = data.organizerId;
-      event.organizationId = data.organizationId;
-      event.startDate = new Date(data.startDate);
-      event.endDate = new Date(data.endDate);
-      event.startTime = data.startTime || '';
-      event.endTime = data.endTime || '';
-      event.description = data.description;
-      event.maxAttendees = data.maxAttendees;
-      event.status = mappedStatus;
-      event.isFeatured = data.isFeatured || false;
-      event.qrCode = data.qrCode;
-      event.imageURL = data.imageURL;
-
-      if (data.venues && Array.isArray(data.venues)) {
-        const venueIds = data.venues.map((v: VenueInterface) => v.venueId).filter(Boolean);
-        if (venueIds.length > 0) {
-          const venues = await AppDataSource.getRepository(Venue).find({ where: { venueId: In(venueIds) } });
-          if (venues.length !== venueIds.length) {
-            return { success: false, message: "One or more venues not found" };
-          }
-          event.venues = venues;
-        }
-      }
-
-      if (data.venueBookings && Array.isArray(data.venueBookings)) {
-        const bookingIds = data.venueBookings.map((b: VenueBookingInterface) => b.bookingId).filter(Boolean);
-        if (bookingIds.length > 0) {
-          const bookings = await AppDataSource.getRepository(VenueBooking).find({ where: { bookingId: In(bookingIds) } });
-          if (bookings.length !== bookingIds.length) {
-            return { success: false, message: "One or more venue bookings not found" };
-          }
-          event.venueBookings = bookings;
-        }
-      }
-
-      return { success: true, data: event };
-    } catch (error) {
-      console.error("Error creating event:", error);
-      return { success: false, message: "Failed to create event" };
-    }
+static async create(
+  data: Partial<EventInterface>,
+  organizationId: string
+): Promise<{ success: boolean; data?: { event: Event; venues: Venue[] }; message?: string }> {
+  const eventOrgId = data.organizationId || organizationId;
+  if (!UUID_REGEX.test(eventOrgId)) {
+    return { success: false, message: "Invalid organization ID format." };
   }
+
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+
+  try {
+    // Validate required event fields
+    if (!data.eventTitle || !data.eventType || !data.organizerId || !data.startDate || !data.endDate) {
+      return { success: false, message: "Missing required fields: eventTitle, eventType, organizerId, startDate, endDate" };
+    }
+
+    // Validate UUID for organizerId
+    if (!UUID_REGEX.test(data.organizerId)) {
+      return { success: false, message: "Invalid organizer ID format." };
+    }
+
+    // Validate event type
+    const eventTypeMap: Record<string, EventType> = {
+      public: EventType.PUBLIC,
+      private: EventType.PRIVATE,
+    };
+    const mappedEventType = eventTypeMap[data.eventType.toLowerCase()];
+    if (!mappedEventType) {
+      return { success: false, message: "Invalid event type" };
+    }
+
+    // Validate event status
+    const eventStatusMap: Record<string, EventStatus> = {
+      pending: EventStatus.PENDING,
+      approved: EventStatus.APPROVED,
+      cancelled: EventStatus.CANCELLED,
+      completed: EventStatus.COMPLETED,
+    };
+    const mappedStatus = data.status ? eventStatusMap[data.status.toLowerCase()] : EventStatus.PENDING;
+    if (data.status && !mappedStatus) {
+      return { success: false, message: "Invalid event status" };
+    }
+
+    // Validate organization and organizer
+    const orgRepo = queryRunner.manager.getRepository(Organization);
+    const userRepo = queryRunner.manager.getRepository(User);
+    const organization = await orgRepo.findOne({ where: { organizationId: eventOrgId } });
+    if (!organization) {
+      return { success: false, message: "Organization not found" };
+    }
+    const organizer = await userRepo.findOne({ where: { userId: data.organizerId } });
+    if (!organizer) {
+      return { success: false, message: "Organizer not found" };
+    }
+
+    // Validate organizer belongs to organization
+    const userInOrg = await userRepo
+      .createQueryBuilder("user")
+      .innerJoin("user.organizations", "org")
+      .where("user.userId = :userId AND org.organizationId = :organizationId", {
+        userId: data.organizerId,
+        organizationId: eventOrgId,
+      })
+      .getOne();
+    if (!userInOrg) {
+      return { success: false, message: "Organizer is not part of the specified organization" };
+    }
+
+    // Create event
+    const event = new Event();
+    event.eventTitle = data.eventTitle;
+    event.eventType = mappedEventType;
+    event.organizerId = data.organizerId;
+    event.organizationId = eventOrgId;
+    event.startDate = new Date(data.startDate);
+    event.endDate = new Date(data.endDate);
+    event.startTime = data.startTime || '';
+    event.endTime = data.endTime || '';
+    event.description = data.description;
+    event.maxAttendees = data.maxAttendees;
+    event.status = mappedStatus;
+    event.isFeatured = data.isFeatured || false;
+    event.qrCode = data.qrCode;
+    event.imageURL = data.imageURL;
+    event.organization = organization;
+    event.organizer = organizer;
+
+    const savedEvent = await queryRunner.manager.save(Event, event);
+
+    // Validate and fetch venues if provided
+    const venues: Venue[] = [];
+    let venueIds: string[] = [];
+    if (data.venues && Array.isArray(data.venues) && data.venues.length > 0) {
+      console.log("Received venues:", data.venues, typeof data.venues);
+      if (!data.venues.every(v => typeof v === 'string')) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: "Venues must be an array of UUID strings" };
+      }
+
+      // Require venueOrganizationId
+      const venueOrganizationId = data.venueOrganizationId;
+      if (!venueOrganizationId) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: "venueOrganizationId is required when assigning venues." };
+      }
+
+      venueIds = data.venues.map((v: string) => v).filter(Boolean);
+      if (venueIds.length === 0 || !venueIds.every(id => UUID_REGEX.test(id))) {
+        await queryRunner.rollbackTransaction();
+        return { success: false, message: "Invalid or empty venue IDs provided" };
+      }
+
+      // Check for duplicate venue IDs
+      const duplicateVenueIds = venueIds.filter((id, idx) => venueIds.indexOf(id) !== idx);
+      if (duplicateVenueIds.length > 0) {
+        await queryRunner.rollbackTransaction();
+        return {
+          success: false,
+          message: `Duplicate venue IDs detected: ${[...new Set(duplicateVenueIds)].join(', ')}`
+        };
+      }
+
+      // Fetch venues that belong to the specified organization
+      const venueRepo = queryRunner.manager.getRepository(Venue);
+      const foundVenues = await venueRepo.find({
+        where: {
+          venueId: In(venueIds),
+          organization: {
+            organizationId: venueOrganizationId
+          }
+        }
+      });
+
+      // If not all venues are found, some do not belong to the organization
+      if (foundVenues.length !== venueIds.length) {
+        await queryRunner.rollbackTransaction();
+        return {
+          success: false,
+          message: "All selected venues must belong to the specified organization."
+        };
+      }
+
+      // Validate venue capacity against event maxAttendees
+      if (data.maxAttendees) {
+        for (const venue of foundVenues) {
+          if (venue.capacity < data.maxAttendees) {
+            await queryRunner.rollbackTransaction();
+            return { success: false, message: `Venue ${venue.venueName} capacity (${venue.capacity}) is insufficient for the expected attendance (${data.maxAttendees})` };
+          }
+        }
+      }
+
+      // Assign venues to event
+      event.venues = foundVenues;
+      venues.push(...foundVenues);
+
+      // Update venues to include the event in their events array
+      for (const venue of foundVenues) {
+        if (!venue.events) {
+          venue.events = [];
+        }
+        if (!venue.events.some(e => e.eventId === savedEvent.eventId)) {
+          venue.events.push(savedEvent);
+          await venueRepo.save(venue);
+        }
+      }
+    }
+
+    // Check for conflicting events if venues are provided
+    if (venueIds.length > 0) {
+      const conflictingEvents = await queryRunner.manager
+        .getRepository(Event)
+        .createQueryBuilder("event")
+        .leftJoinAndSelect("event.venues", "venue")
+        .where("LOWER(event.eventTitle) = LOWER(:title)", { title: data.eventTitle })
+        .andWhere("event.organizationId = :organizationId", { organizationId: eventOrgId })
+        .andWhere("event.startDate = :startDate", { startDate: new Date(data.startDate) })
+        .andWhere("event.startTime = :startTime", { startTime: data.startTime || '' })
+        .andWhere("venue.venueId IN (:venueIds)", { venueIds })
+        .orderBy("event.createdAt", "DESC")
+        .getMany();
+
+      if (conflictingEvents.length > 0) {
+        const recentConflict = conflictingEvents.find(conflict => {
+          const createdAt = new Date(conflict.createdAt).getTime();
+          return Date.now() - createdAt < 15 * 60 * 1000;
+        });
+
+        if (recentConflict) {
+          await queryRunner.rollbackTransaction();
+          return {
+            success: false,
+            message: `Event "${recentConflict.eventTitle}" already exists at this venue on the same date and time. Please wait at least 15 minutes before trying again.`
+          };
+        }
+      }
+    }
+
+    // Save event with venues
+    await queryRunner.manager.save(Event, event);
+
+    // Commit transaction
+    await queryRunner.commitTransaction();
+
+    // Invalidate caches
+    await CacheService.invalidateMultiple([
+      `${this.CACHE_PREFIX}all`,
+      `${this.CACHE_PREFIX}${savedEvent.eventId}`,
+      `${this.CACHE_PREFIX}organization:${eventOrgId}`,
+      `${this.CACHE_PREFIX}organizer:${data.organizerId}`,
+      ...venues.map(venue => `${this.CACHE_PREFIX}venue:${venue.venueId}`),
+    ]);
+
+    return { success: true, data: { event: savedEvent, venues } };
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+    console.error("Error creating event and associating venues:", error);
+    return { success: false, message: `Failed to create event and associate venues: ${error instanceof Error ? error.message : "Unknown error"}` };
+  } finally {
+    await queryRunner.release();
+  }
+}
+
+
 
   static async save(event: Event): Promise<{ success: boolean; data?: Event; message?: string }> {
     try {
@@ -106,8 +264,8 @@ export class EventRepository {
   }
 
   static async getById(id: string): Promise<{ success: boolean; data?: Event; message?: string }> {
-    if (!id) {
-      return { success: false, message: "Event ID is required" };
+    if (!id || !UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid event ID is required" };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}${id}`;
@@ -152,8 +310,8 @@ export class EventRepository {
   }
 
   static async getByOrganizerId(organizerId: string): Promise<{ success: boolean; data?: Event[]; message?: string }> {
-    if (!organizerId) {
-      return { success: false, message: "Organizer ID is required" };
+    if (!organizerId || !UUID_REGEX.test(organizerId)) {
+      return { success: false, message: "Valid organizer ID is required" };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}organizer:${organizerId}`;
@@ -179,8 +337,8 @@ export class EventRepository {
   }
 
   static async getByOrganizationId(organizationId: string): Promise<{ success: boolean; data?: Event[]; message?: string }> {
-    if (!organizationId) {
-      return { success: false, message: "Organization ID is required" };
+    if (!organizationId || !UUID_REGEX.test(organizationId)) {
+      return { success: false, message: "Valid organization ID is required" };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}org:${organizationId}`;
@@ -206,8 +364,8 @@ export class EventRepository {
   }
 
   static async getByVenueId(venueId: string): Promise<{ success: boolean; data?: Event[]; message?: string }> {
-    if (!venueId) {
-      return { success: false, message: "Venue ID is required" };
+    if (!venueId || !UUID_REGEX.test(venueId)) {
+      return { success: false, message: "Valid venue ID is required" };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}venue:${venueId}`;
@@ -291,8 +449,16 @@ export class EventRepository {
   }
 
   static async update(id: string, data: Partial<EventInterface>): Promise<{ success: boolean; data?: Event; message?: string }> {
-    if (!id) {
-      return { success: false, message: "Event ID is required" };
+    if (!id || !UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid event ID is required" };
+    }
+
+    if (data.organizationId && !UUID_REGEX.test(data.organizationId)) {
+      return { success: false, message: "Invalid organization ID format." };
+    }
+
+    if (data.organizerId && !UUID_REGEX.test(data.organizerId)) {
+      return { success: false, message: "Invalid organizer ID format." };
     }
 
     try {
@@ -347,17 +513,27 @@ export class EventRepository {
 
       if (data.venues && Array.isArray(data.venues)) {
         const venueIds = data.venues.map((v: VenueInterface) => v.venueId).filter(Boolean);
+        for (const venueId of venueIds) {
+          if (!UUID_REGEX.test(venueId)) {
+            return { success: false, message: `Invalid venue ID format: ${venueId}` };
+          }
+        }
         const venues = venueIds.length > 0
-          ? await AppDataSource.getRepository(Venue).find({ where: { venueId: In(venueIds) } })
+          ? await AppDataSource.getRepository(Venue).find({ where: { venueId: In(venueIds), organization: { organizationId: data.organizationId ?? event.organizationId } } })
           : [];
         if (venueIds.length > 0 && venues.length !== venueIds.length) {
-          return { success: false, message: "One or more venues not found" };
+          return { success: false, message: "One or more venues not found or not part of the organization" };
         }
         event.venues = venues;
       }
 
       if (data.venueBookings && Array.isArray(data.venueBookings)) {
         const bookingIds = data.venueBookings.map((b: VenueBookingInterface) => b.bookingId).filter(Boolean);
+        for (const bookingId of bookingIds) {
+          if (!UUID_REGEX.test(bookingId)) {
+            return { success: false, message: `Invalid booking ID format: ${bookingId}` };
+          }
+        }
         const bookings = bookingIds.length > 0
           ? await AppDataSource.getRepository(VenueBooking).find({ where: { bookingId: In(bookingIds) } })
           : [];
@@ -384,8 +560,8 @@ export class EventRepository {
   }
 
   static async delete(id: string): Promise<{ success: boolean; message?: string }> {
-    if (!id) {
-      return { success: false, message: "Event ID is required" };
+    if (!id || !UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid event ID is required" };
     }
 
     try {
@@ -412,8 +588,14 @@ export class EventRepository {
   }
 
   static async assignVenues(eventId: string, venueIds: string[]): Promise<{ success: boolean; message?: string }> {
-    if (!eventId || !venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
-      return { success: false, message: "Event ID and valid venue IDs are required" };
+    if (!eventId || !UUID_REGEX.test(eventId) || !venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
+      return { success: false, message: "Valid event ID and venue IDs are required" };
+    }
+
+    for (const venueId of venueIds) {
+      if (!UUID_REGEX.test(venueId)) {
+        return { success: false, message: `Invalid venue ID format: ${venueId}` };
+      }
     }
 
     try {
@@ -423,9 +605,9 @@ export class EventRepository {
         return { success: false, message: "Event not found" };
       }
 
-      const venues = await AppDataSource.getRepository(Venue).find({ where: { venueId: In(venueIds) } });
+      const venues = await AppDataSource.getRepository(Venue).find({ where: { venueId: In(venueIds), organization: { organizationId: event.organizationId } } });
       if (venues.length !== venueIds.length) {
-        return { success: false, message: "One or more venues not found" };
+        return { success: false, message: "One or more venues not found or not part of the organization" };
       }
 
       event.venues = venues;
@@ -446,8 +628,14 @@ export class EventRepository {
   }
 
   static async removeVenues(eventId: string, venueIds: string[]): Promise<{ success: boolean; message?: string }> {
-    if (!eventId || !venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
-      return { success: false, message: "Event ID and valid venue IDs are required" };
+    if (!eventId || !UUID_REGEX.test(eventId) || !venueIds || !Array.isArray(venueIds) || venueIds.length === 0) {
+      return { success: false, message: "Valid event ID and venue IDs are required" };
+    }
+
+    for (const venueId of venueIds) {
+      if (!UUID_REGEX.test(venueId)) {
+        return { success: false, message: `Invalid venue ID format: ${venueId}` };
+      }
     }
 
     try {
@@ -475,8 +663,14 @@ export class EventRepository {
   }
 
   static async assignVenueBookings(eventId: string, bookingIds: string[]): Promise<{ success: boolean; message?: string }> {
-    if (!eventId || !bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
-      return { success: false, message: "Event ID and valid booking IDs are required" };
+    if (!eventId || !UUID_REGEX.test(eventId) || !bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
+      return { success: false, message: "Valid event ID and booking IDs are required" };
+    }
+
+    for (const bookingId of bookingIds) {
+      if (!UUID_REGEX.test(bookingId)) {
+        return { success: false, message: `Invalid booking ID format: ${bookingId}` };
+      }
     }
 
     try {
@@ -486,9 +680,9 @@ export class EventRepository {
         return { success: false, message: "Event not found" };
       }
 
-      const bookings = await AppDataSource.getRepository(VenueBooking).find({ where: { bookingId: In(bookingIds) } });
+      const bookings = await AppDataSource.getRepository(VenueBooking).find({ where: { bookingId: In(bookingIds), organizationId: event.organizationId } });
       if (bookings.length !== bookingIds.length) {
-        return { success: false, message: "One or more venue bookings not found" };
+        return { success: false, message: "One or more venue bookings not found or not part of the organization" };
       }
 
       event.venueBookings = bookings;
@@ -509,8 +703,14 @@ export class EventRepository {
   }
 
   static async removeVenueBookings(eventId: string, bookingIds: string[]): Promise<{ success: boolean; message?: string }> {
-    if (!eventId || !bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
-      return { success: false, message: "Event ID and valid booking IDs are required" };
+    if (!eventId || !UUID_REGEX.test(eventId) || !bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
+      return { success: false, message: "Valid event ID and booking IDs are required" };
+    }
+
+    for (const bookingId of bookingIds) {
+      if (!UUID_REGEX.test(bookingId)) {
+        return { success: false, message: `Invalid booking ID format: ${bookingId}` };
+      }
     }
 
     try {
@@ -537,116 +737,125 @@ export class EventRepository {
     }
   }
 
-static async bulkCreateVenueBookings(
-bookings: Partial<VenueBookingInterface>[],
-userId: string,
-eventId: string,
-organizationId: string
-): Promise<{ success: boolean; data?: VenueBooking[]; message?: string }> {
-  try {
-    const bookingRepo = AppDataSource.getRepository(VenueBooking);
-    const venueRepo = AppDataSource.getRepository(Venue);
-    const eventRepo = AppDataSource.getRepository(Event);
-    const userRepo = AppDataSource.getRepository(User);
-
-    if (!organizationId) {
-      return { success: false, message: "Organization ID is required" };
+  static async bulkCreateVenueBookings(
+    bookings: Partial<VenueBookingInterface>[],
+    userId: string,
+    eventId: string,
+    organizationId: string
+  ): Promise<{ success: boolean; data?: VenueBooking[]; message?: string }> {
+    if (!UUID_REGEX.test(userId) || !UUID_REGEX.test(eventId) || !UUID_REGEX.test(organizationId)) {
+      return { success: false, message: "Valid user ID, event ID, and organization ID are required" };
     }
 
-    // Check user membership in organization
-    const user = await userRepo.findOne({
-      where: { userId },
-      relations: ["organizations"]
-    });
-    if (!user) {
-      return { success: false, message: `User ${userId} not found` };
-    }
-    const userOrgIds = user.organizations.map(org => org.organizationId);
-    if (!userOrgIds.includes(organizationId)) {
-      return { success: false, message: "You are not a member of this organization" };
-    }
+    try {
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const eventRepo = AppDataSource.getRepository(Event);
+      const userRepo = AppDataSource.getRepository(User);
 
-    // Fetch the event to get its time window
-    const event = await eventRepo.findOne({ where: { eventId } });
-    if (!event) {
-      return { success: false, message: `Event ${eventId} not found` };
-    }
-    const eventStart = new Date(event.startDate).getTime();
-    const eventEnd = new Date(event.endDate).getTime();
+      // Check user membership in organization
+      const user = await userRepo.findOne({
+        where: { userId },
+        relations: ["organizations"],
+      });
+      if (!user) {
+        return { success: false, message: `User ${userId} not found` };
+      }
+      const userOrgIds = user.organizations.map(org => org.organizationId);
+      if (!userOrgIds.includes(organizationId)) {
+        return { success: false, message: "You are not a member of this organization" };
+      }
 
-    // Fetch all venues for the organization
-    const orgVenues = await venueRepo.find({
-      where: { organization: { organizationId } },
-      relations: ["bookings", "bookings.event"]
-    });
-    const orgVenueIds = orgVenues.map(v => v.venueId);
+      // Fetch the event to get its time window
+      const event = await eventRepo.findOne({ where: { eventId, organizationId } });
+      if (!event) {
+        return { success: false, message: `Event ${eventId} not found or not part of the organization` };
+      }
+      const eventStart = new Date(event.startDate).getTime();
+      const eventEnd = new Date(event.endDate).getTime();
 
-    // Filter requested venueIds to only those in the organization
-    const requestedVenueIds = bookings.map(b => b.venueId!);
-    const validVenueIds = requestedVenueIds.filter(id => orgVenueIds.includes(id));
-    if (validVenueIds.length === 0) {
-      return { success: false, message: "No valid venues found in the selected organization" };
-    }
+      // Fetch all venues for the organization
+      const orgVenues = await venueRepo.find({
+        where: { organization: { organizationId } },
+        relations: ["bookings", "bookings.event"],
+      });
+      const orgVenueIds = orgVenues.map(v => v.venueId);
 
-    // Check for conflicts for each venue using event's time window
-   const conflictingVenues: string[] = [];
+      // Filter requested venueIds to only those in the organization
+      const requestedVenueIds = bookings.map(b => b.venueId!).filter(id => id && UUID_REGEX.test(id));
+      const validVenueIds = requestedVenueIds.filter(id => orgVenueIds.includes(id));
+      if (validVenueIds.length === 0) {
+        return { success: false, message: "No valid venues found in the selected organization" };
+      }
 
-for (const venue of orgVenues) {
-  if (!validVenueIds.includes(venue.venueId)) continue;
+      // Check for conflicts for each venue using event's time window
+      const conflictingVenues: string[] = [];
+      for (const venue of orgVenues) {
+        if (!validVenueIds.includes(venue.venueId)) continue;
 
-  for (const booking of venue.bookings || []) {
-    for (const event of booking.events || []) {
-      if (!event.startDate || !event.endDate) continue;
+        for (const booking of venue.bookings || []) {
+          const eventObj = booking.event;
+          if (eventObj && eventObj.startDate && eventObj.endDate) {
+            // Only consider events with APPROVED or COMPLETED status
+            if (["APPROVED", "COMPLETED"].includes(eventObj.status)) {
+              const existingStart = new Date(eventObj.startDate).getTime();
+              const existingEnd = new Date(eventObj.endDate).getTime();
 
-      // Only consider events with APPROVED or COMPLETED status
-      if (["APPROVED", "COMPLETED"].includes(event.status)) {
-        const existingStart = new Date(event.startDate).getTime();
-        const existingEnd = new Date(event.endDate).getTime();
-
-        // Check time conflict
-        if (existingStart < eventEnd && eventStart < existingEnd) {
-          conflictingVenues.push(venue.venueId);
-          break;
+              // Check time conflict
+              if (existingStart < eventEnd && eventStart < existingEnd) {
+                conflictingVenues.push(venue.venueId);
+                break;
+              }
+            }
+          }
+          if (conflictingVenues.includes(venue.venueId)) break; // Exit early if conflict found
         }
       }
+
+      if (conflictingVenues.length > 0) {
+        return { success: false, message: `Venues with IDs [${conflictingVenues.join(", ")}] are already booked for the requested time.` };
+      }
+
+      // Create bookings for valid venues, all with status PENDING
+      const validBookings: VenueBooking[] = [];
+      for (const data of bookings) {
+        if (!validVenueIds.includes(data.venueId!)) continue;
+        if (!UUID_REGEX.test(data.venueId!)) {
+          return { success: false, message: `Invalid venue ID format: ${data.venueId}` };
+        }
+        const venue = orgVenues.find(v => v.venueId === data.venueId);
+        if (!venue) continue;
+        const booking = new VenueBooking();
+        booking.venueId = data.venueId!;
+        booking.userId = userId;
+        booking.organizationId = organizationId;
+        booking.eventId = eventId;
+        booking.totalAmountDue = data.totalAmountDue ?? venue.amount ?? 0;
+        booking.venueInvoiceId = data.venueInvoiceId;
+        booking.approvalStatus = ApprovalStatus.PENDING;
+        booking.venue = venue;
+        validBookings.push(booking);
+      }
+
+      const saved = await bookingRepo.save(validBookings);
+      await CacheService.invalidateMultiple([
+        `${this.CACHE_PREFIX}${eventId}`,
+        `${this.CACHE_PREFIX}${eventId}:bookings`,
+        `${this.CACHE_PREFIX}all`,
+        `${this.CACHE_PREFIX}org:${organizationId}`,
+        `${this.CACHE_PREFIX}organizer:${userId}`,
+        ...validBookings.map(booking => `${this.CACHE_PREFIX}booking:${booking.bookingId}`),
+      ]);
+      return { success: true, data: saved };
+    } catch (error) {
+      console.error("Bulk booking failed:", error);
+      return { success: false, message: `Failed to save bookings: ${error instanceof Error ? error.message : "Unknown error"}` };
     }
-    if (conflictingVenues.includes(venue.venueId)) break; // Exit early if conflict found
   }
-}
-
-    if (conflictingVenues.length > 0) {
-      return { success: false, message: `Venues with IDs [${conflictingVenues.join(", ")}] are already booked for the requested time.` };
-    }
-
-    // Create bookings for valid venues, all with status PENDING
-    const validBookings: VenueBooking[] = [];
-    for (const data of bookings) {
-      if (!validVenueIds.includes(data.venueId!)) continue;
-      const venue = orgVenues.find(v => v.venueId === data.venueId);
-      if (!venue) continue;
-      const booking = new VenueBooking();
-      booking.venueId = data.venueId!;
-      booking.userId = userId;
-      booking.organizationId = organizationId;
-      booking.eventId = eventId;
-      booking.totalAmountDue = data.totalAmountDue ?? venue.amount ?? 0;
-      booking.venueInvoiceId = data.venueInvoiceId;
-      booking.approvalStatus = ApprovalStatus.PENDING;
-      booking.venue = venue;
-      validBookings.push(booking);
-    }
-
-    const saved = await bookingRepo.save(validBookings);
-    return { success: true, data: saved };
-  } catch (error) {
-    console.error("Bulk booking failed:", error);
-    return { success: false, message: `Failed to save bookings: ${error instanceof Error ? error.message : "Unknown error"}` };
-  }
-}
 
   static async getVenueBookingById(bookingId: string): Promise<{ success: boolean; data?: VenueBooking; message?: string }> {
-    if (!bookingId) {
-      return { success: false, message: "Booking ID is required" };
+    if (!bookingId || !UUID_REGEX.test(bookingId)) {
+      return { success: false, message: "Valid booking ID is required" };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}booking:${bookingId}`;
@@ -672,8 +881,20 @@ for (const venue of orgVenues) {
   }
 
   static async updateVenueBooking(bookingId: string, data: Partial<VenueBookingInterface>): Promise<{ success: boolean; data?: VenueBooking; message?: string }> {
-    if (!bookingId) {
-      return { success: false, message: "Booking ID is required" };
+    if (!bookingId || !UUID_REGEX.test(bookingId)) {
+      return { success: false, message: "Valid booking ID is required" };
+    }
+
+    if (data.venueId && !UUID_REGEX.test(data.venueId)) {
+      return { success: false, message: "Invalid venue ID format" };
+    }
+
+    if (data.userId && !UUID_REGEX.test(data.userId)) {
+      return { success: false, message: "Invalid user ID format" };
+    }
+
+    if (data.organizationId && !UUID_REGEX.test(data.organizationId)) {
+      return { success: false, message: "Invalid organization ID format" };
     }
 
     try {
@@ -695,7 +916,7 @@ for (const venue of orgVenues) {
       const updatedBooking = await repo.save(booking);
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}booking:${bookingId}`,
-        ...booking.events.map(event => `${this.CACHE_PREFIX}${event.eventId}:bookings`),
+        ...(booking.event ? [`${this.CACHE_PREFIX}${booking.event.eventId}:bookings`] : []),
       ]);
       return { success: true, data: updatedBooking, message: "Venue booking updated successfully" };
     } catch (error) {
@@ -705,8 +926,8 @@ for (const venue of orgVenues) {
   }
 
   static async deleteVenueBooking(bookingId: string): Promise<{ success: boolean; message?: string }> {
-    if (!bookingId) {
-      return { success: false, message: "Booking ID is required" };
+    if (!bookingId || !UUID_REGEX.test(bookingId)) {
+      return { success: false, message: "Valid booking ID is required" };
     }
 
     try {
@@ -719,7 +940,7 @@ for (const venue of orgVenues) {
       await repo.softRemove(booking);
       await CacheService.invalidateMultiple([
         `${this.CACHE_PREFIX}booking:${bookingId}`,
-        ...booking.events.map(event => `${this.CACHE_PREFIX}${event.eventId}:bookings`),
+        ...(booking.event ? [`${this.CACHE_PREFIX}${booking.event.eventId}:bookings`] : []),
       ]);
       return { success: true, message: "Venue booking deleted successfully" };
     } catch (error) {
@@ -727,4 +948,25 @@ for (const venue of orgVenues) {
       return { success: false, message: "Failed to delete venue booking" };
     }
   }
+}
+
+function sanitizeEvent(event: any) {
+  if (!event) return event;
+  // Remove circular references for venues
+  const sanitizedVenues = event.venues?.map((venue: any) => {
+    const { events, ...venueWithoutEvents } = venue;
+    return venueWithoutEvents;
+  });
+
+  // Remove circular references for venueBookings if needed
+  const sanitizedVenueBookings = event.venueBookings?.map((booking: any) => {
+    const { events, ...bookingWithoutEvents } = booking;
+    return bookingWithoutEvents;
+  });
+
+  return {
+    ...event,
+    venues: sanitizedVenues,
+    venueBookings: sanitizedVenueBookings,
+  };
 }
