@@ -1,9 +1,26 @@
 import { DataSource } from "typeorm";
-import IndependentOrganizationSeeder from "../seeds/IndependentUserOrganizationSeeder";
-import { SeederFactoryManager } from "typeorm-extension";
-import { AdminRoleSeeder } from "../seeds/AdminRoleSeeder";
-import { PermissionSeeder } from "../seeds/PermissionSeeder";
+import { Role } from "../models/Role";
+import { User } from "../models/User";
+import { Venue } from "../models/Venue";
+import { TicketType } from "../models/TicketType";
+import { Event } from "../models/Event";
+import { Resource } from "../models/Resources";
+import { VenueResource } from "../models/VenueResource";
+import { EventResource } from "../models/EventResource";
+import { Feedback } from "../models/Feedback";
+import { Permission } from "../models/Permission";
+import { VenuePayment } from "../models/VenuePayment";
+import { Notification } from "../models/Notification";
+import { Organization } from "../models/Organization";
+import { Registration } from "../models/Registration";
+import { Payment } from "../models/Payment";
+import { Invoice } from "../models/Invoice";
+import { InstallmentPlan } from "../models/InstallmentPlan";
+import { Budget } from "../models/Budget";
+import { VenueBooking } from "../models/VenueBooking";
+import { VenueInvoice } from "../models/VenueInvoice";
 
+// Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
 
 export const AppDataSource = new DataSource({
@@ -11,17 +28,31 @@ export const AppDataSource = new DataSource({
   url: process.env.DB_URL,
   synchronize: true,
   logging: false,
-
-  // ✅ Use compiled .js files in production (Docker), .ts in dev
   entities: [
-    isProduction ? __dirname + "/../models/**/*.js" : "src/models/**/*.ts",
+    User,
+    Venue,
+    TicketType,
+    Event,
+    Resource,
+    VenueResource,
+    EventResource,
+    Feedback,
+    Role,
+    Permission,
+    VenuePayment,
+    Notification,
+    Organization,
+    Registration,
+    Payment,
+    Invoice,
+    InstallmentPlan,
+    Budget,
+    VenueBooking,
+    VenueInvoice,
   ],
   migrations: [
-    isProduction
-      ? __dirname + "/../models/migrations/*.js"
-      : "src/models/migrations/*.ts",
+    isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",
   ],
-
   extra: {
     connectionTimeoutMillis: 30000,
   },
@@ -30,69 +61,16 @@ export const AppDataSource = new DataSource({
 });
 
 // Track if seeding has been completed
-let isSeedingCompleted = false;
+// let isSeedingCompleted = false;
 
+// Modified initialization function
 export const initializeDatabase = async (): Promise<void> => {
   try {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
-      console.log("✅ Database connection established!");
-
-      if (!isSeedingCompleted) {
-        console.log("🔐 Seeding permissions...");
-        await PermissionSeeder.seed();
-        await seedAdminRole();
-        await seedDefaultRoles();
-        await runSeeders();
-        await AdminRoleSeeder.seed();
-        isSeedingCompleted = true;
-        console.log("🌱 Database seeding completed successfully.");
-      } else {
-        console.log("✅ Database already seeded - skipping.");
-      }
     }
   } catch (error) {
-    console.error("❌ Error during DB initialization:", error);
-    throw error;
+    //console.error("Error during database initialization:", error);
+    throw error; // Re-throw to handle it in the application
   }
 };
-
-async function runSeeders() {
-  try {
-    const seeder = new IndependentOrganizationSeeder();
-    const factoryManager = new SeederFactoryManager();
-    await seeder.run(AppDataSource, factoryManager);
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function seedDefaultRoles() {
-  try {
-    const roleRepository = AppDataSource.getRepository("Role");
-    // Add default roles if needed
-  } catch (error) {
-    throw error;
-  }
-}
-
-export const isDatabaseSeeded = (): boolean => {
-  return isSeedingCompleted;
-};
-
-async function seedAdminRole() {
-  const roleRepository = AppDataSource.getRepository("Role");
-  const adminExists = await roleRepository.findOne({
-    where: { roleName: "ADMIN" },
-  });
-
-  if (adminExists) return;
-
-  const adminRole = roleRepository.create({
-    roleName: "ADMIN",
-    permissions: ["read:all", "write:all", "delete:all"],
-    description: "Administrator role",
-  });
-  await roleRepository.save(adminRole);
-  console.log("🎉 'ADMIN' role created successfully!");
-}
