@@ -10,6 +10,7 @@ import { In } from "typeorm";
 import { UUID_REGEX } from "../utils/constants";
 import { InvoiceService } from "../services/invoice/InvoiceService";
 import { InvoiceStatus } from "../interfaces/Enums/InvoiceStatus";
+import { VenueStatus } from "../models/Venue";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -111,6 +112,19 @@ export class EventController {
         if (booking.approvalStatus !== ApprovalStatus.APPROVED) {
           booking.approvalStatus = ApprovalStatus.APPROVED;
           await AppDataSource.getRepository(VenueBooking).save(booking);
+        }
+      }
+      // Approve all venues for this event
+      if (event.venues && event.venues.length > 0) {
+        const venueRepo = AppDataSource.getRepository("Venue");
+        for (const venue of event.venues) {
+          const dbVenue = await venueRepo.findOne({
+            where: { venueId: venue.venueId },
+          });
+          if (dbVenue && dbVenue.status !== VenueStatus.APPROVED) {
+            dbVenue.status = VenueStatus.APPROVED;
+            await venueRepo.save(dbVenue);
+          }
         }
       }
       // Create invoices for each booking (if not already invoiced)
