@@ -488,6 +488,8 @@ export class EventController {
     return errors;
   }
 
+ 
+
 }
 function sanitizeVenue(venue: any) {
   if (!venue) return venue;

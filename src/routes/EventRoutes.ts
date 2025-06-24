@@ -22,7 +22,6 @@ router.put('/:id/approve', EventController.approveEvent);
 router.put('/:id', EventController.updateEvent);
 router.delete('/:id', EventController.deleteEvent);
 
-
 // Venue Booking Management
 router.post('/:eventId/venue-bookings', EventController.bulkCreateVenueBookings);
 router.put('/venue-bookings/:bookingId/approve', EventController.approveVenueBooking);
