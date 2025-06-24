@@ -17,18 +17,19 @@ export class VenueInterface {
   contactEmail?: string;
   contactPhone?: string;
   websiteURL?: string;
-  status:VenueStatus = VenueStatus.PENDING;
+  status: VenueStatus = VenueStatus.PENDING;
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
+  cancellationReason?: string;
 
   constructor(data: Partial<VenueInterface>) {
     Object.assign(this, {
-      venueId: data.venueId || '',
-      venueName: data.venueName || '',
-      organizationId: data.organizationId || '',
+      venueId: data.venueId || "",
+      venueName: data.venueName || "",
+      organizationId: data.organizationId || "",
       capacity: data.capacity || 0,
-      location: data.location || '',
+      location: data.location || "",
       latitude: data.latitude,
       longitude: data.longitude,
       googleMapsLink: data.googleMapsLink,
@@ -48,9 +49,10 @@ export class VenueInterface {
 
   static validate(data: Partial<VenueInterface>): string[] {
     const errors: string[] = [];
-    if (!data.venueName) errors.push('venueName is required');
-    if (!data.capacity || data.capacity <= 0) errors.push('capacity must be greater than 0');
-    if (!data.location) errors.push('location is required');
+    if (!data.venueName) errors.push("venueName is required");
+    if (!data.capacity || data.capacity <= 0)
+      errors.push("capacity must be greater than 0");
+    if (!data.location) errors.push("location is required");
     return errors;
   }
 }

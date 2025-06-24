@@ -34,7 +34,8 @@ import { Notification } from "./Notification";
 export enum VenueStatus {
   PENDING = "PENDING",
   APPROVED = "APPROVED",
-  REJECTED = "REJECTED"
+  CANCELLED = "CANCELLED",
+  REJECTED = "REJECTED",
 }
 
 @Entity("venues")
@@ -103,16 +104,16 @@ export class Venue {
   @JoinColumn({ name: "organizationId" })
   organization?: Organization;
 
-  @ManyToMany(() => User, user => user.venues)
+  @ManyToMany(() => User, (user) => user.venues)
   @JoinTable({
     name: "venue_users",
     joinColumn: { name: "venueId", referencedColumnName: "venueId" },
-    inverseJoinColumn: { name: "userId", referencedColumnName: "userId" }
+    inverseJoinColumn: { name: "userId", referencedColumnName: "userId" },
   })
   users!: User[];
 
-@OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
-bookings!: VenueBooking[];
+  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
+  bookings!: VenueBooking[];
 
   @ManyToMany(() => Event, (event) => event.venues)
   @JoinTable({
@@ -188,4 +189,12 @@ bookings!: VenueBooking[];
 
   @DeleteDateColumn()
   deletedAt?: Date;
+
+  @Column({ type: "varchar", nullable: true })
+  @IsOptional()
+  @Length(3, 200, {
+    message:
+      "cancellationReason must be between 3 and 200 characters",
+  })
+  cancellationReason?: string;
 }
