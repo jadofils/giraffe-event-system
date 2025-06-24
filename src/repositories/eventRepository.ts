@@ -7,7 +7,7 @@ import { EventInterface } from "../interfaces/EventInterface";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
 import { EventStatus, EventType } from "../interfaces/Index";
-import { In, Between } from "typeorm";
+import { In, Between, Not } from "typeorm";
 import { ApprovalStatus } from "../models/VenueBooking";
 import { User } from "../models/User";
 import { Organization } from "../models/Organization";
@@ -1319,6 +1319,35 @@ export class EventRepository {
     } catch (error) {
       console.error("Error deleting venue booking:", error);
       return { success: false, message: "Failed to delete venue booking" };
+    }
+  }
+
+  static async getPublicApprovedEvents(): Promise<{
+    success: boolean;
+    data?: Event[];
+    message?: string;
+  }> {
+    try {
+      const events = await AppDataSource.getRepository(Event).find({
+        where: {
+          status: EventStatus.APPROVED,
+          eventType: Not(EventType.PRIVATE),
+        },
+        relations: [
+          "organizer",
+          "organizer.role",
+          "venues",
+          "venueBookings",
+          "organization",
+        ],
+        order: { startDate: "ASC" },
+      });
+      return { success: true, data: events };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to fetch public approved events",
+      };
     }
   }
 }

@@ -10,6 +10,7 @@ import { AppDataSource } from "../config/Database";
 import { Resource } from "../models/Resources";
 import { VenueResource } from "../models/VenueResource";
 import { OrganizationRepository } from "../repositories/OrganizationRepository";
+import { EventType } from "../interfaces/Enums/EventTypeEnum";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -1214,7 +1215,6 @@ export class VenueController {
     }
   }
 
-
   static async checkAvailability(req: Request, res: Response): Promise<void> {
     try {
       const {
@@ -1296,31 +1296,31 @@ export class VenueController {
   }
 
   /**
- * Retrieves all approved venues.
- * @param req The Express request object.
- * @param res The Express response object.
- */
-static async listApprovedVenues(req: Request, res: Response): Promise<void> {
+   * Retrieves all approved venues.
+   * @param req The Express request object.
+   * @param res The Express response object.
+   */
+  static async listApprovedVenues(req: Request, res: Response): Promise<void> {
     try {
-        const result = await VenueRepository.getApprovedVenues();
+      const result = await VenueRepository.getApprovedVenues();
 
-        if (result.success) {
-            res.status(200).json(result);
-        } else {
-            res.status(500).json({
-                success: false,
-                message: result.message || "Failed to retrieve approved venues"
-            });
-        }
-    } catch (error: any) {
+      if (result.success) {
+        res.status(200).json(result);
+      } else {
         res.status(500).json({
-            success: false,
-            message: "An unexpected error occurred while retrieving approved venues.",
-            error: error?.message || error
+          success: false,
+          message: result.message || "Failed to retrieve approved venues",
         });
+      }
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message:
+          "An unexpected error occurred while retrieving approved venues.",
+        error: error?.message || error,
+      });
     }
-}
-
+  }
 
   static async cancelVenue(req: Request, res: Response): Promise<void> {
     const user = (req as any).user;
@@ -1356,5 +1356,47 @@ static async listApprovedVenues(req: Request, res: Response): Promise<void> {
     } else {
       res.status(400).json({ success: false, message: result.message });
     }
+  }
+
+  static async getEventsByVenue(req: Request, res: Response): Promise<void> {
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    try {
+      const result = await EventRepository.getByVenueId(venueId);
+      if (result.success && result.data) {
+        res.status(200).json({ success: true, data: result.data });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: result.message || "No events found for this venue.",
+        });
+      }
+    } catch (error) {
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to get events for venue." });
+    }
+  }
+
+  static async listPublicApprovedEvents(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const result = await EventRepository.getPublicApprovedEvents();
+    if (result.success && result.data) {
+      res.status(200).json({ success: true, data: result.data });
+    } else {
+      res.status(500).json({ success: false, message: result.message });
+    }
+  }
+
+  static async listEventTypes(req: Request, res: Response): Promise<void> {
+    res.status(200).json({
+      success: true,
+      data: Object.values(EventType),
+    });
   }
 }

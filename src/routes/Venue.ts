@@ -61,6 +61,12 @@ router.post(
 router.post("/approve/:id", authenticate, VenueController.approveVenue);
 router.post("/cancel/:id", authenticate, VenueController.cancelVenue);
 
+router.get("/:venueId/events", authenticate, VenueController.getEventsByVenue);
+
+router.get("/public-approved-events", VenueController.listPublicApprovedEvents);
+
+router.get("/event-types", VenueController.listEventTypes);
+
 // router.use("/", checkAbsenceRoutes);
 
 export const venueRoute = router;
