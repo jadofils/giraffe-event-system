@@ -1,4 +1,4 @@
-import { Request, Response} from "express";
+import { Request, Response } from "express";
 
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
@@ -12,18 +12,25 @@ export class VenueController {
     const body = req.body;
 
     if (!userId) {
-      res.status(401).json({ success: false, message: "Authentication required." });
+      res
+        .status(401)
+        .json({ success: false, message: "Authentication required." });
       return;
     }
 
     // If body is an array, handle multiple creation
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        res.status(400).json({ success: false, message: "Venue array cannot be empty." });
+        res
+          .status(400)
+          .json({ success: false, message: "Venue array cannot be empty." });
         return;
       }
       // Set managerId from token for each venue
-      const venuesData = body.map((venue: any) => ({ ...venue, managerId: userId }));
+      const venuesData = body.map((venue: any) => ({
+        ...venue,
+        managerId: userId,
+      }));
       try {
         const createResult = await VenueRepository.createMultiple(venuesData);
         res.status(createResult.success ? 201 : 207).json({
@@ -180,7 +187,7 @@ export class VenueController {
     }
   }
 
-static async update(req: Request, res: Response): Promise<void> {
+  static async update(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const userId = req.user?.userId;
     const {
@@ -202,17 +209,21 @@ static async update(req: Request, res: Response): Promise<void> {
     }: Partial<VenueInterface> = req.body;
 
     if (!id) {
-      res.status(400).json({ success: false, message: 'Venue ID is required.' });
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
       return;
     }
 
     if (!userId) {
-      res.status(401).json({ success: false, message: 'Authentication required.' });
+      res
+        .status(401)
+        .json({ success: false, message: "Authentication required." });
       return;
     }
 
     // Log request body for debugging
-    console.log('Update request body:', req.body);
+    console.log("Update request body:", req.body);
 
     // Construct update data, omitting undefined fields
     const updateData: Partial<VenueInterface> = {};
@@ -223,7 +234,8 @@ static async update(req: Request, res: Response): Promise<void> {
     if (managerId !== undefined) updateData.managerId = managerId;
     if (latitude !== undefined) updateData.latitude = latitude;
     if (longitude !== undefined) updateData.longitude = longitude;
-    if (googleMapsLink !== undefined) updateData.googleMapsLink = googleMapsLink;
+    if (googleMapsLink !== undefined)
+      updateData.googleMapsLink = googleMapsLink;
     if (amenities !== undefined) updateData.amenities = amenities;
     if (venueType !== undefined) updateData.venueType = venueType;
     if (contactPerson !== undefined) updateData.contactPerson = contactPerson;
@@ -237,7 +249,7 @@ static async update(req: Request, res: Response): Promise<void> {
     if (validationErrors.length > 0) {
       res.status(400).json({
         success: false,
-        message: `Validation errors: ${validationErrors.join(', ')}`,
+        message: `Validation errors: ${validationErrors.join(", ")}`,
       });
       return;
     }
@@ -247,20 +259,20 @@ static async update(req: Request, res: Response): Promise<void> {
       if (updateResult.success && updateResult.data) {
         res.status(200).json({
           success: true,
-          message: 'Venue updated successfully.',
+          message: "Venue updated successfully.",
           data: updateResult.data,
         });
       } else {
         res.status(404).json({
           success: false,
-          message: updateResult.message || 'Venue not found.',
+          message: updateResult.message || "Venue not found.",
         });
       }
     } catch (err) {
-      console.error('Error updating venue:', err);
+      console.error("Error updating venue:", err);
       res.status(500).json({
         success: false,
-        message: 'Failed to update venue due to a server error.',
+        message: "Failed to update venue due to a server error.",
       });
     }
   }
@@ -463,7 +475,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Check venue event conflicts
-  static async checkVenueEventConflicts(req: Request, res: Response): Promise<void> {
+  static async checkVenueEventConflicts(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { venueId, startDate, endDate, startTime, endTime } = req.query;
 
     if (
@@ -632,7 +647,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Get venues by proximity
-  static async getVenuesByProximity(req: Request, res: Response): Promise<void> {
+  static async getVenuesByProximity(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { latitude, longitude, radius } = req.query;
 
     if (
@@ -682,7 +700,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Assign a user as manager to a venue (simple version)
-  static async assignManagerToVenue(req: Request, res: Response): Promise<void> {
+  static async assignManagerToVenue(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { venueId, userId } = req.body;
 
     if (!venueId || !userId) {
@@ -735,7 +756,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Get resources for a venue by ID
-  static async getResourcesByVenueId(req: Request, res: Response): Promise<void> {
+  static async getResourcesByVenueId(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { id } = req.params;
     if (!id) {
       res
@@ -787,7 +811,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Remove a resource from a venue
-  static async removeResourceFromVenue(req: Request, res: Response): Promise<void> {
+  static async removeResourceFromVenue(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { venueId, resourceId } = req.params;
     if (!venueId || !resourceId) {
       res.status(400).json({
@@ -839,7 +866,10 @@ static async update(req: Request, res: Response): Promise<void> {
   }
 
   // Create a venue and assign resources in one request
-  static async createVenueWithResources(req: Request, res: Response): Promise<void> {
+  static async createVenueWithResources(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const userId = req.user?.userId;
     const { resources, ...venueData } = req.body;
     if (!userId) {
@@ -854,12 +884,10 @@ static async update(req: Request, res: Response): Promise<void> {
       !venueData.location ||
       !venueData.amount
     ) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "Required fields: venueName, capacity, location, amount.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "Required fields: venueName, capacity, location, amount.",
+      });
       return;
     }
     try {
@@ -871,12 +899,10 @@ static async update(req: Request, res: Response): Promise<void> {
       }
       const saveResult = await VenueRepository.save(createResult.data);
       if (!saveResult.success || !saveResult.data) {
-        res
-          .status(500)
-          .json({
-            success: false,
-            message: saveResult.message || "Failed to save venue.",
-          });
+        res.status(500).json({
+          success: false,
+          message: saveResult.message || "Failed to save venue.",
+        });
         return;
       }
       let assignedResources: any[] = [];
@@ -913,12 +939,10 @@ static async update(req: Request, res: Response): Promise<void> {
       });
     } catch (err) {
       console.error("Error creating venue with resources:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to create venue with resources.",
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to create venue with resources.",
+      });
     }
   }
 
@@ -936,7 +960,8 @@ static async update(req: Request, res: Response): Promise<void> {
       if (!startDate || !endDate || !startTime || !endTime) {
         res.status(400).json({
           success: false,
-          message: 'Missing required parameters: startDate, endDate, startTime, or endTime',
+          message:
+            "Missing required parameters: startDate, endDate, startTime, or endTime",
         });
         return;
       }
@@ -946,17 +971,16 @@ static async update(req: Request, res: Response): Promise<void> {
         new Date(endDate as string),
         startTime as string,
         endTime as string,
-        parseInt(bufferMinutes as string, 10),
+        parseInt(bufferMinutes as string, 10)
       );
 
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
-      console.error('Controller error:', error);
+      console.error("Controller error:", error);
       res.status(500).json({
         success: false,
-        message: 'Server error while checking venue availability.',
+        message: "Server error while checking venue availability.",
       });
     }
   }
-  
 }

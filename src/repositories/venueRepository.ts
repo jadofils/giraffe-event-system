@@ -207,12 +207,12 @@ export class VenueRepository {
       };
     }
   }
-static async update(
+  static async update(
     id: string,
     data: Partial<VenueInterface>
   ): Promise<{ success: boolean; data?: Venue; message: string }> {
     if (!id) {
-      return { success: false, message: 'Venue ID is required.' };
+      return { success: false, message: "Venue ID is required." };
     }
 
     // Validate input data
@@ -220,7 +220,7 @@ static async update(
     if (validationErrors.length > 0) {
       return {
         success: false,
-        message: `Validation errors: ${validationErrors.join(', ')}`,
+        message: `Validation errors: ${validationErrors.join(", ")}`,
       };
     }
 
@@ -236,11 +236,11 @@ static async update(
 
       if (!venue) {
         await queryRunner.rollbackTransaction();
-        return { success: false, message: 'Venue not found or deleted.' };
+        return { success: false, message: "Venue not found or deleted." };
       }
 
       // Log input data for debugging
-      console.log('Update input data:', data);
+      console.log("Update input data:", data);
 
       // Check for duplicate name and location
       const nameChanged = data.venueName && data.venueName !== venue.venueName;
@@ -259,7 +259,8 @@ static async update(
           await queryRunner.rollbackTransaction();
           return {
             success: false,
-            message: 'Another venue with the same name and location already exists.',
+            message:
+              "Another venue with the same name and location already exists.",
           };
         }
       }
@@ -271,7 +272,7 @@ static async update(
       });
 
       // Log merged entity for debugging
-      console.log('Merged venue:', mergedVenue);
+      console.log("Merged venue:", mergedVenue);
 
       // Save changes
       const updatedVenue = await repo.save(mergedVenue);
@@ -289,15 +290,15 @@ static async update(
       return {
         success: true,
         data: updatedVenue,
-        message: 'Venue updated successfully.',
+        message: "Venue updated successfully.",
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      console.error('Error updating venue:', error);
+      console.error("Error updating venue:", error);
       return {
         success: false,
         message: `Failed to update venue: ${
-          error instanceof Error ? error.message : 'Unknown error'
+          error instanceof Error ? error.message : "Unknown error"
         }`,
       };
     } finally {
@@ -806,7 +807,6 @@ static async update(
     }
   }
 
-
   static async findAvailableVenues(
     startDate: Date,
     endDate: Date,
@@ -815,15 +815,22 @@ static async update(
     bufferMinutes: number = 30
   ): Promise<{
     success: boolean;
-    data?: { availableVenues: Venue[]; isAvailableInFuture: boolean; conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[]; nextAvailableTime?: string };
+    data?: {
+      availableVenues: Venue[];
+      isAvailableInFuture: boolean;
+      conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[];
+      nextAvailableTime?: string;
+    };
     message?: string;
   }> {
-    const cacheKey = `${this.CACHE_PREFIX}available:${startDate.toISOString()}:${endDate.toISOString()}:${startTime}:${endTime}:${bufferMinutes}`;
-    
+    const cacheKey = `${
+      this.CACHE_PREFIX
+    }available:${startDate.toISOString()}:${endDate.toISOString()}:${startTime}:${endTime}:${bufferMinutes}`;
+
     try {
       // Combine date and time into full Date objects
       const parseTime = (date: Date, time: string): Date => {
-        const [hours, minutes] = time.split(':').map(Number);
+        const [hours, minutes] = time.split(":").map(Number);
         const newDate = new Date(date);
         newDate.setHours(hours, minutes, 0, 0);
         return newDate;
@@ -836,7 +843,7 @@ static async update(
       if (eventEnd <= eventStart) {
         return {
           success: false,
-          message: 'End date/time must be after start date/time.',
+          message: "End date/time must be after start date/time.",
         };
       }
 
@@ -846,73 +853,126 @@ static async update(
         isAvailableInFuture: boolean;
         conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[];
       };
-      let cachedResult = await CacheService.get<AvailableVenuesCacheType>(cacheKey);
+      let cachedResult = await CacheService.get<AvailableVenuesCacheType>(
+        cacheKey
+      );
       if (!cachedResult) {
-        // Get all approved venues
+        // Get all venues that are not deleted (regardless of status)
         const allVenues = await AppDataSource.getRepository(Venue).find({
-          where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
-          relations: ['manager'],
+          where: { deletedAt: IsNull() },
+          relations: ["manager"],
         });
 
-        const availableVenues: Array<Venue & {
-          previousEvent?: {
-            startDate: string;
-            startTime: string;
-            endDate: string;
-            endTime: string;
-          };
-          nextAvailableTime: string;
-        }> = [];
-        const conflictingVenues: { venue: Venue; conflictingEvents: AppEvent[] }[] = [];
+        const availableVenues: Array<
+          Venue & {
+            previousEvent?: {
+              startDate: string;
+              startTime: string;
+              endDate: string;
+              endTime: string;
+            };
+            nextAvailableTime: string;
+          }
+        > = [];
+        const conflictingVenues: {
+          venue: Venue;
+          conflictingEvents: AppEvent[];
+        }[] = [];
 
         // Check each venue for availability
         for (const venue of allVenues) {
-          const conflictingBookings = await AppDataSource.getRepository(VenueBooking)
-            .createQueryBuilder('booking')
-            .leftJoinAndSelect('booking.event', 'event')
-            .where('booking.venueId = :venueId', { venueId: venue.venueId })
-            .andWhere('booking.approvalStatus = :status', { status: 'approved' })
+          // Check for conflicting bookings (approved)
+          const conflictingBookings = await AppDataSource.getRepository(
+            VenueBooking
+          )
+            .createQueryBuilder("booking")
+            .leftJoinAndSelect("booking.event", "event")
+            .where("booking.venueId = :venueId", { venueId: venue.venueId })
+            .andWhere("booking.approvalStatus = :status", {
+              status: "approved",
+            })
             .andWhere(
-              '((event.startDate < :eventEnd AND event.endDate > :eventStart) OR ' +
-              '(event.startDate = :eventStart AND event.startTime <= :endTime AND event.endTime >= :startTime))',
+              "((event.startDate < :eventEnd AND event.endDate > :eventStart) OR " +
+                "(event.startDate = :eventStart AND event.startTime <= :endTime AND event.endTime >= :startTime))",
               {
-              eventStart,
-              eventEnd,
-              startTime: typeof startTime === 'string' ? startTime : String(startTime),
-              endTime: typeof endTime === 'string' ? endTime : String(endTime),
+                eventStart,
+                eventEnd,
+                startTime:
+                  typeof startTime === "string" ? startTime : String(startTime),
+                endTime:
+                  typeof endTime === "string" ? endTime : String(endTime),
               }
             )
             .getMany();
 
-          if (conflictingBookings.length === 0) {
-            // Find the latest event that ends before the requested start time
-            const previousBooking = await AppDataSource.getRepository(VenueBooking)
-              .createQueryBuilder('booking')
-              .leftJoinAndSelect('booking.event', 'event')
-              .where('booking.venueId = :venueId', { venueId: venue.venueId })
-              .andWhere('booking.approvalStatus = :status', { status: 'approved' })
-              .andWhere('((event.endDate < :eventStart) OR (event.endDate = :eventStart AND event.endTime < :startTime))', {
+          // Check for conflicting events directly (even if no booking exists)
+          const conflictingEvents = await AppDataSource.getRepository(AppEvent)
+            .createQueryBuilder("event")
+            .leftJoin("event.venues", "venue")
+            .where("venue.venueId = :venueId", { venueId: venue.venueId })
+            .andWhere("event.status = :status", { status: "APPROVED" })
+            .andWhere(
+              "((event.startDate < :eventEnd AND event.endDate > :eventStart) OR " +
+                "(event.startDate = :eventStart AND event.startTime <= :endTime AND event.endTime >= :startTime))",
+              {
                 eventStart,
-                startTime: typeof startTime === 'string' ? startTime : String(startTime),
+                eventEnd,
+                startTime:
+                  typeof startTime === "string" ? startTime : String(startTime),
+                endTime:
+                  typeof endTime === "string" ? endTime : String(endTime),
+              }
+            )
+            .getMany();
+
+          if (
+            conflictingBookings.length === 0 &&
+            conflictingEvents.length === 0
+          ) {
+            // Find the latest event that ends before the requested start time
+            const previousBooking = await AppDataSource.getRepository(
+              VenueBooking
+            )
+              .createQueryBuilder("booking")
+              .leftJoinAndSelect("booking.event", "event")
+              .where("booking.venueId = :venueId", { venueId: venue.venueId })
+              .andWhere("booking.approvalStatus = :status", {
+                status: "approved",
               })
-              .orderBy('event.endDate', 'DESC')
-              .addOrderBy('event.endTime', 'DESC')
+              .andWhere(
+                "((event.endDate < :eventStart) OR (event.endDate = :eventStart AND event.endTime < :startTime))",
+                {
+                  eventStart,
+                  startTime:
+                    typeof startTime === "string"
+                      ? startTime
+                      : String(startTime),
+                }
+              )
+              .orderBy("event.endDate", "DESC")
+              .addOrderBy("event.endTime", "DESC")
               .getOne();
 
             let previousEvent = undefined;
             let nextAvailableTime = eventStart.toISOString();
             if (previousBooking && previousBooking.event) {
               previousEvent = {
-                startDate: previousBooking.event.startDate?.toISOString?.() || '',
-                startTime: previousBooking.event.startTime || '',
-                endDate: previousBooking.event.endDate?.toISOString?.() || '',
-                endTime: previousBooking.event.endTime || '',
+                startDate:
+                  previousBooking.event.startDate?.toISOString?.() || "",
+                startTime: previousBooking.event.startTime || "",
+                endDate: previousBooking.event.endDate?.toISOString?.() || "",
+                endTime: previousBooking.event.endTime || "",
               };
               // Calculate next available time: previous event's end + 15 minutes
-              let prevEndDate = previousBooking.event.endDate instanceof Date
-                ? new Date(previousBooking.event.endDate)
-                : new Date(previousBooking.event.endDate);
-              let [endHour, endMinute] = (previousBooking.event.endTime || '00:00').split(':').map(Number);
+              let prevEndDate =
+                previousBooking.event.endDate instanceof Date
+                  ? new Date(previousBooking.event.endDate)
+                  : new Date(previousBooking.event.endDate);
+              let [endHour, endMinute] = (
+                previousBooking.event.endTime || "00:00"
+              )
+                .split(":")
+                .map(Number);
               prevEndDate.setHours(endHour, endMinute, 0, 0);
               prevEndDate = new Date(prevEndDate.getTime() + 15 * 60 * 1000); // add 15 minutes
               nextAvailableTime = prevEndDate.toISOString();
@@ -925,23 +985,28 @@ static async update(
           } else {
             conflictingVenues.push({
               venue,
-              conflictingEvents: conflictingBookings.map((booking) => booking.event),
+              conflictingEvents: [
+                ...conflictingBookings.map((booking) => booking.event),
+                ...conflictingEvents,
+              ],
             });
           }
         }
 
         // Check future availability (e.g., 30 minutes after event start)
-        const futureTime = new Date(eventStart.getTime() + bufferMinutes * 60 * 1000);
+        const futureTime = new Date(
+          eventStart.getTime() + bufferMinutes * 60 * 1000
+        );
         const futureConflicts = await AppDataSource.getRepository(VenueBooking)
-          .createQueryBuilder('booking')
-          .leftJoin('booking.event', 'event')
-          .where('booking.approvalStatus = :status', { status: 'approved' })
+          .createQueryBuilder("booking")
+          .leftJoin("booking.event", "event")
+          .where("booking.approvalStatus = :status", { status: "approved" })
           .andWhere(
-            '((event.startDate < :futureTime AND event.endDate > :futureTime) OR ' +
-            '(event.startDate = :futureTime AND event.startTime <= :futureTimeStr AND event.endTime >= :futureTimeStr))',
-            { 
-            futureTime, 
-            futureTimeStr: futureTime.toISOString().substring(11, 16) // "HH:mm"
+            "((event.startDate < :futureTime AND event.endDate > :futureTime) OR " +
+              "(event.startDate = :futureTime AND event.startTime <= :futureTimeStr AND event.endTime >= :futureTimeStr))",
+            {
+              futureTime,
+              futureTimeStr: futureTime.toISOString().substring(11, 16), // "HH:mm"
             }
           )
           .getCount();
@@ -965,10 +1030,13 @@ static async update(
         let minEndTime: string | null = null;
         for (const conflict of cachedResult.conflictingVenues) {
           for (const event of conflict.conflictingEvents) {
-            const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
-            const endTime = event.endTime || '00:00';
+            const endDate =
+              event.endDate instanceof Date
+                ? event.endDate
+                : new Date(event.endDate);
+            const endTime = event.endTime || "00:00";
             let eventEnd = new Date(endDate);
-            const [h, m] = endTime.split(':').map(Number);
+            const [h, m] = endTime.split(":").map(Number);
             eventEnd.setHours(h, m, 0, 0);
             if (!minEndDate || eventEnd < minEndDate) {
               minEndDate = eventEnd;
@@ -994,18 +1062,16 @@ static async update(
         },
         message: cachedResult.availableVenues.length
           ? `${cachedResult.availableVenues.length} venue(s) available for the requested time slot.`
-          : 'No venues available for the requested time slot.',
+          : "No venues available for the requested time slot.",
       };
     } catch (error) {
-      console.error('Error finding available venues:', error);
+      console.error("Error finding available venues:", error);
       return {
         success: false,
         message: `Failed to find available venues: ${
-          error instanceof Error ? error.message : 'Unknown error'
+          error instanceof Error ? error.message : "Unknown error"
         }`,
       };
     }
   }
-
 }
-
