@@ -1207,7 +1207,7 @@ export class VenueController {
         return;
       }
 
-      const result = await VenueRepository.findAvailableVenues(
+      const result = await VenueRepository.findFullyAvailableVenues(
         new Date(startDate as string),
         new Date(endDate as string),
         startTime as string,
@@ -1215,7 +1215,22 @@ export class VenueController {
         parseInt(bufferMinutes as string, 10)
       );
 
-      res.status(result.success ? 200 : 400).json(result);
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message: `${
+            result.data?.length || 0
+          } venue(s) fully available for the requested time range.`,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message:
+            result.message ||
+            "No venues available for the requested time range.",
+        });
+      }
     } catch (error) {
       console.error("Controller error:", error);
       res.status(500).json({
