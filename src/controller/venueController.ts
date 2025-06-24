@@ -4,112 +4,353 @@ import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
 import { VenueRepository } from "../repositories/venueRepository";
 import { VenueResourceRepository } from "../repositories/VenueResourceRepository";
+import { Venue, VenueStatus } from "../models/Venue";
+import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
+import { AppDataSource } from "../config/Database";
+import { Resource } from "../models/Resources";
+import { VenueResource } from "../models/VenueResource";
+import { OrganizationRepository } from "../repositories/OrganizationRepository";
 
 export class VenueController {
   // Create a single venue or multiple venues
-  static async create(req: Request, res: Response): Promise<void> {
-    const userId = req.user?.userId;
-    const body = req.body;
+ /**
+     * Handles the creation of one or more venues,
+     * including associated resources and assignment to an organization.
+     *
+     * Supports both single venue object and array of venue objects in the request body.
+     *
+     * @param req The Express request object, expected to be AuthenticatedRequest.
+     * @param res The Express response object.
+     * @returns A JSON response indicating success or failure of venue creation and assignment.
+     */
+      public static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    if (!userId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
+    static async create(req: Request, res: Response): Promise<void> {
+        const authenticatedReq = req as AuthenticatedRequest;
+        const userId = authenticatedReq.user?.userId;
+        const organizationIdFromUser = authenticatedReq.user?.organizationId; // Organization ID from authenticated user token
+
+        // Determine user's role for status assignment (admin = APPROVED, others = PENDING)
+        let userRole: string | undefined = undefined;
+        if (authenticatedReq.user?.role && typeof authenticatedReq.user.role === "object" && authenticatedReq.user.role.roleName) {
+            userRole = String(authenticatedReq.user.role.roleName).toLowerCase();
+        } else if (typeof authenticatedReq.user?.role === "string") {
+            userRole = (authenticatedReq.user.role as string).toLowerCase();
+        }
+
+        const body = authenticatedReq.body; // The request body containing venue data
+
+        // Check for authenticated user ID
+        if (!userId) {
+            res.status(401).json({ success: false, message: "Authentication required." });
+            return;
+        }
+
+        // Get TypeORM repositories for interacting with the database
+        const resourceRepository = AppDataSource.getRepository(Resource);
+        const venueResourceRepository = AppDataSource.getRepository(VenueResource);
+        const venueRepository = AppDataSource.getRepository(Venue); // Direct access to Venue entity repository
+
+        /**
+         * Helper function to process and associate resources with a newly created venue.
+         * It handles both existing resources (by ID) and new resources (by full details).
+         * @param venue The Venue entity to associate resources with.
+         * @param resourcesData An array of resource objects from the request body.
+         */
+        const processAndAssociateResources = async (venue: Venue, resourcesData: any[] | undefined) => {
+            if (resourcesData && resourcesData.length > 0) {
+                for (const resData of resourcesData) {
+                    let resource: Resource | null = null;
+                    // Check if resourceId is provided in the request data (meaning it's an existing resource)
+                    if (resData.resourceId) {
+                        if (!OrganizationRepository.UUID_REGEX.test(resData.resourceId)) {
+                            console.warn(`Invalid resourceId format for existing resource: ${resData.resourceId}. Skipping association.`);
+                            continue;
+                        }
+                        resource = await resourceRepository.findOne({ where: { resourceId: resData.resourceId } });
+                        if (!resource) {
+                            console.warn(`Resource with ID ${resData.resourceId} not found for venue ${venue.venueId}. Skipping association.`);
+                            continue; // Skip this resource if it doesn't exist
+                        }
+                    } else if (resData.resourceName && resData.description && typeof resData.costPerUnit === 'number' && resData.costPerUnit > 0) {
+                        // If resourceId is not provided, attempt to create a new resource
+                        const newResource = new Resource();
+                        newResource.resourceName = resData.resourceName;
+                        newResource.description = resData.description;
+                        newResource.costPerUnit = resData.costPerUnit;
+                        try {
+                            resource = await resourceRepository.save(newResource); // Save the new resource to get its ID
+                            console.log(`Created new resource: ${newResource.resourceName}`);
+                        } catch (error: any) {
+                            console.error(`Failed to create new resource '${resData.resourceName}' for venue ${venue.venueId}:`, error.message);
+                            continue; // Skip association if new resource creation fails
+                        }
+                    } else {
+                        console.warn("Invalid resource data provided. Requires 'resourceId' OR 'resourceName', 'description', 'costPerUnit' (positive number). Skipping.", resData);
+                        continue; // Skip if resource data is malformed
+                    }
+
+                    // If a valid resource (existing or newly created) is found, proceed to associate it with the venue
+                    if (resource && typeof resData.quantity === 'number' && resData.quantity > 0) {
+                        const venueResource = new VenueResource();
+                        venueResource.venue = venue; // Link to the venue
+                        venueResource.resource = resource; // Link to the resource
+                        venueResource.quantity = resData.quantity; // Set the quantity of this resource for the venue
+                        try {
+                            await venueResourceRepository.save(venueResource); // Save the VenueResource association
+                            console.log(`Associated ${resData.quantity} units of resource '${resource.resourceName}' with venue '${venue.venueName}'.`);
+                        } catch (error: any) {
+                            console.error(`Failed to associate resource '${resource.resourceName}' with venue '${venue.venueName}':`, error.message);
+                        }
+                    } else if (resource) {
+                        console.warn(`Invalid quantity for resource '${resource.resourceName}': ${resData.quantity}. Quantity must be a positive number. Skipping association.`);
+                    }
+                }
+            }
+        };
+
+        // --- Handle Multiple Venue Creation (if request body is an array) ---
+        if (Array.isArray(body)) {
+            if (body.length === 0) {
+                res.status(400).json({ success: false, message: "Venue array cannot be empty." });
+                return;
+            }
+
+            const successfullyCreatedVenues: (Venue & { assignmentStatus?: string })[] = [];
+            const failedCreations: { venueData: any; error: string }[] = [];
+
+            // Process each venue object in the array
+            for (const venueData of body) {
+                let targetOrganizationId: string | undefined = undefined;
+
+                // Determine and validate organizationId for each venue in the batch
+                if (venueData.organizationId) {
+                    if (!OrganizationRepository.UUID_REGEX.test(venueData.organizationId)) {
+                        failedCreations.push({ venueData, error: `Invalid organization ID (UUID) provided for venue '${venueData.venueName || 'unknown'}'.` });
+                        continue; // Skip to the next venue in the batch
+                    }
+                    targetOrganizationId = venueData.organizationId;
+                } else if (organizationIdFromUser) {
+                    targetOrganizationId = organizationIdFromUser;
+                } else {
+                    // If no organizationId is provided in body or from user, it's an error for this venue
+                    failedCreations.push({ venueData, error: `Organization ID is required for venue '${venueData.venueName || 'unknown'}' creation and assignment.` });
+                    continue; // Skip to the next venue in the batch
+                }
+
+                try {
+                    // Prepare data for new venue, including managerId, organizationId, and status
+                    const newVenueData: Partial<VenueInterface> = {
+                        ...venueData,
+                        managerId: userId,
+                        organizationId: targetOrganizationId, // Use the validated/determined organizationId
+                        status: userRole === "admin" ? VenueStatus.APPROVED : VenueStatus.PENDING,
+                    };
+
+                    // Use the static VenueRepository.create to instantiate a Venue object
+                    const venueCreateResult = VenueRepository.create(newVenueData);
+                    if (!venueCreateResult.success || !venueCreateResult.data) {
+                        failedCreations.push({ venueData, error: venueCreateResult.message || "Failed to instantiate venue." });
+                        continue; // Move to the next venue in the array
+                    }
+
+                    // Save the Venue entity to the database to get its primary key (venueId)
+                    const savedVenue = await venueRepository.save(venueCreateResult.data);
+                    if (!savedVenue) {
+                        failedCreations.push({ venueData, error: "Failed to save venue to database." });
+                        continue;
+                    }
+                    console.log(`Successfully created venue: ${savedVenue.venueName} (ID: ${savedVenue.venueId})`);
+
+                    // Process and associate resources for the newly created venue
+                    await processAndAssociateResources(savedVenue, venueData.resources);
+
+                    // Assign the newly created venue to the organization using the repository method
+                    // Ensure savedVenue.venueId is not null before using it
+                    let currentAssignmentStatus = "";
+                    if (targetOrganizationId && savedVenue.venueId) {
+                        const assignResult = await OrganizationRepository.addVenuesToOrganization(targetOrganizationId, [savedVenue.venueId]);
+                        if (!assignResult.success) {
+                            console.warn(`Failed to assign venue '${savedVenue.venueName}' (ID: ${savedVenue.venueId}) to organization '${targetOrganizationId}': ${assignResult.message}`);
+                            currentAssignmentStatus = `Failed to assign to organization: ${assignResult.message}`;
+                        } else {
+                            console.log(`Successfully assigned venue '${savedVenue.venueName}' to organization '${targetOrganizationId}'.`);
+                            currentAssignmentStatus = "Successfully assigned to organization.";
+                        }
+                    } else {
+                         currentAssignmentStatus = "Assignment to organization skipped due to missing organization ID or venue ID.";
+                    }
+
+                    // Fetch the complete venue object with all its relations (manager, organization, and resources)
+                    // Use savedVenue.venueId as the ID for fetching
+                    const venueWithRelations = await venueRepository.findOne({
+                        where: { venueId: savedVenue.venueId },
+                        relations: ["manager", "organization", "resources"],
+                    });
+
+                    if (venueWithRelations) {
+                        successfullyCreatedVenues.push({
+                            ...venueWithRelations,
+                            assignmentStatus: currentAssignmentStatus
+                        });
+                    } else {
+                        failedCreations.push({ venueData, error: `Could not retrieve relations for venue ${savedVenue.venueId}` });
+                    }
+
+                } catch (err: any) {
+                    console.error(`Error creating venue from batch: ${venueData?.venueName || 'Unknown'}`, err.message);
+                    failedCreations.push({ venueData, error: err.message || "Unknown error during creation." });
+                }
+            }
+
+            // Send appropriate response based on the outcome of batch creation
+            if (successfullyCreatedVenues.length > 0) {
+                res.status(successfullyCreatedVenues.length === body.length ? 201 : 207).json({
+                    success: true,
+                    message: successfullyCreatedVenues.length === body.length
+                        ? "All venues created and assigned successfully."
+                        : "Some venues were created and assigned successfully, others failed or partially failed assignment.",
+                    data: successfullyCreatedVenues,
+                    failed: failedCreations.length > 0 ? failedCreations : undefined,
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: "No venues were created successfully.",
+                    errors: failedCreations,
+                });
+            }
+            return; // Exit function after handling array input
+        }
+
+        // --- Handle Single Venue Creation (if request body is an object) ---
+        const {
+            venueName,
+            capacity,
+            location,
+            amount,
+            latitude,
+            longitude,
+            googleMapsLink,
+            organizationId, // Extract organizationId directly from the body
+            resources,      // Extract resources array directly from the body
+            amenities,
+            venueType,
+            contactPerson,
+            contactEmail,
+            contactPhone,
+            websiteURL,
+        }: Partial<VenueInterface> & { resources?: any[] } = body; // Augment type to acknowledge 'resources' property
+
+        // Determine and validate target organization ID
+        let targetOrganizationId: string | undefined = undefined;
+        if (organizationId) {
+            // Validate organizationId if provided in the request body
+            if (!OrganizationRepository.UUID_REGEX.test(organizationId)) {
+                res.status(400).json({ success: false, message: "Invalid organization ID (UUID) provided." });
+                return;
+            }
+            targetOrganizationId = organizationId;
+        } else if (organizationIdFromUser) {
+            // Fallback to organizationId from the authenticated user's token
+            targetOrganizationId = organizationIdFromUser;
+        } else {
+            // If no organizationId is provided in body or from user, return an error
+            res.status(400).json({ success: false, message: "Organization ID is required for venue creation and assignment." });
+            return;
+        }
+
+        // Basic validation for essential venue fields (delegated to VenueRepository.create)
+        // This initial check here is redundant if VenueRepository.create handles it, but good for early exit.
+        if (!venueName || !capacity || !location || !amount) {
+            res.status(400).json({
+                success: false,
+                message: "Required fields: venueName, capacity, location, amount.",
+            });
+            return;
+        }
+
+        try {
+            // Prepare data for the new venue
+            const newVenueData: Partial<VenueInterface> = {
+                venueName,
+                capacity,
+                location,
+                amount,
+                managerId: userId,
+                latitude,
+                longitude,
+                googleMapsLink,
+                organizationId: targetOrganizationId, // Use the validated/determined organizationId
+                status: userRole === "admin" ? VenueStatus.APPROVED : VenueStatus.PENDING,
+                amenities,
+                venueType,
+                contactPerson,
+                contactEmail,
+                contactPhone,
+                websiteURL,
+            };
+
+            // Use the static VenueRepository.create method to create a Venue object instance
+            const createResult = VenueRepository.create(newVenueData);
+            if (!createResult.success || !createResult.data) {
+                res.status(400).json({ success: false, message: createResult.message });
+                return;
+            }
+
+            // Save the Venue entity to the database to get its primary key (venueId)
+            const savedVenueResult = await VenueRepository.save(createResult.data);
+            if (!savedVenueResult.success || !savedVenueResult.data) {
+                res.status(400).json({ success: false, message: savedVenueResult.message || "Failed to save venue to database." });
+                return;
+            }
+            const savedVenue = savedVenueResult.data;
+            console.log(`Successfully created venue: ${savedVenue.venueName} (ID: ${savedVenue.venueId})`);
+
+            // Process and associate resources for the newly created venue
+            await processAndAssociateResources(savedVenue, resources);
+
+            let assignmentMessage: string = "Venue created successfully.";
+            let assignmentSuccess: boolean = true;
+
+            // Assign the newly created venue to the organization using the repository method
+            if (targetOrganizationId && savedVenue.venueId) {
+                const assignResult = await OrganizationRepository.addVenuesToOrganization(targetOrganizationId, [savedVenue.venueId]);
+                if (!assignResult.success) {
+                    console.error(`Failed to assign venue '${savedVenue.venueName}' (ID: ${savedVenue.venueId}) to organization '${targetOrganizationId}': ${assignResult.message}`);
+                    assignmentMessage = `Venue created, but failed to assign to organization: ${assignResult.message}`;
+                    assignmentSuccess = false;
+                } else {
+                    console.log(`Successfully assigned venue '${savedVenue.venueName}' to organization '${targetOrganizationId}'.`);
+                }
+            } else {
+                assignmentMessage = "Venue created, but assignment to organization skipped due to missing organization ID or venue ID.";
+                assignmentSuccess = false;
+            }
+
+            // Fetch the complete venue object with all its relations (manager, organization, and newly added resources)
+            const venueWithRelations = await venueRepository.findOne({
+                where: { venueId: savedVenue.venueId },
+                relations: ["manager", "organization", "resources"], // Eager load all related entities
+            });
+
+            res.status(201).json({
+                success: assignmentSuccess, // Reflect overall success, or partial success with warning
+                message: assignmentMessage,
+                data: venueWithRelations,
+            });
+
+        } catch (err: any) {
+            console.error("Error creating venue:", err.message);
+            res.status(500).json({
+                success: false,
+                message: "Failed to create venue due to a server error.",
+                error: (err instanceof Error) ? err.message : "Unknown error",
+            });
+        }
     }
 
-    // If body is an array, handle multiple creation
-    if (Array.isArray(body)) {
-      if (body.length === 0) {
-        res
-          .status(400)
-          .json({ success: false, message: "Venue array cannot be empty." });
-        return;
-      }
-      // Set managerId from token for each venue
-      const venuesData = body.map((venue: any) => ({
-        ...venue,
-        managerId: userId,
-      }));
-      try {
-        const createResult = await VenueRepository.createMultiple(venuesData);
-        res.status(createResult.success ? 201 : 207).json({
-          success: createResult.success,
-          message: createResult.success
-            ? "All venues created successfully."
-            : "Some venues failed to create.",
-          data: createResult.venues,
-          errors: createResult.errors,
-        });
-      } catch (err) {
-        console.error("Error creating multiple venues:", err);
-        res.status(500).json({
-          success: false,
-          message: "Failed to create venues due to a server error.",
-        });
-      }
-      return;
-    }
-
-    // Otherwise, handle single creation
-    const {
-      venueName,
-      capacity,
-      location,
-      amount,
-      latitude,
-      longitude,
-      googleMapsLink,
-    }: Partial<VenueInterface> = body;
-
-    if (!venueName || !capacity || !location || !amount) {
-      res.status(400).json({
-        success: false,
-        message: "Required fields: venueName, capacity, location, amount.",
-      });
-      return;
-    }
-
-    try {
-      const newVenueData: Partial<VenueInterface> = {
-        venueName,
-        capacity,
-        location,
-        amount,
-        managerId: userId, // Always set from token
-        latitude,
-        longitude,
-        googleMapsLink,
-      };
-
-      const createResult = await VenueRepository.create(newVenueData);
-      if (!createResult.success || !createResult.data) {
-        res.status(400).json({ success: false, message: createResult.message });
-        return;
-      }
-
-      const saveResult = await VenueRepository.save(createResult.data);
-      if (saveResult.success && saveResult.data) {
-        res.status(201).json({
-          success: true,
-          message: "Venue created successfully.",
-          data: saveResult.data,
-        });
-      } else {
-        res.status(500).json({
-          success: false,
-          message: saveResult.message || "Failed to save venue.",
-        });
-      }
-    } catch (err) {
-      console.error("Error creating venue:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to create venue due to a server error.",
-      });
-    }
-  }
-
+    
   // Get venue by ID
   static async getById(req: Request, res: Response): Promise<void> {
     const { id } = req.params;

@@ -11,7 +11,7 @@ router.get("/all", authenticate, VenueController.getAll);
 router.get("/get/:id", authenticate, VenueController.getById);
 router.get("/search", authenticate, VenueController.searchVenues);
 router.get("/count", authenticate, VenueController.getVenueCount);
-router.post("/add", authenticate, VenueController.create);
+router.post("/add", authenticate,isAdmin, VenueController.create);
 router.get("/manager-venues", authenticate, VenueController.getByManagerId);
 router.put("/update/:id", authenticate, VenueController.update);
 router.delete("/remove/:id", authenticate, VenueController.delete);
