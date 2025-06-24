@@ -165,65 +165,7 @@ export const authenticate = async (
 export const isAuthenticatedRequest = (req: Request): req is AuthenticatedRequest => {
   return 'user' in req && req.user !== undefined;
 };
-const router = Router();
 
-// Get all venues
-router.get("/all", authenticate, VenueController.getAll);
-
-// Get venue by ID
-router.get("/get/:id", authenticate, VenueController.getById);
-
-// Search venues
-router.get("/search", authenticate, VenueController.searchVenues);
-
-// Get venue count
-router.get("/count", authenticate, VenueController.getVenueCount);
-
-// Create venue
-router.post("/add", authenticate, VenueController.create); 
-
-// Get venues by manager ID
-router.get("/manager-venues", authenticate, VenueController.getByManagerId);
-
-// Update venue
-router.put("/update/:id", authenticate, VenueController.update);
-
-// Delete venue
-router.delete("/remove/:id", authenticate, VenueController.delete);
-
-// Assign manager to venue
-router.post(
-  "/assign-manager",
-  authenticate,
-  VenueController.assignManagerToVenue
-);
-
-// Add resources to venue
-router.post(
-  "/:venueId/resources",
-  authenticate,
-  VenueController.addResourcesToVenue
-);
-
-// Remove resource from venue
-router.delete(
-  "/:venueId/resources/:resourceId",
-  authenticate,
-  VenueController.removeResourceFromVenue
-);
-
-// Get venue resources
-router.get("/:venueId/resources", authenticate, VenueController.getVenueResources);
-
-// Create venue with resources
-router.post('/add-with-resources', authenticate, VenueController.createVenueWithResources);
-
-// Update venue manager
-router.put("/update-manager/:id", authenticate, VenueController.updateVenueManager);
-
-// Remove venue manager
-router.put("/remove-manager/:id", isAdmin, VenueController.removeVenueManager);
 
 //router.use("/", checkAbsenceRoutes);
 
-export default router;

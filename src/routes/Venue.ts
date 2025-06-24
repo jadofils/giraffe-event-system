@@ -34,10 +34,11 @@ router.get(
   authenticate,
   VenueController.getVenueResources
 );
-router.post(
-  "/add-with-resources",
+router.post("/add-with-resources", authenticate, VenueController.create);
+router.get(
+  "/approved-venues",
   authenticate,
-  VenueController.createVenueWithResources
+  VenueController.listApprovedVenues
 );
 router.put(
   "/update-manager/:id",

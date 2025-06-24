@@ -1322,7 +1322,6 @@ export class EventRepository {
     }
   }
 }
-
 function sanitizeEvent(event: any) {
   if (!event) return event;
   // Remove circular references for venues

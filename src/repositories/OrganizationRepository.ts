@@ -10,6 +10,7 @@ const CACHE_TTL = 3600; // 1 hour
 
 export class OrganizationRepository {
   public static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  public static readonly CACHE_PREFIX = "org:";
 
   /**
    * Get all organizations
@@ -41,35 +42,41 @@ export class OrganizationRepository {
    * @param id Organization UUID
    * @returns Organization with users
    */
-  static async getById(id: string): Promise<{ success: boolean; data?: Organization; message?: string }> {
-    if (!id || !this.UUID_REGEX.test(id)) {
-      return { success: false, message: "Valid organization ID is required" };
+    /**
+     * Retrieves an organization by its ID, including related users and venues.
+     * @param id The UUID of the organization.
+     * @returns An object indicating success/failure and the organization data.
+     */
+    static async getById(id: string): Promise<{ success: boolean; data?: Organization; message?: string }> {
+        if (!id || !this.UUID_REGEX.test(id)) {
+            return { success: false, message: "Valid organization ID is required" };
+        }
+
+        try {
+            const cacheKey = `${this.CACHE_PREFIX}id:${id}:withVenuesAndUsers`; // More specific cache key
+            const organization = await CacheService.getOrSetSingle(
+                cacheKey,
+                AppDataSource.getRepository(Organization),
+                async () => {
+                    // Eagerly load 'users', 'users.role', and 'venues' relations
+                    return await AppDataSource.getRepository(Organization).findOne({
+                        where: { organizationId: id },
+                        relations: ["users", "users.role", "venues"], // FIX: Added "venues" relation here
+                    });
+                },
+                CACHE_TTL
+            );
+
+            if (!organization) {
+                return { success: false, message: "Organization not found" };
+            }
+
+            return { success: true, data: organization };
+        } catch (error: any) {
+            console.error(`[Organization Fetch Error] ID: ${id}:`, error.message);
+            return { success: false, message: `Failed to fetch organization: ${error.message || "Unknown error"}` };
+        }
     }
-
-    try {
-      const cacheKey = `org:id:${id}`;
-      const organization = await CacheService.getOrSetSingle(
-        cacheKey,
-        AppDataSource.getRepository(Organization),
-        async () => {
-          return await AppDataSource.getRepository(Organization).findOne({
-            where: { organizationId: id },
-            relations: ["users", "users.role"],
-          });
-        },
-        CACHE_TTL
-      );
-
-      if (!organization) {
-        return { success: false, message: "Organization not found" };
-      }
-
-      return { success: true, data: organization };
-    } catch (error) {
-      console.error(`[Organization Fetch Error] ID: ${id}:`, error);
-      return { success: false, message: "Failed to fetch organization" };
-    }
-  }
 
   /**
    * Create a new organization (not saved)

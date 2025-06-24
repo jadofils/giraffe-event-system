@@ -1214,86 +1214,6 @@ export class VenueController {
     }
   }
 
-  // Create a venue and assign resources in one request
-  static async createVenueWithResources(
-    req: Request,
-    res: Response
-  ): Promise<void> {
-    const userId = req.user?.userId;
-    const { resources, ...venueData } = req.body;
-    if (!userId) {
-      res
-        .status(401)
-        .json({ success: false, message: "Authentication required." });
-      return;
-    }
-    if (
-      !venueData.venueName ||
-      !venueData.capacity ||
-      !venueData.location ||
-      !venueData.amount
-    ) {
-      res.status(400).json({
-        success: false,
-        message: "Required fields: venueName, capacity, location, amount.",
-      });
-      return;
-    }
-    try {
-      // Create the venue
-      const createResult = await VenueRepository.create(venueData);
-      if (!createResult.success || !createResult.data) {
-        res.status(400).json({ success: false, message: createResult.message });
-        return;
-      }
-      const saveResult = await VenueRepository.save(createResult.data);
-      if (!saveResult.success || !saveResult.data) {
-        res.status(500).json({
-          success: false,
-          message: saveResult.message || "Failed to save venue.",
-        });
-        return;
-      }
-      let assignedResources: any[] = [];
-      if (Array.isArray(resources) && resources.length > 0) {
-        // Support creating new resources inline
-        const resourceAssignments: { resourceId: string; quantity: number }[] =
-          [];
-        for (const r of resources) {
-          if (r.resource) {
-            // Create the resource first
-            const created = await import(
-              "../repositories/ResourceRepository"
-            ).then((m) => m.ResourceRepository.createResource(r.resource));
-            resourceAssignments.push({
-              resourceId: created.resourceId,
-              quantity: r.quantity,
-            });
-          } else if (r.resourceId) {
-            resourceAssignments.push({
-              resourceId: r.resourceId,
-              quantity: r.quantity,
-            });
-          }
-        }
-        assignedResources = await VenueResourceRepository.addResourcesToVenue(
-          saveResult.data.venueId,
-          resourceAssignments
-        );
-      }
-      res.status(201).json({
-        success: true,
-        message: "Venue and resources created successfully.",
-        data: { venue: saveResult.data, resources: assignedResources },
-      });
-    } catch (err) {
-      console.error("Error creating venue with resources:", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to create venue with resources.",
-      });
-    }
-  }
 
   static async checkAvailability(req: Request, res: Response): Promise<void> {
     try {
@@ -1374,6 +1294,33 @@ export class VenueController {
       res.status(400).json({ success: false, message: result.message });
     }
   }
+
+  /**
+ * Retrieves all approved venues.
+ * @param req The Express request object.
+ * @param res The Express response object.
+ */
+static async listApprovedVenues(req: Request, res: Response): Promise<void> {
+    try {
+        const result = await VenueRepository.getApprovedVenues();
+
+        if (result.success) {
+            res.status(200).json(result);
+        } else {
+            res.status(500).json({
+                success: false,
+                message: result.message || "Failed to retrieve approved venues"
+            });
+        }
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            message: "An unexpected error occurred while retrieving approved venues.",
+            error: error?.message || error
+        });
+    }
+}
+
 
   static async cancelVenue(req: Request, res: Response): Promise<void> {
     const user = (req as any).user;

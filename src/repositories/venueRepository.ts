@@ -6,7 +6,6 @@ import { Venue, VenueStatus } from "../models/Venue";
 import { VenueBooking } from "../models/VenueBooking";
 import { Event as AppEvent } from "../models/Event";
 import { CacheService } from "../services/CacheService";
-import { Request, Response } from "express";
 
 export class VenueRepository {
   private static readonly CACHE_PREFIX = "venue:";
@@ -1258,4 +1257,43 @@ export class VenueRepository {
       };
     }
   }
+
+ /**
+     * Retrieves all venues with an 'APPROVED' status, not soft-deleted,
+     * including their manager, organization, users, and resources.
+     * This method is cached.
+     *
+     * @returns A result object containing approved venues or an error message.
+     */
+    static async getApprovedVenues(): Promise<{ success: boolean; data?: Venue[]; message?: string }> {
+        const cacheKey = `${this.CACHE_PREFIX}approved`; // Specific cache key for approved venues
+        try {
+            const cachedVenues = await CacheService.get<Venue[]>(cacheKey);
+            if (cachedVenues) {
+                return { success: true, data: cachedVenues, message: "Approved venues fetched from cache." };
+            }
+
+            const venues = await AppDataSource.getRepository(Venue).find({
+                where: {
+                    status: VenueStatus.APPROVED,
+                    deletedAt: IsNull(), // Ensure only non-soft-deleted venues are returned
+                },
+                relations: [
+                    "manager",
+                    "organization", // Corrected: A venue has one organization, not 'organizations' array
+                    "users",      // Corrected: 'users' is the relation to the User entity directly
+                    "resources"   // Added: To fetch associated resources
+                ],
+            });
+
+            await CacheService.set(cacheKey, venues); // Cache the result
+            return { success: true, data: venues, message: "Approved venues retrieved successfully." };
+        } catch (error: any) {
+            console.error("Error finding approved venues:", error.message);
+            return {
+                success: false,
+                message: `Failed to find approved venues due to a server error: ${error.message || "Unknown error"}`,
+            };
+        }
+    }
 }

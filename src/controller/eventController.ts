@@ -487,8 +487,8 @@ export class EventController {
     if (!data.organizationId) errors.push("organizationId is required");
     return errors;
   }
-}
 
+}
 function sanitizeVenue(venue: any) {
   if (!venue) return venue;
   const { events, ...venueWithoutEvents } = venue;
