@@ -14,141 +14,145 @@ export class VenueRepository {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   // Create venue
-static create(data: Partial<VenueInterface>): {
-  success: boolean;
-  data?: Venue;
-  message?: string;
-} {
-  if (!data.venueName || !data.capacity || !data.location || !data.amount) {
-    return {
-      success: false,
-      message: "Required fields: venueName, capacity, location, amount.",
-    };
-  }
-
-  if (typeof data.capacity !== "number" || data.capacity <= 0) {
-    return { success: false, message: "Capacity must be a positive number." };
-  }
-
-  if (typeof data.amount !== "number" || data.amount <= 0) {
-    return { success: false, message: "Amount must be a positive number." };
-  }
-
-  if (data.managerId && !this.UUID_REGEX.test(data.managerId)) {
-    return { success: false, message: "Invalid managerId format." };
-  }
-
-  if (data.organizationId && !this.UUID_REGEX.test(data.organizationId)) {
-    return { success: false, message: "Invalid organizationId format." };
-  }
-
-  if (
-    data.latitude !== undefined &&
-    (typeof data.latitude !== "number" || data.latitude < -90 || data.latitude > 90)
-  ) {
-    return {
-      success: false,
-      message: "Invalid latitude. Must be a number between -90 and 90.",
-    };
-  }
-
-  if (
-    data.longitude !== undefined &&
-    (typeof data.longitude !== "number" || data.longitude < -180 || data.longitude > 180)
-  ) {
-    return {
-      success: false,
-      message: "Invalid longitude. Must be a number between -180 and 180.",
-    };
-  }
-
-  const venue = new Venue();
-  Object.assign(venue, {
-    venueName: data.venueName,
-    capacity: data.capacity,
-    location: data.location,
-    amount: data.amount,
-    managerId: data.managerId ?? undefined,
-    organizationId: data.organizationId ?? undefined,
-    latitude: data.latitude ?? undefined,
-    longitude: data.longitude ?? undefined,
-    googleMapsLink: data.googleMapsLink ?? undefined,
-    amenities: data.amenities ?? undefined,
-    venueType: data.venueType ?? undefined,
-    contactPerson: data.contactPerson ?? undefined,
-    contactEmail: data.contactEmail ?? undefined,
-    contactPhone: data.contactPhone ?? undefined,
-    websiteURL: data.websiteURL ?? undefined,
-    status:
-      typeof data.status === "string" &&
-      data.status.toUpperCase() === VenueStatus.APPROVED
-        ? VenueStatus.APPROVED
-        : VenueStatus.PENDING,
-  });
-
-  return { success: true, data: venue };
-}
-
-  // Save venue
-static async save(
-  venue: Venue
-): Promise<{ success: boolean; data?: Venue; message?: string }> {
-  if (!venue.venueName || !venue.capacity || !venue.location || !venue.amount) {
-    return {
-      success: false,
-      message: "Required fields: venueName, capacity, location, amount.",
-    };
-  }
-
-  try {
-    const repo = AppDataSource.getRepository(Venue);
-
-    // Find any venue with same name and location, regardless of organization
-    const duplicate = await repo.findOne({
-      where: {
-        venueName: venue.venueName,
-        location: venue.location
-      }
-    });
-
-    if (
-      duplicate &&
-      duplicate.venueId !== venue.venueId
-    ) {
-      const sameOrg = duplicate.organizationId === venue.organizationId;
+  static create(data: Partial<VenueInterface>): {
+    success: boolean;
+    data?: Venue;
+    message?: string;
+  } {
+    if (!data.venueName || !data.capacity || !data.location || !data.amount) {
       return {
         success: false,
-        message: sameOrg
-          ? `Venue "${venue.venueName}" at "${venue.location}" already exists in your organization.`
-          : `Venue "${venue.venueName}" at "${venue.location}" is already registered under another organization.`,
-        data: duplicate,
+        message: "Required fields: venueName, capacity, location, amount.",
       };
     }
 
-    const savedVenue = await repo.save(venue);
+    if (typeof data.capacity !== "number" || data.capacity <= 0) {
+      return { success: false, message: "Capacity must be a positive number." };
+    }
 
-    await CacheService.invalidateMultiple([
-      `${this.CACHE_PREFIX}all`,
-      `${this.CACHE_PREFIX}${savedVenue.venueId}`,
-      `${this.CACHE_PREFIX}manager:${savedVenue.managerId}`,
-      `${this.CACHE_PREFIX}search:*`,
-    ]);
+    if (typeof data.amount !== "number" || data.amount <= 0) {
+      return { success: false, message: "Amount must be a positive number." };
+    }
 
-    return {
-      success: true,
-      data: savedVenue,
-      message: "Venue saved successfully",
-    };
-  } catch (error: any) {
-    console.error("Error saving venue:", error);
-    return {
-      success: false,
-      message: "Failed to save venue."
-    };
+    if (data.managerId && !this.UUID_REGEX.test(data.managerId)) {
+      return { success: false, message: "Invalid managerId format." };
+    }
+
+    if (data.organizationId && !this.UUID_REGEX.test(data.organizationId)) {
+      return { success: false, message: "Invalid organizationId format." };
+    }
+
+    if (
+      data.latitude !== undefined &&
+      (typeof data.latitude !== "number" ||
+        data.latitude < -90 ||
+        data.latitude > 90)
+    ) {
+      return {
+        success: false,
+        message: "Invalid latitude. Must be a number between -90 and 90.",
+      };
+    }
+
+    if (
+      data.longitude !== undefined &&
+      (typeof data.longitude !== "number" ||
+        data.longitude < -180 ||
+        data.longitude > 180)
+    ) {
+      return {
+        success: false,
+        message: "Invalid longitude. Must be a number between -180 and 180.",
+      };
+    }
+
+    const venue = new Venue();
+    Object.assign(venue, {
+      venueName: data.venueName,
+      capacity: data.capacity,
+      location: data.location,
+      amount: data.amount,
+      managerId: data.managerId ?? undefined,
+      organizationId: data.organizationId ?? undefined,
+      latitude: data.latitude ?? undefined,
+      longitude: data.longitude ?? undefined,
+      googleMapsLink: data.googleMapsLink ?? undefined,
+      amenities: data.amenities ?? undefined,
+      venueType: data.venueType ?? undefined,
+      contactPerson: data.contactPerson ?? undefined,
+      contactEmail: data.contactEmail ?? undefined,
+      contactPhone: data.contactPhone ?? undefined,
+      websiteURL: data.websiteURL ?? undefined,
+      status:
+        typeof data.status === "string" &&
+        data.status.toUpperCase() === VenueStatus.APPROVED
+          ? VenueStatus.APPROVED
+          : VenueStatus.PENDING,
+    });
+
+    return { success: true, data: venue };
   }
-}
 
+  // Save venue
+  static async save(
+    venue: Venue
+  ): Promise<{ success: boolean; data?: Venue; message?: string }> {
+    if (
+      !venue.venueName ||
+      !venue.capacity ||
+      !venue.location ||
+      !venue.amount
+    ) {
+      return {
+        success: false,
+        message: "Required fields: venueName, capacity, location, amount.",
+      };
+    }
 
+    try {
+      const repo = AppDataSource.getRepository(Venue);
+
+      // Find any venue with same name and location, regardless of organization
+      const duplicate = await repo.findOne({
+        where: {
+          venueName: venue.venueName,
+          location: venue.location,
+        },
+      });
+
+      if (duplicate && duplicate.venueId !== venue.venueId) {
+        const sameOrg = duplicate.organizationId === venue.organizationId;
+        return {
+          success: false,
+          message: sameOrg
+            ? `Venue "${venue.venueName}" at "${venue.location}" already exists in your organization.`
+            : `Venue "${venue.venueName}" at "${venue.location}" is already registered under another organization.`,
+          data: duplicate,
+        };
+      }
+
+      const savedVenue = await repo.save(venue);
+
+      await CacheService.invalidateMultiple([
+        `${this.CACHE_PREFIX}all`,
+        `${this.CACHE_PREFIX}${savedVenue.venueId}`,
+        `${this.CACHE_PREFIX}manager:${savedVenue.managerId}`,
+        `${this.CACHE_PREFIX}search:*`,
+      ]);
+
+      return {
+        success: true,
+        data: savedVenue,
+        message: "Venue saved successfully",
+      };
+    } catch (error: any) {
+      console.error("Error saving venue:", error);
+      return {
+        success: false,
+        message: "Failed to save venue.",
+      };
+    }
+  }
 
   // Get venue by ID
   static async getById(
@@ -166,7 +170,7 @@ static async save(
         async () => {
           return await AppDataSource.getRepository(Venue).findOne({
             where: { venueId: id, deletedAt: IsNull() },
-            relations: ["manager", "manager.role","resources","organization"],
+            relations: ["manager", "manager.role", "resources", "organization"],
           });
         },
         this.CACHE_TTL
@@ -1138,171 +1142,201 @@ static async save(
   }
 
   static async findFullyAvailableVenues(
-  startDate: Date,
-  endDate: Date,
-  startTime: string,
-  endTime: string,
-  bufferMinutes: number = 30
-): Promise<{
-  success: boolean;
-  data?: Venue[];
-  message?: string;
-  error?: any;
-}> {
-  try {
-    const venues = await AppDataSource.getRepository(Venue).find({
-      where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
-      relations: ["manager"]
-    });
+    startDate: Date,
+    endDate: Date,
+    startTime: string,
+    endTime: string,
+    bufferMinutes: number = 30
+  ): Promise<{
+    success: boolean;
+    data?: Venue[];
+    message?: string;
+    error?: any;
+  }> {
+    try {
+      const venues = await AppDataSource.getRepository(Venue).find({
+        where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
+        relations: ["manager", "organization"],
+      });
 
-    if (!venues || venues.length === 0) {
-      return {
-        success: false,
-        message: "No approved venues found in the system.",
-        error: { code: "NO_VENUES", details: "VenueRepository returned 0 records." }
-      };
-    }
-
-    const parseTime = (date: Date, time: string): Date => {
-      const [hours, minutes] = time.split(":").map(Number);
-      const newDate = new Date(date);
-      newDate.setHours(hours, minutes, 0, 0);
-      return newDate;
-    };
-
-    const getDaysInRange = (start: Date, end: Date): Date[] => {
-      const days: Date[] = [];
-      let current = new Date(start);
-      while (current <= end) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
+      if (!venues || venues.length === 0) {
+        return {
+          success: false,
+          message: "No approved venues found in the system.",
+          error: {
+            code: "NO_VENUES",
+            details: "VenueRepository returned 0 records.",
+          },
+        };
       }
-      return days;
-    };
 
-    const reqDays = getDaysInRange(
-      new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()),
-      new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-    );
+      const parseTime = (date: Date, time: string): Date => {
+        const [hours, minutes] = time.split(":").map(Number);
+        const newDate = new Date(date);
+        newDate.setHours(hours, minutes, 0, 0);
+        return newDate;
+      };
 
-    const availableVenues: Venue[] = [];
+      const getDaysInRange = (start: Date, end: Date): Date[] => {
+        const days: Date[] = [];
+        let current = new Date(start);
+        while (current <= end) {
+          days.push(new Date(current));
+          current.setDate(current.getDate() + 1);
+        }
+        return days;
+      };
 
-    for (const venue of venues) {
-      const bookings = await AppDataSource.getRepository(VenueBooking)
-        .createQueryBuilder("booking")
-        .leftJoinAndSelect("booking.event", "event")
-        .where("booking.venueId = :venueId", { venueId: venue.venueId })
-        .andWhere("booking.approvalStatus = :status", { status: "approved" })
-        .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
-        .andWhere("event.startDate <= :reqEnd AND event.endDate >= :reqStart", {
-          reqStart: startDate,
-          reqEnd: endDate
-        })
-        .getMany();
+      const reqDays = getDaysInRange(
+        new Date(
+          startDate.getFullYear(),
+          startDate.getMonth(),
+          startDate.getDate()
+        ),
+        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+      );
 
-      let isAvailableAllDays = true;
+      const availableVenues: Venue[] = [];
 
-      for (const day of reqDays) {
-        const reqStart = parseTime(day, startTime);
-        const reqEnd = parseTime(day, endTime);
+      for (const venue of venues) {
+        const bookings = await AppDataSource.getRepository(VenueBooking)
+          .createQueryBuilder("booking")
+          .leftJoinAndSelect("booking.event", "event")
+          .where("booking.venueId = :venueId", { venueId: venue.venueId })
+          .andWhere("booking.approvalStatus = :status", { status: "approved" })
+          .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+          .andWhere(
+            "event.startDate <= :reqEnd AND event.endDate >= :reqStart",
+            {
+              reqStart: startDate,
+              reqEnd: endDate,
+            }
+          )
+          .getMany();
 
-        let hasOverlap = false;
+        let isAvailableAllDays = true;
 
-        for (const booking of bookings) {
-          if (!booking.event) continue;
+        for (const day of reqDays) {
+          const reqStart = parseTime(day, startTime);
+          const reqEnd = parseTime(day, endTime);
 
-          const eventStartDay = new Date(
-            booking.event.startDate.getFullYear(),
-            booking.event.startDate.getMonth(),
-            booking.event.startDate.getDate()
-          );
+          let hasOverlap = false;
 
-          const eventEndDay = new Date(
-            booking.event.endDate.getFullYear(),
-            booking.event.endDate.getMonth(),
-            booking.event.endDate.getDate()
-          );
+          for (const booking of bookings) {
+            if (!booking.event) continue;
 
-          if (day < eventStartDay || day > eventEndDay) continue;
+            const eventStartDay = new Date(
+              booking.event.startDate.getFullYear(),
+              booking.event.startDate.getMonth(),
+              booking.event.startDate.getDate()
+            );
 
-          const eventStart = parseTime(day, booking.event.startTime || "00:00");
-          const eventEnd = parseTime(day, booking.event.endTime || "23:59");
+            const eventEndDay = new Date(
+              booking.event.endDate.getFullYear(),
+              booking.event.endDate.getMonth(),
+              booking.event.endDate.getDate()
+            );
 
-          const bufferedStart = new Date(eventStart.getTime() - bufferMinutes * 60000);
-          const bufferedEnd = new Date(eventEnd.getTime() + bufferMinutes * 60000);
+            if (day < eventStartDay || day > eventEndDay) continue;
 
-          if (bufferedStart < reqEnd && reqStart < bufferedEnd) {
-            hasOverlap = true;
+            const eventStart = parseTime(
+              day,
+              booking.event.startTime || "00:00"
+            );
+            const eventEnd = parseTime(day, booking.event.endTime || "23:59");
+
+            const bufferedStart = new Date(
+              eventStart.getTime() - bufferMinutes * 60000
+            );
+            const bufferedEnd = new Date(
+              eventEnd.getTime() + bufferMinutes * 60000
+            );
+
+            if (bufferedStart < reqEnd && reqStart < bufferedEnd) {
+              hasOverlap = true;
+              break;
+            }
+          }
+
+          if (hasOverlap) {
+            isAvailableAllDays = false;
             break;
           }
         }
 
-        if (hasOverlap) {
-          isAvailableAllDays = false;
-          break;
+        if (isAvailableAllDays) {
+          availableVenues.push(venue);
         }
       }
 
-      if (isAvailableAllDays) {
-        availableVenues.push(venue);
-      }
+      return {
+        success: true,
+        data: availableVenues,
+        message: `${availableVenues.length} venue(s) available for requested time range.`,
+      };
+    } catch (error: any) {
+      console.error("Repository error: findFullyAvailableVenues ->", error);
+      return {
+        success: false,
+        message: "Error occurred while checking venue availability.",
+        error: {
+          message: error?.message || "Unknown error",
+          stack: error?.stack || null,
+        },
+      };
     }
-
-    return {
-      success: true,
-      data: availableVenues,
-      message: `${availableVenues.length} venue(s) available for requested time range.`
-    };
-  } catch (error: any) {
-    console.error("Repository error: findFullyAvailableVenues ->", error);
-    return {
-      success: false,
-      message: "Error occurred while checking venue availability.",
-      error: {
-        message: error?.message || "Unknown error",
-        stack: error?.stack || null
-      }
-    };
   }
-}
 
+  /**
+   * Retrieves all venues with an 'APPROVED' status, not soft-deleted,
+   * including their manager, organization, users, and resources.
+   * This method is cached.
+   *
+   * @returns A result object containing approved venues or an error message.
+   */
+  static async getApprovedVenues(): Promise<{
+    success: boolean;
+    data?: Venue[];
+    message?: string;
+  }> {
+    const cacheKey = `${this.CACHE_PREFIX}approved`; // Specific cache key for approved venues
+    try {
+      const cachedVenues = await CacheService.get<Venue[]>(cacheKey);
+      if (cachedVenues) {
+        return {
+          success: true,
+          data: cachedVenues,
+          message: "Approved venues fetched from cache.",
+        };
+      }
 
- /**
-     * Retrieves all venues with an 'APPROVED' status, not soft-deleted,
-     * including their manager, organization, users, and resources.
-     * This method is cached.
-     *
-     * @returns A result object containing approved venues or an error message.
-     */
-    static async getApprovedVenues(): Promise<{ success: boolean; data?: Venue[]; message?: string }> {
-        const cacheKey = `${this.CACHE_PREFIX}approved`; // Specific cache key for approved venues
-        try {
-            const cachedVenues = await CacheService.get<Venue[]>(cacheKey);
-            if (cachedVenues) {
-                return { success: true, data: cachedVenues, message: "Approved venues fetched from cache." };
-            }
+      const venues = await AppDataSource.getRepository(Venue).find({
+        where: {
+          status: VenueStatus.APPROVED,
+          deletedAt: IsNull(), // Ensure only non-soft-deleted venues are returned
+        },
+        relations: [
+          "manager",
+          "organization", // Corrected: A venue has one organization, not 'organizations' array
+          "users", // Corrected: 'users' is the relation to the User entity directly
+          "resources", // Added: To fetch associated resources
+        ],
+      });
 
-            const venues = await AppDataSource.getRepository(Venue).find({
-                where: {
-                    status: VenueStatus.APPROVED,
-                    deletedAt: IsNull(), // Ensure only non-soft-deleted venues are returned
-                },
-                relations: [
-                    "manager",
-                    "organization", // Corrected: A venue has one organization, not 'organizations' array
-                    "users",      // Corrected: 'users' is the relation to the User entity directly
-                    "resources"   // Added: To fetch associated resources
-                ],
-            });
-
-            await CacheService.set(cacheKey, venues); // Cache the result
-            return { success: true, data: venues, message: "Approved venues retrieved successfully." };
-        } catch (error: any) {
-            console.error("Error finding approved venues:", error.message);
-            return {
-                success: false,
-                message: `Failed to find approved venues due to a server error: ${error.message || "Unknown error"}`,
-            };
-        }
+      await CacheService.set(cacheKey, venues); // Cache the result
+      return {
+        success: true,
+        data: venues,
+        message: "Approved venues retrieved successfully.",
+      };
+    } catch (error: any) {
+      console.error("Error finding approved venues:", error.message);
+      return {
+        success: false,
+        message: `Failed to find approved venues due to a server error: ${
+          error.message || "Unknown error"
+        }`,
+      };
     }
+  }
 }
