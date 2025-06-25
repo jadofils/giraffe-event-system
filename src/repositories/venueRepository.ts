@@ -169,7 +169,7 @@ export class VenueRepository {
         async () => {
           return await AppDataSource.getRepository(Venue).findOne({
             where: { venueId: id, deletedAt: IsNull() },
-            relations: ["manager", "manager.role"],
+            relations: ["manager", "manager.role","resources","organization"],
           });
         },
         this.CACHE_TTL
