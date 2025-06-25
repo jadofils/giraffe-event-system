@@ -1215,59 +1215,71 @@ export class VenueController {
     }
   }
 
-  static async checkAvailability(req: Request, res: Response): Promise<void> {
-    try {
-      const {
-        startDate,
-        endDate,
-        startTime,
-        endTime,
-        bufferMinutes = 30,
-      } = req.body;
+  /**
+ * GET /api/v1/venues/check-availability
+ * Query params:
+ *   - startDate
+ *   - endDate
+ *   - startTime
+ *   - endTime
+ *   - bufferMinutes (optional, default = 30)
+ */
+static async checkAvailability(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      bufferMinutes = "30"
+    } = req.query;
 
-      // Validate required parameters
-      if (!startDate || !endDate || !startTime || !endTime) {
-        res.status(400).json({
-          success: false,
-          message:
-            "Missing required parameters: startDate, endDate, startTime, or endTime",
-        });
-        return;
-      }
-
-      const result = await VenueRepository.findFullyAvailableVenues(
-        new Date(startDate as string),
-        new Date(endDate as string),
-        startTime as string,
-        endTime as string,
-        parseInt(bufferMinutes as string, 10)
-      );
-
-      if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: `${
-            result.data?.length || 0
-          } venue(s) fully available for the requested time range.`,
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          message:
-            result.message ||
-            "No venues available for the requested time range.",
-        });
-      }
-    } catch (error) {
-      console.error("Controller error:", error);
-      res.status(500).json({
+    // Validate required parameters
+    if (!startDate || !endDate || !startTime || !endTime) {
+      res.status(400).json({
         success: false,
-        message: "Server error while checking venue availability.",
+        message:
+          "Missing required query parameters: startDate, endDate, startTime, or endTime"
+      });
+      return;
+    }
+
+    const result = await VenueRepository.findFullyAvailableVenues(
+      new Date(startDate as string),
+      new Date(endDate as string),
+      startTime as string,
+      endTime as string,
+      parseInt(bufferMinutes as string, 10)
+    );
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        message: `${
+          result.data?.length || 0
+        } venue(s) fully available for the requested time range.`
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message:
+          result.message ||
+          "No venues available for the requested time range."
       });
     }
+  } catch (error) {
+    console.error("Controller error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while checking venue availability.",
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
+}
 
+ 
+ 
   static async approveVenue(req: Request, res: Response): Promise<void> {
     const user = (req as any).user;
     if (

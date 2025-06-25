@@ -53,7 +53,7 @@ router.put(
   VenueController.removeVenueManager
 );
 
-router.post(
+router.get(
   "/available-venues",
   authenticate,
   VenueController.checkAvailability

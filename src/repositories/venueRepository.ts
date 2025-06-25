@@ -1138,122 +1138,134 @@ static async save(
   }
 
   static async findFullyAvailableVenues(
-    startDate: Date,
-    endDate: Date,
-    startTime: string,
-    endTime: string,
-    bufferMinutes: number = 30
-  ): Promise<{ success: boolean; data?: Venue[]; message?: string }> {
-    try {
-      // Only consider venues with status 'APPROVED'
-      const venues = await AppDataSource.getRepository(Venue).find({
-        where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
-        relations: ["manager"],
-      });
+  startDate: Date,
+  endDate: Date,
+  startTime: string,
+  endTime: string,
+  bufferMinutes: number = 30
+): Promise<{
+  success: boolean;
+  data?: Venue[];
+  message?: string;
+  error?: any;
+}> {
+  try {
+    const venues = await AppDataSource.getRepository(Venue).find({
+      where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
+      relations: ["manager"]
+    });
 
-      // Parse requested time range
-      const parseTime = (date: Date, time: string): Date => {
-        const [hours, minutes] = time.split(":").map(Number);
-        const newDate = new Date(date);
-        newDate.setHours(hours, minutes, 0, 0);
-        return newDate;
+    if (!venues || venues.length === 0) {
+      return {
+        success: false,
+        message: "No approved venues found in the system.",
+        error: { code: "NO_VENUES", details: "VenueRepository returned 0 records." }
       };
+    }
 
-      // Helper to iterate days between two dates (inclusive)
-      const getDaysInRange = (start: Date, end: Date): Date[] => {
-        const days: Date[] = [];
-        let current = new Date(start);
-        while (current <= end) {
-          days.push(new Date(current));
-          current.setDate(current.getDate() + 1);
-        }
-        return days;
-      };
+    const parseTime = (date: Date, time: string): Date => {
+      const [hours, minutes] = time.split(":").map(Number);
+      const newDate = new Date(date);
+      newDate.setHours(hours, minutes, 0, 0);
+      return newDate;
+    };
 
-      const reqDays = getDaysInRange(
-        new Date(
-          startDate.getFullYear(),
-          startDate.getMonth(),
-          startDate.getDate()
-        ),
-        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-      );
+    const getDaysInRange = (start: Date, end: Date): Date[] => {
+      const days: Date[] = [];
+      let current = new Date(start);
+      while (current <= end) {
+        days.push(new Date(current));
+        current.setDate(current.getDate() + 1);
+      }
+      return days;
+    };
 
-      const availableVenues: Venue[] = [];
+    const reqDays = getDaysInRange(
+      new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()),
+      new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+    );
 
-      for (const venue of venues) {
-        // Get all approved bookings/events for this venue that could possibly overlap
-        const bookings = await AppDataSource.getRepository(VenueBooking)
-          .createQueryBuilder("booking")
-          .leftJoinAndSelect("booking.event", "event")
-          .where("booking.venueId = :venueId", { venueId: venue.venueId })
-          .andWhere("booking.approvalStatus = :status", { status: "approved" })
-          .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
-          .andWhere(
-            "event.startDate <= :reqEnd AND event.endDate >= :reqStart",
-            { reqStart: startDate, reqEnd: endDate }
-          )
-          .getMany();
+    const availableVenues: Venue[] = [];
 
-        let isAvailableAllDays = true;
-        for (const day of reqDays) {
-          // Requested slot for this day
-          const reqStart = parseTime(day, startTime);
-          const reqEnd = parseTime(day, endTime);
+    for (const venue of venues) {
+      const bookings = await AppDataSource.getRepository(VenueBooking)
+        .createQueryBuilder("booking")
+        .leftJoinAndSelect("booking.event", "event")
+        .where("booking.venueId = :venueId", { venueId: venue.venueId })
+        .andWhere("booking.approvalStatus = :status", { status: "approved" })
+        .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+        .andWhere("event.startDate <= :reqEnd AND event.endDate >= :reqStart", {
+          reqStart: startDate,
+          reqEnd: endDate
+        })
+        .getMany();
 
-          // Check for overlap with any booking on this day
-          let hasOverlap = false;
-          for (const booking of bookings) {
-            if (!booking.event) continue;
-            // Check if this event covers this day
-            const eventStartDay = new Date(
-              booking.event.startDate.getFullYear(),
-              booking.event.startDate.getMonth(),
-              booking.event.startDate.getDate()
-            );
-            const eventEndDay = new Date(
-              booking.event.endDate.getFullYear(),
-              booking.event.endDate.getMonth(),
-              booking.event.endDate.getDate()
-            );
-            if (day < eventStartDay || day > eventEndDay) continue;
-            // Event's slot for this day
-            const eventStart = parseTime(
-              day,
-              booking.event.startTime || "00:00"
-            );
-            const eventEnd = parseTime(day, booking.event.endTime || "23:59");
-            // Apply buffer
-            const bufferedStart = new Date(
-              eventStart.getTime() - bufferMinutes * 60000
-            );
-            const bufferedEnd = new Date(
-              eventEnd.getTime() + bufferMinutes * 60000
-            );
-            // Check overlap (time-based)
-            if (bufferedStart < reqEnd && reqStart < bufferedEnd) {
-              hasOverlap = true;
-              break;
-            }
-          }
-          if (hasOverlap) {
-            isAvailableAllDays = false;
+      let isAvailableAllDays = true;
+
+      for (const day of reqDays) {
+        const reqStart = parseTime(day, startTime);
+        const reqEnd = parseTime(day, endTime);
+
+        let hasOverlap = false;
+
+        for (const booking of bookings) {
+          if (!booking.event) continue;
+
+          const eventStartDay = new Date(
+            booking.event.startDate.getFullYear(),
+            booking.event.startDate.getMonth(),
+            booking.event.startDate.getDate()
+          );
+
+          const eventEndDay = new Date(
+            booking.event.endDate.getFullYear(),
+            booking.event.endDate.getMonth(),
+            booking.event.endDate.getDate()
+          );
+
+          if (day < eventStartDay || day > eventEndDay) continue;
+
+          const eventStart = parseTime(day, booking.event.startTime || "00:00");
+          const eventEnd = parseTime(day, booking.event.endTime || "23:59");
+
+          const bufferedStart = new Date(eventStart.getTime() - bufferMinutes * 60000);
+          const bufferedEnd = new Date(eventEnd.getTime() + bufferMinutes * 60000);
+
+          if (bufferedStart < reqEnd && reqStart < bufferedEnd) {
+            hasOverlap = true;
             break;
           }
         }
-        if (isAvailableAllDays) {
-          availableVenues.push(venue);
+
+        if (hasOverlap) {
+          isAvailableAllDays = false;
+          break;
         }
       }
-      return { success: true, data: availableVenues };
-    } catch (error) {
-      console.error("Error finding fully available venues:", error);
-      return {
-        success: false,
-        message: "Failed to find fully available venues.",
-      };
+
+      if (isAvailableAllDays) {
+        availableVenues.push(venue);
+      }
     }
+
+    return {
+      success: true,
+      data: availableVenues,
+      message: `${availableVenues.length} venue(s) available for requested time range.`
+    };
+  } catch (error: any) {
+    console.error("Repository error: findFullyAvailableVenues ->", error);
+    return {
+      success: false,
+      message: "Error occurred while checking venue availability.",
+      error: {
+        message: error?.message || "Unknown error",
+        stack: error?.stack || null
+      }
+    };
   }
+}
+
 
  /**
      * Retrieves all venues with an 'APPROVED' status, not soft-deleted,
