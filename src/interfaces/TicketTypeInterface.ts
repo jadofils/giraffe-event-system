@@ -26,6 +26,7 @@ export class TicketTypeInterface {
   deletedAt?: Date;
   registrations?: RegistrationRef[];
   eventId!: string;
+  organizationId?: string; // <-- Add this line
 
   constructor(data: Partial<TicketTypeInterface>) {
     Object.assign(this, {
@@ -50,6 +51,7 @@ export class TicketTypeInterface {
       deletedAt: data.deletedAt,
       registrations: data.registrations ?? [],
       eventId: data.eventId || '',
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 
@@ -66,6 +68,7 @@ export class TicketTypeInterface {
     if (data.minQuantity !== undefined && data.minQuantity < 1) errors.push('minQuantity must be at least 1');
     if (data.maxQuantity !== undefined && data.maxQuantity < 1) errors.push('maxQuantity must be at least 1');
     if (data.perks !== undefined && !Array.isArray(data.perks)) errors.push('perks must be an array of strings');
+    // Optionally validate organizationId here if required
     return errors;
   }
 
@@ -88,6 +91,7 @@ export class TicketTypeInterface {
       perks: data.perks,
       createdByUserId: data.createdByUserId,
       eventId: data.eventId,
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 
@@ -114,6 +118,7 @@ export class TicketTypeInterface {
       deletedAt: data.deletedAt?.toISOString(),
       registrations: data.registrations?.map(r => r.registrationId),
       eventId: data.eventId,
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 }
@@ -136,6 +141,7 @@ export class TicketTypeRequestInterface {
   perks?: string[];
   createdByUserId?: string;
   eventId!: string;
+  organizationId?: string; // <-- Add this line
 
   constructor(data: Partial<TicketTypeRequestInterface>) {
     Object.assign(this, {
@@ -156,6 +162,7 @@ export class TicketTypeRequestInterface {
       perks: data.perks,
       createdByUserId: data.createdByUserId,
       eventId: data.eventId || '',
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 
@@ -179,6 +186,7 @@ export class TicketTypeRequestInterface {
       createdByUserId: data.createdByUserId || '',
       eventId: data.eventId,
       registrations: [],
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 }
@@ -205,6 +213,7 @@ export class TicketTypeResponseInterface {
   deletedAt?: string;
   registrations?: string[];
   eventId!: string;
+  organizationId?: string; // <-- Add this line
 
   constructor(data: Partial<TicketTypeResponseInterface>) {
     Object.assign(this, {
@@ -229,6 +238,7 @@ export class TicketTypeResponseInterface {
       deletedAt: data.deletedAt,
       registrations: data.registrations ?? [],
       eventId: data.eventId || '',
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 
@@ -259,6 +269,7 @@ export class TicketTypeResponseInterface {
       deletedAt: data.deletedAt?.toISOString(),
       registrations: data.registrations?.map(r => r.registrationId),
       eventId: data.eventId,
+      organizationId: data.organizationId, // <-- Add this line
     });
   }
 }

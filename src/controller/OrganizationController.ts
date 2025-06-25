@@ -59,6 +59,7 @@ export class OrganizationController {
    */
   static async bulkCreate(req: Request, res: Response): Promise<void> {
     const { organizations }: { organizations: Partial<OrganizationInterface>[] } = req.body;
+    const userId = req.user?.userId; // <-- Get userId from token (auth middleware must set req.user)
 
     if (!organizations?.length) {
       res.status(400).json({
@@ -68,9 +69,29 @@ export class OrganizationController {
       return;
     }
 
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized: User not found in token." });
+      return;
+    }
+
     try {
+      // 1. Create organizations
       const result = await OrganizationRepository.bulkCreate(organizations);
-      res.status(result.success ? 201 : 400).json(result);
+
+      if (!result.success || !result.data?.length) {
+        res.status(400).json(result);
+        return;
+      }
+
+      // 2. Assign the creator as a user to each organization
+      for (const org of result.data) {
+        await OrganizationRepository.assignUsersToOrganization([userId], org.organizationId);
+      }
+
+      res.status(201).json({
+        ...result,
+        message: "Organizations created and creator assigned.",
+      });
     } catch (error) {
       console.error("[OrganizationController BulkCreate Error]:", error);
       res.status(500).json({

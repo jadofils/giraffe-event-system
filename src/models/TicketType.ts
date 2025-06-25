@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from "typeorm";
 import {
   IsUUID,
@@ -21,12 +22,12 @@ import {
   IsArray,
   ArrayMinSize,
   ArrayMaxSize,
-  IsDate,
   IsDateString,
 } from "class-validator";
 import { Registration } from "./Registration";
-import { TicketCategory } from "../interfaces/Enums/TicketCategoryEnum"; // Ensure this path is correct
+import { TicketCategory } from "../interfaces/Enums/TicketCategoryEnum";
 import { Event } from "./Event";
+import { Organization } from "./Organization";
 
 @Entity("ticket_types")
 export class TicketType {
@@ -42,7 +43,6 @@ export class TicketType {
   @Column({ type: "numeric", precision: 10, scale: 2, nullable: false })
   @IsNumber({}, { message: "Price must be a number" })
   @IsPositive({ message: "Price must be a positive number" })
-  // @IsDecimal is often not needed if you use IsNumber and handle decimal precision in database
   price!: number;
 
   @Column({ nullable: true, type: "text" })
@@ -51,13 +51,13 @@ export class TicketType {
   description?: string;
 
   @Column({
-    type: "enum", // Use 'enum' type for enums in TypeORM
-    enum: TicketCategory, // Link to your TicketCategory enum
+    type: "enum",
+    enum: TicketCategory,
     nullable: false,
-    default: TicketCategory.REGULAR, // Set a default value if appropriate
+    default: TicketCategory.REGULAR,
   })
   @IsNotEmpty({ message: "ticketCategory is required" })
-  ticketCategory!: TicketCategory; // Use the enum type directly
+  ticketCategory!: TicketCategory;
 
   @Column({ nullable: true })
   @IsOptional()
@@ -66,68 +66,59 @@ export class TicketType {
 
   @Column({ nullable: true, type: "text" })
   @IsOptional()
-  @Length(0, 500, {
-    message: "promoDescription must be at most 500 characters",
-  })
+  @Length(0, 500, { message: "promoDescription must be at most 500 characters" })
   promoDescription?: string;
-
-  // --- NEW FIELDS FROM TicketTypeRequest INTERFACE ---
 
   @Column({ type: "int", nullable: true })
   @IsOptional()
   @IsNumber({}, { message: "Capacity must be a number" })
   @Min(0, { message: "Capacity cannot be negative" })
-  capacity?: number; // Maximum tickets available
+  capacity?: number;
 
   @Column({ type: "timestamp", nullable: true })
   @IsOptional()
   @IsDateString({}, { message: "availableFrom must be a valid date" })
-  availableFrom?: Date; // When ticket sales start
+  availableFrom?: Date;
 
   @Column({ type: "timestamp", nullable: true })
   @IsOptional()
   @IsDateString({}, { message: "availableUntil must be a valid date" })
-  availableUntil?: Date; // When ticket sales end
+  availableUntil?: Date;
 
-  @Column({ type: "boolean", default: true }) // Default to true (sellable)
-  @IsOptional() // Allow it to be omitted if default is set
+  @Column({ type: "boolean", default: true })
+  @IsOptional()
   @IsBoolean({ message: "isActive must be a boolean value" })
-  isActive!: boolean; // Whether ticket is currently sellable
+  isActive!: boolean;
 
   @Column({ type: "int", nullable: true })
   @IsOptional()
   @IsNumber({}, { message: "minQuantity must be a number" })
   @Min(1, { message: "minQuantity must be at least 1" })
-  minQuantity?: number; // Minimum purchase quantity (for GROUP tickets)
+  minQuantity?: number;
 
   @Column({ type: "int", nullable: true })
   @IsOptional()
   @IsNumber({}, { message: "maxQuantity must be a number" })
   @Min(1, { message: "maxQuantity must be at least 1" })
-  // You might also add a @Max if there's a global max per customer
-  maxQuantity?: number; // Maximum purchase quantity per customer
+  maxQuantity?: number;
 
-  @Column({ type: "boolean", default: false }) // Default to false
-  @IsOptional() // Allow it to be omitted if default is set
+  @Column({ type: "boolean", default: false })
+  @IsOptional()
   @IsBoolean({ message: "requiresVerification must be a boolean value" })
-  requiresVerification!: boolean; // For STUDENT, SENIOR, PRESS tickets
+  requiresVerification!: boolean;
 
-  // Store perks as a JSON array in the database (or text field for simplicity)
-  @Column({ type: "jsonb", nullable: true }) // 'jsonb' for PostgreSQL, 'json' for MySQL/SQLite
+  @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   @IsArray({ message: "Perks must be an array" })
-  @Length(1, 100, {
-    each: true,
-    message: "Each perk must be between 1 and 100 characters",
-  })
-  @ArrayMinSize(0) // Allow empty array
-  @ArrayMaxSize(20, { message: "Cannot have more than 20 perks" }) // Example max perks
-  perks?: string[]; // List of included perks/benefits
+  @Length(1, 100, { each: true, message: "Each perk must be between 1 and 100 characters" })
+  @ArrayMinSize(0)
+  @ArrayMaxSize(20, { message: "Cannot have more than 20 perks" })
+  perks?: string[];
 
   @Column({ default: "00000000-0000-0000-0000-000000000000" })
   @IsUUID()
   createdByUserId!: string;
-  // --- AUTOMATIC TIMESTAMPS (Recommended) ---
+
   @CreateDateColumn({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
   createdAt!: Date;
 
@@ -137,7 +128,6 @@ export class TicketType {
     onUpdate: "CURRENT_TIMESTAMP",
   })
   updatedAt!: Date;
-  // --- END NEW FIELDS ---
 
   @DeleteDateColumn({ name: "deletedAt", type: "timestamp", nullable: true })
   deletedAt?: Date;
@@ -145,9 +135,7 @@ export class TicketType {
   @OneToMany(
     () => Registration,
     (registration: Registration) => registration.ticketType,
-    {
-      cascade: false, // Prevent cascading deletes to avoid accidental data loss
-    }
+    { cascade: false }
   )
   registrations!: Registration[];
 
@@ -156,4 +144,11 @@ export class TicketType {
 
   @ManyToOne(() => Event, (event) => event.ticketTypes, { onDelete: "CASCADE" })
   event!: Event;
+
+  @Column({ type: "uuid", nullable: true })
+  organizationId?: string;
+
+  @ManyToOne(() => Organization, (organization) => organization.ticketTypes, { nullable: true })
+  @JoinColumn({ name: "organizationId" })
+  organization?: Organization;
 }

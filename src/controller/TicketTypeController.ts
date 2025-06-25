@@ -5,6 +5,7 @@ import { TicketCategory } from '../interfaces/Index';
 import { validate } from 'class-validator';
 import { TicketType } from '../models/TicketType';
 import { EventRepository } from '../repositories/eventRepository';
+import { TicketTypeRepository } from '../repositories/TicketTypeRepository';
 
 export class TicketTypeController {
   /**
@@ -12,10 +13,13 @@ export class TicketTypeController {
    * Only logged-in users who created the event or are in the event's organization can create tickets for approved events.
    */
   static async createTicketType(req: Request, res: Response): Promise<void> {
-    const userId = req.user?.userId; // Assumes auth middleware attaches userId
-    if (!userId) {
-      res.status(401).json({ success: false, message: 'Unauthorized: User not logged in.' });
-      return;
+    const userId = req.user?.userId;
+    const tokenOrgId = req.user?.organizationId; // If your auth middleware sets this
+
+    // Allow if either userId or organizationId is present
+    if (!userId && !tokenOrgId) {
+        res.status(401).json({ success: false, message: 'Unauthorized: User or organization not logged in.' });
+        return;
     }
 
     const ticketTypeData: TicketTypeRequestInterface = req.body;
@@ -39,16 +43,6 @@ export class TicketTypeController {
         return;
       }
 
-      // --- Validate against TicketType model ---
-      const ticketType = new TicketType();
-      Object.assign(ticketType, ticketTypeData);
-      const validationErrors = await validate(ticketType, { skipMissingProperties: true });
-      if (validationErrors.length > 0) {
-        const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
-        res.status(400).json({ success: false, message: `Validation failed: ${errorMessages.join(', ')}` });
-        return;
-      }
-
       // --- Check if event exists and is approved ---
       const eventResult = await EventRepository.getById(ticketTypeData.eventId);
       if (!eventResult.success || !eventResult.data) {
@@ -67,18 +61,40 @@ export class TicketTypeController {
         eventResult.data.organization &&
         Array.isArray(eventResult.data.organization.users) &&
         eventResult.data.organization.users.some(u => u.userId === userId);
-      if (!isCreator && !isInOrganization) {
+
+      // Allow if user is creator, in organization, or tokenOrgId matches event's organizationId
+      const isOrgTokenMatch = tokenOrgId && eventResult.data.organizationId === tokenOrgId;
+
+      if (!isCreator && !isInOrganization && !isOrgTokenMatch) {
         res.status(403).json({ success: false, message: 'Unauthorized: You cannot create tickets for this event.' });
         return;
       }
 
       // --- Create ticket type ---
-      const newTicketType = await TicketTypeService.createTicketType({ ...ticketTypeData, createdByUserId: userId });
+      const eventEntity = eventResult.data;
+      const ticketType = new TicketType();
+      Object.assign(ticketType, ticketTypeData);
+
+      ticketType.createdByUserId = userId;
+      ticketType.eventId = eventEntity.eventId;
+      ticketType.event = eventEntity;
+      // Always set organizationId from the event (not from the body or token)
+      ticketType.organizationId = eventEntity.organizationId;
+
+      const validationErrors = await validate(ticketType, { skipMissingProperties: true });
+      if (validationErrors.length > 0) {
+        const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
+        res.status(400).json({ success: false, message: `Validation failed: ${errorMessages.join(', ')}` });
+        return;
+      }
+
+      const newTicketType = await TicketTypeService.createTicketType(ticketType);
 
       // --- Convert to response format ---
       const responseData = TicketTypeResponseInterface.fromEntity({
         ...newTicketType,
         createdByUserId: newTicketType.createdByUserId || userId,
+        organizationId: newTicketType.organizationId,
       });
 
       res.status(201).json({ success: true, message: 'Ticket type created successfully.', data: responseData });
@@ -296,4 +312,68 @@ export class TicketTypeController {
       res.status(500).json({ success: false, message: 'Failed to fetch ticket counts', error: error.message || 'Internal server error' });
     }
   }
+
+  /**
+   * Retrieves all TicketTypes.
+   */
+  static async getAllTickets(req: Request, res: Response): Promise<void> {
+    try {
+      const ticketRepo = new TicketTypeRepository();
+      const result = await ticketRepo.findAllTickects();
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in TicketTypeController.getAllTickets:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+static async updateIsActive(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.userId;
+    const { ticketTypeId } = req.params;
+    const { isActive } = req.body ?? {};
+
+    if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized: User not logged in.' });
+        return;
+    }
+    if (typeof isActive !== 'boolean') {
+        res.status(400).json({ success: false, message: 'isActive must be a boolean.' });
+        return;
+    }
+
+    try {
+        const ticketRepo = new TicketTypeRepository();
+        const ticketResult = await ticketRepo.findById(ticketTypeId);
+        if (!ticketResult.success || !ticketResult.data) {
+            res.status(404).json({ success: false, message: 'Ticket type not found.' });
+            return;
+        }
+        const { availableFrom, availableUntil } = ticketResult.data;
+        const now = new Date();
+
+        // Only check time window if activating
+        const canActivate = isActive
+            ? (!availableFrom || now >= new Date(availableFrom)) &&
+              (!availableUntil || now <= new Date(availableUntil))
+            : true;
+
+        if (!canActivate) {
+            res.status(400).json({ success: false, message: 'Cannot activate: Ticket is not within available time window.' });
+            return;
+        }
+
+        const result = await ticketRepo.updateIsActive(ticketTypeId, isActive, userId);
+        if (!result.success) {
+            res.status(400).json(result);
+            return;
+        }
+        res.status(200).json(result);
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: 'Failed to update isActive', error: error.message });
+    }
+}
 }

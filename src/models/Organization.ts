@@ -8,6 +8,7 @@ import { User } from './User';
 import { VenueBooking } from './VenueBooking';
 import { Venue } from './Venue';
 import { VenueInvoice } from './VenueInvoice';
+import { TicketType } from './TicketType';
 
 @Entity('organizations')
 export class Organization {
@@ -90,6 +91,8 @@ export class Organization {
   @OneToMany(() => VenueInvoice, (venueInvoice) => venueInvoice.organization)
   venueInvoices!: VenueInvoice[];
 
+@OneToMany(() => TicketType, (ticketType) => ticketType.organization)
+ticketTypes!: TicketType[];
   // --- Timestamp Columns ---
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt!: Date;
