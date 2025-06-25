@@ -121,11 +121,8 @@ export class LoginController {
           username: user.username,
           phoneNumber: user.phoneNumber,
           organizationId: firstOrganization.organizationId,
-          needsPasswordReset: isSessionPasswordLogin,
-          roles: {
-            roleId: user.role.roleId,
-            roleName: user.role.roleName,
-          },
+          roleId: user.role.roleId,
+          roleName: user.role.roleName,
         },
         SECRET_KEY,
         { expiresIn: "24h" }
@@ -202,7 +199,6 @@ export class LoginController {
             relations: [
               "organizations",
               "organizations.venues",
-              "organizations.venues.events", // <-- Add this line
               "role",
               "role.permissions"
             ],
@@ -254,7 +250,6 @@ export class LoginController {
         contactPhone: firstOrganization.contactPhone,
         address: firstOrganization.address,
         organizationType: firstOrganization.organizationType,
-        venues: venuesWithApprovedEvents
       };
 
       // Generate JWT token
@@ -264,7 +259,6 @@ export class LoginController {
           email: user.email,
           username: user.username,
           phoneNumber: user.phoneNumber,
-          organization,
           organizationId: firstOrganization.organizationId,
           roles: {
             roleId: user.role.roleId,

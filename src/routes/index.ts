@@ -17,6 +17,8 @@ import InstallmentPlanRoutes from "./InstallmentPlanRoutes";
 import EventRoute from "./EventRoutes";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./Venue";
+import { Registration } from "../models/Registration";
+import RegistrationRoutes from "./RegistrationRoutes";
 const router = Router();
 router.use(
   "/static",
@@ -24,10 +26,12 @@ router.use(
 ); // Adjust path as needed
 
 // Use versioned routes
+
 router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/organizations", organizationRoutes); // This makes `/api/v1/organizations/*` available
 router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
+router.use("/registrations",RegistrationRoutes)
 //resources
 router.use("/resources", resourceRoutes);
 router.use("/venue", venueRoute); // This makes `/api/v1/venue/*` available

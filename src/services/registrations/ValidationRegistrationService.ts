@@ -115,7 +115,7 @@ export class RegistrationService {
             "event",
             "user",
             "buyer",
-            "ticket_types",
+            "ticketType",
             "venue",
             "payment",
             "invoice",
@@ -348,52 +348,37 @@ export class RegistrationService {
       };
     }
 
-    // Validate ticket logic
-    const uniqueBoughtForIds = [...new Set(boughtForIds)];
+    // --- CUSTOMIZED LOGIC BELOW ---
 
-    // Check for invalid inclusions in boughtForIds
-    if (userId && boughtForIds.includes(userId)) {
-      errors.push(
-        "The account owner (userId) should not be explicitly listed in 'boughtForIds'."
-      );
-    }
-    if (buyerId && boughtForIds.includes(buyerId)) {
-      errors.push(
-        "The buyer (buyerId) should not be explicitly listed in 'boughtForIds'."
-      );
-    }
-
-    if (noOfTickets === 1) {
-      if (uniqueBoughtForIds.length > 0) {
-        errors.push("For a single ticket, 'boughtForIds' array must be empty.");
+    // If boughtForIds is empty or not provided, tickets are for the logged-in user only
+    if (!boughtForIds || boughtForIds.length === 0) {
+      if (noOfTickets !== 1) {
+        errors.push("If no 'boughtForIds' are provided, you can only buy 1 ticket for yourself.");
       }
-    } else if (noOfTickets && noOfTickets > 1) {
-      if (uniqueBoughtForIds.length !== noOfTickets - 1) {
+    } else {
+      // If boughtForIds is provided, it must match the number of tickets
+      const uniqueBoughtForIds = [...new Set(boughtForIds)];
+      if (uniqueBoughtForIds.length !== noOfTickets) {
         errors.push(
-          `For ${noOfTickets} tickets, 'boughtForIds' must contain ${
-            noOfTickets - 1
-          } unique attendee IDs (excluding the buyer). Found: ${
-            uniqueBoughtForIds.length
-          }.`
+          `When 'boughtForIds' is provided, it must contain exactly ${noOfTickets} unique attendee IDs. Found: ${uniqueBoughtForIds.length}.`
         );
       }
 
-      if (uniqueBoughtForIds.length > 0) {
-        const existingAttendees = await this.userRepository.find({
-          where: { userId: In(uniqueBoughtForIds) },
-        });
+      // Check that all boughtForIds exist as users
+      const existingAttendees = await this.userRepository.find({
+        where: { userId: In(uniqueBoughtForIds) },
+      });
 
-        if (existingAttendees.length !== uniqueBoughtForIds.length) {
-          const foundIds = existingAttendees.map((u) => u.userId);
-          const notFound = uniqueBoughtForIds.filter(
-            (id) => !foundIds.includes(id)
-          );
-          errors.push(
-            `Attendee User(s) with ID(s) '${notFound.join(
-              ", "
-            )}' specified in 'boughtForIds' do not exist.`
-          );
-        }
+      if (existingAttendees.length !== uniqueBoughtForIds.length) {
+        const foundIds = existingAttendees.map((u) => u.userId);
+        const notFound = uniqueBoughtForIds.filter(
+          (id) => !foundIds.includes(id)
+        );
+        errors.push(
+          `Attendee User(s) with ID(s) '${notFound.join(
+            ", "
+          )}' specified in 'boughtForIds' do not exist.`
+        );
       }
     }
 

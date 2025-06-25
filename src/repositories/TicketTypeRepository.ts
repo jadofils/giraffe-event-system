@@ -6,6 +6,19 @@ import { IsNull } from 'typeorm';
 import { validate } from 'class-validator';
 import { CacheService } from '../services/CacheService'; // Import CacheService
 import { EventStatus } from '../interfaces/Enums/EventStatusEnum'; // Ensure correct path
+import { TicketCategory } from '../interfaces/Enums/TicketCategoryEnum'; // Ensure correct path
+
+const ticketRelations = [
+    'registrations',
+    'event',
+    'event.organization',
+    'event.venues',
+    'event.venueBookings',
+    'event.registrations',
+    'event.payments',
+    'event.invoices',
+    'organization'
+];
 
 export class TicketTypeRepository {
     private repository = AppDataSource.getRepository(TicketType);
@@ -20,6 +33,21 @@ export class TicketTypeRepository {
      * @param userId - The ID of the logged-in user creating the ticket.
      * @returns An object indicating success, a message, and the created data if successful.
      */
+
+    //get all tickets
+    async findAllTickects (): Promise<{ success: boolean; message: string; data: TicketType[] }> {
+        try {
+            const tickets = await this.repository.find({
+                where: { deletedAt: IsNull() },
+                relations: ticketRelations,
+                order: { ticketName: 'ASC' },
+            });
+            return { success: true, message: 'Tickets fetched successfully.', data: tickets };
+        } catch (error) {
+            console.error('Error in TicketTypeRepository.findAllTickects:', error);
+            return { success: false, message: 'Failed to fetch tickets.', data: [] };
+        }
+    }
     async create(ticketType: Partial<TicketType>, userId: string): Promise<{
         success: boolean;
         message: string;
@@ -88,11 +116,17 @@ export class TicketTypeRepository {
             // --- Save TicketType ---
             const saved = await this.repository.save(newTicketType);
 
-            // --- Cache the ticket type ---
-            await CacheService.set(`ticketType:${saved.ticketTypeId}`, saved, 3600); // Cache for 1 hour
-            await CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`); // Invalidate event tickets cache
+            // --- Fetch with relations for response ---
+            const fullTicket = await this.repository.findOne({
+                where: { ticketTypeId: saved.ticketTypeId },
+                relations: ticketRelations,
+            });
 
-            return { success: true, message: 'Ticket type created successfully.', data: saved };
+            // --- Cache the ticket type ---
+            await CacheService.set(`ticketType:${saved.ticketTypeId}`, fullTicket, 3600);
+            await CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`);
+
+            return { success: true, message: 'Ticket type created successfully.', data: fullTicket ?? undefined };
         } catch (error) {
             console.error('Error in TicketTypeRepository.create:', error);
             return { success: false, message: 'Failed to create ticket type.' };
@@ -119,7 +153,7 @@ export class TicketTypeRepository {
                     eventId,
                     deletedAt: IsNull(),
                 },
-                relations: ['registrations', 'event'],
+                relations: ticketRelations,
                 order: { ticketName: 'ASC' },
             });
 
@@ -153,7 +187,7 @@ export class TicketTypeRepository {
                     ticketTypeId,
                     deletedAt: IsNull(),
                 },
-                relations: ['registrations', 'event'],
+                relations: ticketRelations,
             });
 
             if (!ticket) {
@@ -212,6 +246,9 @@ export class TicketTypeRepository {
             if (updateData.price !== undefined && (typeof updateData.price !== 'number' || updateData.price <= 0)) {
                 return { success: false, message: 'Ticket price must be a positive number if provided.' };
             }
+            if (updateData.ticketCategory && !Object.values(TicketCategory).includes(updateData.ticketCategory)) {
+                return { success: false, message: 'Invalid ticket category provided.' };
+            }
 
             const updatedTicketType = this.repository.create({ ...ticketType, ...updateData });
             const validationErrors = await validate(updatedTicketType);
@@ -224,11 +261,16 @@ export class TicketTypeRepository {
             Object.assign(ticketType, updateData);
             const updated = await this.repository.save(ticketType);
 
-            // --- Update cache ---
-            await CacheService.set(`ticketType:${ticketTypeId}`, updated, 3600);
+            // Fetch with relations for response
+            const fullTicket = await this.repository.findOne({
+                where: { ticketTypeId: updated.ticketTypeId },
+                relations: ticketRelations,
+            });
+
+            await CacheService.set(`ticketType:${ticketTypeId}`, fullTicket, 3600);
             await CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`); // Invalidate event tickets cache
 
-            return { success: true, message: 'Ticket type updated successfully.', data: updated };
+            return { success: true, message: 'Ticket type updated successfully.', data: fullTicket ?? undefined };
         } catch (error) {
             console.error('Error in TicketTypeRepository.update:', error);
             return { success: false, message: 'Failed to update ticket type.' };
@@ -290,6 +332,69 @@ export class TicketTypeRepository {
         } catch (error) {
             console.error('Error in TicketTypeRepository.delete:', error);
             return { success: false, message: 'Failed to soft delete ticket type.' };
+        }
+    }
+
+  async updateIsActive(ticketTypeId: string, isActive: boolean, userId: string): Promise<{ success: boolean; message: string; data?: TicketType }> {
+        try {
+            // Find the ticket type with all relations
+            const { success, data: ticketType } = await this.findById(ticketTypeId);
+            if (!success || !ticketType) {
+                return { success: false, message: `Ticket type with ID '${ticketTypeId}' not found or deleted.` };
+            }
+
+            // Authorization: Only event creator or org member can update
+            const event = await this.eventRepository.findOne({
+                where: { eventId: ticketType.eventId, deletedAt: IsNull(), status: EventStatus.APPROVED },
+                relations: ['organization'],
+            });
+            if (!event) {
+                return { success: false, message: 'Event not found, not approved, or deleted.' };
+            }
+
+            const user = await this.userRepository.findOne({
+                where: { userId, deletedAt: IsNull() },
+                relations: ['organizations'],
+            });
+            if (!user) {
+                return { success: false, message: 'User not found.' };
+            }
+
+            const isCreator = event.createdByUserId === userId || event.organizerId === userId;
+            const isInOrganization = user.organizations.some(org => org.organizationId === event.organizationId);
+            if (!isCreator && !isInOrganization) {
+                return { success: false, message: 'Unauthorized: You cannot update tickets for this event.' };
+            }
+
+            // --- Time window check for activation ---
+            const now = new Date();
+            const { availableFrom, availableUntil } = ticketType;
+            const canActivate = isActive
+                ? (!availableFrom || now >= new Date(availableFrom)) &&
+                  (!availableUntil || now <= new Date(availableUntil))
+                : true;
+
+            if (!canActivate) {
+                return { success: false, message: 'Cannot activate: Ticket is not within available time window.' };
+            }
+
+            // Update isActive
+            ticketType.isActive = isActive;
+            const updated = await this.repository.save(ticketType);
+
+            // Fetch with relations for response
+            const fullTicket = await this.repository.findOne({
+                where: { ticketTypeId: updated.ticketTypeId },
+                relations: ticketRelations,
+            });
+
+            await CacheService.set(`ticketType:${ticketTypeId}`, fullTicket, 3600);
+            await CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`);
+
+            return { success: true, message: 'Ticket type isActive updated successfully.', data: fullTicket ?? undefined };
+        } catch (error) {
+            console.error('Error in TicketTypeRepository.updateIsActive:', error);
+            return { success: false, message: 'Failed to update isActive.' };
         }
     }
 }
