@@ -3,6 +3,7 @@ import { VenueController } from "../controller/venueController";
 import { isAdmin } from "../middlewares/IsAdmin";
 // import checkAbsenceRoutes from "./CheckAbsenceRoutes";
 import { authenticate } from "../middlewares/AuthMiddleware";
+import upload from "../middlewares/upload";
 
 const router = Router();
 
@@ -10,7 +11,15 @@ router.get("/all", authenticate, VenueController.getAll);
 router.get("/get/:id", authenticate, VenueController.getById);
 router.get("/search", authenticate, VenueController.searchVenues);
 router.get("/count", authenticate, VenueController.getVenueCount);
-router.post("/add", authenticate, VenueController.create);
+router.post(
+  "/add",
+  authenticate,
+  upload.fields([
+    { name: "mainPhoto", maxCount: 1 },
+    { name: "subPhotos", maxCount: 2 },
+  ]),
+  VenueController.create
+);
 router.get("/manager-venues", authenticate, VenueController.getByManagerId);
 router.put("/update/:id", authenticate, VenueController.update);
 router.delete("/remove/:id", authenticate, VenueController.delete);

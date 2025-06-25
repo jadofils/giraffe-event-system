@@ -193,8 +193,15 @@ export class Venue {
   @Column({ type: "varchar", nullable: true })
   @IsOptional()
   @Length(3, 200, {
-    message:
-      "cancellationReason must be between 3 and 200 characters",
+    message: "cancellationReason must be between 3 and 200 characters",
   })
   cancellationReason?: string;
+
+  @Column({ nullable: true })
+  @IsOptional()
+  mainPhotoUrl?: string;
+
+  @Column({ type: "simple-array", nullable: true })
+  @IsOptional()
+  subPhotoUrls?: string[];
 }

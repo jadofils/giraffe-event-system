@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import cloudinary from "../config/cloudinary";
+import streamifier from "streamifier";
 
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
@@ -44,7 +46,55 @@ export class VenueController {
       userRole = (authenticatedReq.user.role as string).toLowerCase();
     }
 
-    const body = authenticatedReq.body; // The request body containing venue data
+    const body = authenticatedReq.body;
+    const files = (req as any).files || {};
+
+    // Handle image uploads (mainPhoto and subPhotos)
+    let mainPhotoUrl: string | undefined = undefined;
+    let subPhotoUrls: string[] = [];
+
+    // Helper to upload a buffer to Cloudinary
+    const uploadToCloudinary = (file: Express.Multer.File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "venues" },
+          (error, result) => {
+            if (error) return reject(error);
+            if (!result) return reject(new Error("No result from Cloudinary"));
+            resolve(result.secure_url);
+          }
+        );
+        streamifier.createReadStream(file.buffer).pipe(uploadStream);
+      });
+    };
+
+    if (files.mainPhoto && files.mainPhoto[0]) {
+      try {
+        mainPhotoUrl = await uploadToCloudinary(files.mainPhoto[0]);
+      } catch (err) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to upload main photo",
+          error: err,
+        });
+        return;
+      }
+    }
+    if (files.subPhotos && Array.isArray(files.subPhotos)) {
+      for (const file of files.subPhotos) {
+        try {
+          const url = await uploadToCloudinary(file);
+          subPhotoUrls.push(url);
+        } catch (err) {
+          res.status(500).json({
+            success: false,
+            message: "Failed to upload sub photo",
+            error: err,
+          });
+          return;
+        }
+      }
+    }
 
     // Check for authenticated user ID
     if (!userId) {
@@ -148,169 +198,6 @@ export class VenueController {
       }
     };
 
-    // --- Handle Multiple Venue Creation (if request body is an array) ---
-    if (Array.isArray(body)) {
-      if (body.length === 0) {
-        res
-          .status(400)
-          .json({ success: false, message: "Venue array cannot be empty." });
-        return;
-      }
-
-      const successfullyCreatedVenues: (Venue & {
-        assignmentStatus?: string;
-      })[] = [];
-      const failedCreations: { venueData: any; error: string }[] = [];
-
-      // Process each venue object in the array
-      for (const venueData of body) {
-        let targetOrganizationId: string | undefined = undefined;
-
-        // Determine and validate organizationId for each venue in the batch
-        if (venueData.organizationId) {
-          if (
-            !OrganizationRepository.UUID_REGEX.test(venueData.organizationId)
-          ) {
-            failedCreations.push({
-              venueData,
-              error: `Invalid organization ID (UUID) provided for venue '${
-                venueData.venueName || "unknown"
-              }'.`,
-            });
-            continue; // Skip to the next venue in the batch
-          }
-          targetOrganizationId = venueData.organizationId;
-        } else if (organizationIdFromUser) {
-          targetOrganizationId = organizationIdFromUser;
-        } else {
-          // If no organizationId is provided in body or from user, it's an error for this venue
-          failedCreations.push({
-            venueData,
-            error: `Organization ID is required for venue '${
-              venueData.venueName || "unknown"
-            }' creation and assignment.`,
-          });
-          continue; // Skip to the next venue in the batch
-        }
-
-        try {
-          // Prepare data for new venue, including managerId, organizationId, and status
-          const newVenueData: Partial<VenueInterface> = {
-            ...venueData,
-            managerId: userId,
-            organizationId: targetOrganizationId, // Use the validated/determined organizationId
-            status:
-              userRole === "admin" ? VenueStatus.APPROVED : VenueStatus.PENDING,
-          };
-
-          // Use the static VenueRepository.create to instantiate a Venue object
-          const venueCreateResult = VenueRepository.create(newVenueData);
-          if (!venueCreateResult.success || !venueCreateResult.data) {
-            failedCreations.push({
-              venueData,
-              error:
-                venueCreateResult.message || "Failed to instantiate venue.",
-            });
-            continue; // Move to the next venue in the array
-          }
-
-          // Save the Venue entity to the database to get its primary key (venueId)
-          const savedVenue = await venueRepository.save(venueCreateResult.data);
-          if (!savedVenue) {
-            failedCreations.push({
-              venueData,
-              error: "Failed to save venue to database.",
-            });
-            continue;
-          }
-          console.log(
-            `Successfully created venue: ${savedVenue.venueName} (ID: ${savedVenue.venueId})`
-          );
-
-          // Process and associate resources for the newly created venue
-          await processAndAssociateResources(savedVenue, venueData.resources);
-
-          // Assign the newly created venue to the organization using the repository method
-          // Ensure savedVenue.venueId is not null before using it
-          let currentAssignmentStatus = "";
-          if (targetOrganizationId && savedVenue.venueId) {
-            const assignResult =
-              await OrganizationRepository.addVenuesToOrganization(
-                targetOrganizationId,
-                [savedVenue.venueId]
-              );
-            if (!assignResult.success) {
-              console.warn(
-                `Failed to assign venue '${savedVenue.venueName}' (ID: ${savedVenue.venueId}) to organization '${targetOrganizationId}': ${assignResult.message}`
-              );
-              currentAssignmentStatus = `Failed to assign to organization: ${assignResult.message}`;
-            } else {
-              console.log(
-                `Successfully assigned venue '${savedVenue.venueName}' to organization '${targetOrganizationId}'.`
-              );
-              currentAssignmentStatus =
-                "Successfully assigned to organization.";
-            }
-          } else {
-            currentAssignmentStatus =
-              "Assignment to organization skipped due to missing organization ID or venue ID.";
-          }
-
-          // Fetch the complete venue object with all its relations (manager, organization, and resources)
-          // Use savedVenue.venueId as the ID for fetching
-          const venueWithRelations = await venueRepository.findOne({
-            where: { venueId: savedVenue.venueId },
-            relations: ["manager", "organization", "resources"],
-          });
-
-          if (venueWithRelations) {
-            successfullyCreatedVenues.push({
-              ...venueWithRelations,
-              assignmentStatus: currentAssignmentStatus,
-            });
-          } else {
-            failedCreations.push({
-              venueData,
-              error: `Could not retrieve relations for venue ${savedVenue.venueId}`,
-            });
-          }
-        } catch (err: any) {
-          console.error(
-            `Error creating venue from batch: ${
-              venueData?.venueName || "Unknown"
-            }`,
-            err.message
-          );
-          failedCreations.push({
-            venueData,
-            error: err.message || "Unknown error during creation.",
-          });
-        }
-      }
-
-      // Send appropriate response based on the outcome of batch creation
-      if (successfullyCreatedVenues.length > 0) {
-        res
-          .status(successfullyCreatedVenues.length === body.length ? 201 : 207)
-          .json({
-            success: true,
-            message:
-              successfullyCreatedVenues.length === body.length
-                ? "All venues created and assigned successfully."
-                : "Some venues were created and assigned successfully, others failed or partially failed assignment.",
-            data: successfullyCreatedVenues,
-            failed: failedCreations.length > 0 ? failedCreations : undefined,
-          });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: "No venues were created successfully.",
-          errors: failedCreations,
-        });
-      }
-      return; // Exit function after handling array input
-    }
-
     // --- Handle Single Venue Creation (if request body is an object) ---
     const {
       venueName,
@@ -385,6 +272,8 @@ export class VenueController {
         contactEmail,
         contactPhone,
         websiteURL,
+        mainPhotoUrl,
+        subPhotoUrls,
       };
 
       // Use the static VenueRepository.create method to create a Venue object instance

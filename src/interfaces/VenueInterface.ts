@@ -22,6 +22,8 @@ export class VenueInterface {
   updatedAt!: Date;
   deletedAt?: Date;
   cancellationReason?: string;
+  mainPhotoUrl?: string;
+  subPhotoUrls?: string[];
 
   constructor(data: Partial<VenueInterface>) {
     Object.assign(this, {
