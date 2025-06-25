@@ -26,13 +26,23 @@ export class VenueRepository {
       };
     }
 
-    if (typeof data.capacity !== "number" || data.capacity <= 0) {
+    const capacityNum =
+      typeof data.capacity === "string" ? Number(data.capacity) : data.capacity;
+    if (
+      typeof capacityNum !== "number" ||
+      isNaN(capacityNum) ||
+      capacityNum <= 0
+    ) {
       return { success: false, message: "Capacity must be a positive number." };
     }
+    data.capacity = capacityNum;
 
-    if (typeof data.amount !== "number" || data.amount <= 0) {
+    const amountNum =
+      typeof data.amount === "string" ? Number(data.amount) : data.amount;
+    if (typeof amountNum !== "number" || isNaN(amountNum) || amountNum <= 0) {
       return { success: false, message: "Amount must be a positive number." };
     }
+    data.amount = amountNum;
 
     if (data.managerId && !this.UUID_REGEX.test(data.managerId)) {
       return { success: false, message: "Invalid managerId format." };
@@ -83,6 +93,8 @@ export class VenueRepository {
       contactEmail: data.contactEmail ?? undefined,
       contactPhone: data.contactPhone ?? undefined,
       websiteURL: data.websiteURL ?? undefined,
+      mainPhotoUrl: data.mainPhotoUrl ?? undefined,
+      subPhotoUrls: data.subPhotoUrls ?? undefined,
       status:
         typeof data.status === "string" &&
         data.status.toUpperCase() === VenueStatus.APPROVED
