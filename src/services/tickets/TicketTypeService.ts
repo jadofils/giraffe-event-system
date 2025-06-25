@@ -37,11 +37,14 @@ private static convertToResponse(ticketType: TicketType): TicketTypeResponseInte
         maxQuantity: ticketType.maxQuantity,
         isActive: ticketType.isActive,
         perks: ticketType.perks,
-        deletedAt: ticketType.deletedAt ? ticketType.deletedAt.toISOString() : undefined,
-        availableFrom: ticketType.availableFrom ? ticketType.availableFrom.toISOString() : undefined,
-        availableUntil: ticketType.availableUntil ? ticketType.availableUntil.toISOString() : undefined,
-        createdAt: ticketType.createdAt ? ticketType.createdAt.toISOString() : undefined,
-        updatedAt: ticketType.updatedAt ? ticketType.updatedAt.toISOString() : undefined,
+        deletedAt: ticketType.deletedAt ? ticketType.deletedAt.toISOString() : "",
+        availableFrom: ticketType.availableFrom ? ticketType.availableFrom.toISOString() : "",
+        availableUntil: ticketType.availableUntil ? ticketType.availableUntil.toISOString() : "",
+        createdAt: ticketType.createdAt ? ticketType.createdAt.toISOString() : "",
+        updatedAt: ticketType.updatedAt ? ticketType.updatedAt.toISOString() : "",
+        requiresVerification: ticketType.requiresVerification,
+        createdByUserId: ticketType.createdByUserId,
+        eventId: ticketType.eventId,
     };
 }
 

@@ -1,63 +1,25 @@
-import { Router } from "express";
-import { TicketTypeController } from "../controller/TicketTypeController";
-import { authenticate } from "../middlewares/AuthMiddleware"; // make sure this is imported
+import { Router } from 'express';
+import { authenticate } from '../middlewares/AuthMiddleware';
+import { TicketTypeController } from '../controller/TicketTypeController';
 
 const router = Router();
 
-// =======================
-// 📂 Public Ticket Type Routes
-// =======================
-// (If you want any public routes like viewing ticket types, put them here)
+// Create a new ticket type (protected)
+router.post('/',authenticate, TicketTypeController.createTicketType);
 
+// Get all active ticket types for an event
+router.get('/event/:eventId', TicketTypeController.getTicketTypesByEvent);
 
-// =======================
-// 🔒 Protected Ticket Type Routes
-// =======================
-router.use(authenticate);
+// Get a single ticket type by ID
+router.get('/:ticketTypeId', TicketTypeController.getTicketTypeById);
 
-// POST /api/ticket-types
-router.post("/", async (req, res, next) => {
-  try {
-    await TicketTypeController.createTicketType(req, res);
-  } catch (err) {
-    next(err);
-  }
-});
+// Update an existing ticket type (protected)
+router.patch('/:ticketTypeId',authenticate, TicketTypeController.updateTicketType);
 
-// GET /api/ticket-types
-router.get("/", async (req, res, next) => {
-  try {
-    await TicketTypeController.getAllTicketTypes(req, res);
-  } catch (err) {
-    next(err);
-  }
-});
+// Soft delete a ticket type (protected)
+router.delete('/:ticketTypeId',authenticate, TicketTypeController.deleteTicketType);
 
-// GET /api/ticket-types/:ticketTypeId
-router.get("/:ticketTypeId", async (req, res, next) => {
-  try {
-    await TicketTypeController.getTicketTypeById(req, res);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// PUT /api/ticket-types/:ticketTypeId
-router.put("/:ticketTypeId", async (req, res, next) => {
-  try {
-    await TicketTypeController.updateTicketType(req, res);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// DELETE /api/ticket-types/:ticketTypeId
-router.delete("/:ticketTypeId", async (req, res, next) => {
-  try {
-    await TicketTypeController.deleteTicketType(req, res);
-  } catch (err) {
-    next(err);
-  }
-});
+// Get ticket count statistics by category
+router.get('/count-by-category', TicketTypeController.getTicketCountByCategory);
 
 export default router;

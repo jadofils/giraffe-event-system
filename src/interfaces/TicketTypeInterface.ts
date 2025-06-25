@@ -1,5 +1,9 @@
 import { TicketCategory } from './Enums/TicketCategoryEnum';
 
+export interface RegistrationRef {
+  registrationId: string;
+}
+
 export class TicketTypeInterface {
   ticketTypeId!: string;
   ticketName!: string;
@@ -11,22 +15,24 @@ export class TicketTypeInterface {
   capacity?: number;
   availableFrom?: Date;
   availableUntil?: Date;
-  isActive?: boolean;
+  isActive!: boolean;
   minQuantity?: number;
   maxQuantity?: number;
-  requiresVerification?: boolean;
+  requiresVerification!: boolean;
   perks?: string[];
+  createdByUserId!: string;
   createdAt!: Date;
   updatedAt!: Date;
   deletedAt?: Date;
+  registrations?: RegistrationRef[];
   eventId!: string;
 
   constructor(data: Partial<TicketTypeInterface>) {
     Object.assign(this, {
       ticketTypeId: data.ticketTypeId || '',
       ticketName: data.ticketName || '',
-      price: data.price || 0,
-      ticketCategory: data.ticketCategory || TicketCategory.REGULAR,
+      price: data.price ?? 0,
+      ticketCategory: data.ticketCategory ?? TicketCategory.REGULAR,
       description: data.description,
       promoName: data.promoName,
       promoDescription: data.promoDescription,
@@ -38,9 +44,11 @@ export class TicketTypeInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification ?? false,
       perks: data.perks,
-      createdAt: data.createdAt || new Date(),
-      updatedAt: data.updatedAt || new Date(),
+      createdByUserId: data.createdByUserId || '',
+      createdAt: data.createdAt ?? new Date(),
+      updatedAt: data.updatedAt ?? new Date(),
       deletedAt: data.deletedAt,
+      registrations: data.registrations ?? [],
       eventId: data.eventId || '',
     });
   }
@@ -48,10 +56,16 @@ export class TicketTypeInterface {
   static validate(data: Partial<TicketTypeInterface>): string[] {
     const errors: string[] = [];
     if (!data.ticketName) errors.push('ticketName is required');
-    if (!data.price || data.price < 0) errors.push('price must be non-negative');
-    if (!Object.values(TicketCategory).includes(data.ticketCategory!)) {
+    if (data.price === undefined || data.price < 0) errors.push('price must be non-negative');
+    if (!data.ticketCategory || !Object.values(TicketCategory).includes(data.ticketCategory)) {
       errors.push(`ticketCategory must be one of ${Object.values(TicketCategory).join(', ')}`);
     }
+    if (!data.eventId) errors.push('eventId is required');
+    if (!data.createdByUserId) errors.push('createdByUserId is required');
+    if (data.capacity !== undefined && data.capacity < 0) errors.push('capacity must be non-negative');
+    if (data.minQuantity !== undefined && data.minQuantity < 1) errors.push('minQuantity must be at least 1');
+    if (data.maxQuantity !== undefined && data.maxQuantity < 1) errors.push('maxQuantity must be at least 1');
+    if (data.perks !== undefined && !Array.isArray(data.perks)) errors.push('perks must be an array of strings');
     return errors;
   }
 
@@ -72,6 +86,7 @@ export class TicketTypeInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification,
       perks: data.perks,
+      createdByUserId: data.createdByUserId,
       eventId: data.eventId,
     });
   }
@@ -93,9 +108,11 @@ export class TicketTypeInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification,
       perks: data.perks,
+      createdByUserId: data.createdByUserId,
       createdAt: data.createdAt.toISOString(),
       updatedAt: data.updatedAt.toISOString(),
       deletedAt: data.deletedAt?.toISOString(),
+      registrations: data.registrations?.map(r => r.registrationId),
       eventId: data.eventId,
     });
   }
@@ -117,26 +134,28 @@ export class TicketTypeRequestInterface {
   maxQuantity?: number;
   requiresVerification?: boolean;
   perks?: string[];
-  eventId?: string;
+  createdByUserId?: string;
+  eventId!: string;
 
   constructor(data: Partial<TicketTypeRequestInterface>) {
     Object.assign(this, {
       ticketTypeId: data.ticketTypeId,
       ticketName: data.ticketName || '',
-      price: data.price || 0,
-      ticketCategory: data.ticketCategory || TicketCategory.REGULAR,
+      price: data.price ?? 0,
+      ticketCategory: data.ticketCategory ?? TicketCategory.REGULAR,
       description: data.description,
       promoName: data.promoName,
       promoDescription: data.promoDescription,
       capacity: data.capacity,
       availableFrom: data.availableFrom,
       availableUntil: data.availableUntil,
-      isActive: data.isActive,
+      isActive: data.isActive ?? true,
       minQuantity: data.minQuantity,
       maxQuantity: data.maxQuantity,
-      requiresVerification: data.requiresVerification,
+      requiresVerification: data.requiresVerification ?? false,
       perks: data.perks,
-      eventId: data.eventId,
+      createdByUserId: data.createdByUserId,
+      eventId: data.eventId || '',
     });
   }
 
@@ -157,7 +176,9 @@ export class TicketTypeRequestInterface {
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification ?? false,
       perks: data.perks,
+      createdByUserId: data.createdByUserId || '',
       eventId: data.eventId,
+      registrations: [],
     });
   }
 }
@@ -173,37 +194,41 @@ export class TicketTypeResponseInterface {
   capacity?: number;
   availableFrom?: string;
   availableUntil?: string;
-  isActive?: boolean;
+  isActive!: boolean;
   minQuantity?: number;
   maxQuantity?: number;
-  requiresVerification?: boolean;
+  requiresVerification!: boolean;
   perks?: string[];
-  createdAt?: string;
-  updatedAt?: string;
+  createdByUserId!: string;
+  createdAt!: string;
+  updatedAt!: string;
   deletedAt?: string;
-  eventId?: string;
+  registrations?: string[];
+  eventId!: string;
 
   constructor(data: Partial<TicketTypeResponseInterface>) {
     Object.assign(this, {
       ticketTypeId: data.ticketTypeId || '',
       ticketName: data.ticketName || '',
-      price: data.price || 0,
-      ticketCategory: data.ticketCategory || TicketCategory.REGULAR,
+      price: data.price ?? 0,
+      ticketCategory: data.ticketCategory ?? TicketCategory.REGULAR,
       description: data.description,
       promoName: data.promoName,
       promoDescription: data.promoDescription,
       capacity: data.capacity,
       availableFrom: data.availableFrom,
       availableUntil: data.availableUntil,
-      isActive: data.isActive,
+      isActive: data.isActive ?? true,
       minQuantity: data.minQuantity,
       maxQuantity: data.maxQuantity,
-      requiresVerification: data.requiresVerification,
+      requiresVerification: data.requiresVerification ?? false,
       perks: data.perks,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
+      createdByUserId: data.createdByUserId || '',
+      createdAt: data.createdAt ?? new Date().toISOString(),
+      updatedAt: data.updatedAt ?? new Date().toISOString(),
       deletedAt: data.deletedAt,
-      eventId: data.eventId,
+      registrations: data.registrations ?? [],
+      eventId: data.eventId || '',
     });
   }
 
@@ -217,16 +242,22 @@ export class TicketTypeResponseInterface {
       promoName: data.promoName,
       promoDescription: data.promoDescription,
       capacity: data.capacity,
-      availableFrom: data.availableFrom?.toISOString(),
-      availableUntil: data.availableUntil?.toISOString(),
+      availableFrom: data.availableFrom instanceof Date
+        ? data.availableFrom.toISOString()
+        : data.availableFrom || undefined,
+      availableUntil: data.availableUntil instanceof Date
+        ? data.availableUntil.toISOString()
+        : data.availableUntil || undefined,
       isActive: data.isActive,
       minQuantity: data.minQuantity,
       maxQuantity: data.maxQuantity,
       requiresVerification: data.requiresVerification,
       perks: data.perks,
+      createdByUserId: data.createdByUserId,
       createdAt: data.createdAt.toISOString(),
       updatedAt: data.updatedAt.toISOString(),
       deletedAt: data.deletedAt?.toISOString(),
+      registrations: data.registrations?.map(r => r.registrationId),
       eventId: data.eventId,
     });
   }
