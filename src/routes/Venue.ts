@@ -14,6 +14,7 @@ router.post("/add", authenticate, VenueController.create);
 router.get("/manager-venues", authenticate, VenueController.getByManagerId);
 router.put("/update/:id", authenticate, VenueController.update);
 router.delete("/remove/:id", authenticate, VenueController.delete);
+router.get("/venue-approximately", authenticate, VenueController.getVenuesByProximity);
 router.post(
   "/assign-manager",
   authenticate,

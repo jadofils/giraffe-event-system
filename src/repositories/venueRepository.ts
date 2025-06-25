@@ -14,144 +14,141 @@ export class VenueRepository {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   // Create venue
-  static create(data: Partial<VenueInterface>): {
-    success: boolean;
-    data?: Venue;
-    message?: string;
-  } {
-    // Basic validation for essential venue fields
-    if (!data.venueName || !data.capacity || !data.location || !data.amount) {
-      return {
-        success: false,
-        message:
-          "Required fields for venue creation: venueName, capacity, location, amount.",
-      };
-    }
-
-    // Validate capacity and amount are positive numbers
-    if (typeof data.capacity !== "number" || data.capacity <= 0) {
-      return { success: false, message: "Capacity must be a positive number." };
-    }
-    if (typeof data.amount !== "number" || data.amount <= 0) {
-      return { success: false, message: "Amount must be a positive number." };
-    }
-
-    // Validate optional fields if provided
-    if (data.managerId && !this.UUID_REGEX.test(data.managerId)) {
-      return { success: false, message: "Invalid managerId format." };
-    }
-    if (data.organizationId && !this.UUID_REGEX.test(data.organizationId)) {
-      return { success: false, message: "Invalid organizationId format." };
-    }
-    if (
-      data.latitude !== undefined &&
-      (typeof data.latitude !== "number" ||
-        data.latitude < -90 ||
-        data.latitude > 90)
-    ) {
-      return {
-        success: false,
-        message: "Invalid latitude. Must be a number between -90 and 90.",
-      };
-    }
-    if (
-      data.longitude !== undefined &&
-      (typeof data.longitude !== "number" ||
-        data.longitude < -180 ||
-        data.longitude > 180)
-    ) {
-      return {
-        success: false,
-        message: "Invalid longitude. Must be a number between -180 and 180.",
-      };
-    }
-
-    const venue = new Venue();
-    venue.venueName = data.venueName;
-    venue.capacity = data.capacity;
-    venue.location = data.location;
-    venue.amount = data.amount;
-    venue.managerId = data.managerId ?? undefined;
-    venue.organizationId = data.organizationId ?? undefined;
-    venue.latitude = data.latitude ?? undefined;
-    venue.longitude = data.longitude ?? undefined;
-    venue.googleMapsLink = data.googleMapsLink ?? undefined;
-    venue.amenities = data.amenities ?? undefined;
-    venue.venueType = data.venueType ?? undefined;
-    venue.contactPerson = data.contactPerson ?? undefined;
-    venue.contactEmail = data.contactEmail ?? undefined;
-    venue.contactPhone = data.contactPhone ?? undefined;
-    venue.websiteURL = data.websiteURL ?? undefined;
-
-    // Set status: use provided status or default to PENDING
-    if (data.status && typeof data.status === "string") {
-      // Accept both "APPROVED"/"approved" and "PENDING"/"pending"
-      const normalized = data.status.toUpperCase();
-      venue.status =
-        normalized === VenueStatus.APPROVED
-          ? VenueStatus.APPROVED
-          : VenueStatus.PENDING;
-    } else {
-      venue.status = VenueStatus.PENDING;
-    }
-
-    return { success: true, data: venue };
+static create(data: Partial<VenueInterface>): {
+  success: boolean;
+  data?: Venue;
+  message?: string;
+} {
+  if (!data.venueName || !data.capacity || !data.location || !data.amount) {
+    return {
+      success: false,
+      message: "Required fields: venueName, capacity, location, amount.",
+    };
   }
+
+  if (typeof data.capacity !== "number" || data.capacity <= 0) {
+    return { success: false, message: "Capacity must be a positive number." };
+  }
+
+  if (typeof data.amount !== "number" || data.amount <= 0) {
+    return { success: false, message: "Amount must be a positive number." };
+  }
+
+  if (data.managerId && !this.UUID_REGEX.test(data.managerId)) {
+    return { success: false, message: "Invalid managerId format." };
+  }
+
+  if (data.organizationId && !this.UUID_REGEX.test(data.organizationId)) {
+    return { success: false, message: "Invalid organizationId format." };
+  }
+
+  if (
+    data.latitude !== undefined &&
+    (typeof data.latitude !== "number" || data.latitude < -90 || data.latitude > 90)
+  ) {
+    return {
+      success: false,
+      message: "Invalid latitude. Must be a number between -90 and 90.",
+    };
+  }
+
+  if (
+    data.longitude !== undefined &&
+    (typeof data.longitude !== "number" || data.longitude < -180 || data.longitude > 180)
+  ) {
+    return {
+      success: false,
+      message: "Invalid longitude. Must be a number between -180 and 180.",
+    };
+  }
+
+  const venue = new Venue();
+  Object.assign(venue, {
+    venueName: data.venueName,
+    capacity: data.capacity,
+    location: data.location,
+    amount: data.amount,
+    managerId: data.managerId ?? undefined,
+    organizationId: data.organizationId ?? undefined,
+    latitude: data.latitude ?? undefined,
+    longitude: data.longitude ?? undefined,
+    googleMapsLink: data.googleMapsLink ?? undefined,
+    amenities: data.amenities ?? undefined,
+    venueType: data.venueType ?? undefined,
+    contactPerson: data.contactPerson ?? undefined,
+    contactEmail: data.contactEmail ?? undefined,
+    contactPhone: data.contactPhone ?? undefined,
+    websiteURL: data.websiteURL ?? undefined,
+    status:
+      typeof data.status === "string" &&
+      data.status.toUpperCase() === VenueStatus.APPROVED
+        ? VenueStatus.APPROVED
+        : VenueStatus.PENDING,
+  });
+
+  return { success: true, data: venue };
+}
+
   // Save venue
-  static async save(
-    venue: Venue
-  ): Promise<{ success: boolean; data?: Venue; message?: string }> {
-    if (
-      !venue.venueName ||
-      !venue.capacity ||
-      !venue.location ||
-      !venue.amount
-    ) {
-      return {
-        success: false,
-        message: "Required fields: venueName, capacity, location, amount.",
-      };
-    }
-
-    try {
-      const repo = AppDataSource.getRepository(Venue);
-      const existingVenue = await repo.findOne({
-        where: { venueName: venue.venueName, location: venue.location },
-      });
-
-      if (existingVenue && existingVenue.venueId !== venue.venueId) {
-        return {
-          success: false,
-          message: "A venue with this name and location already exists.",
-          data: existingVenue,
-        };
-      }
-
-      const savedVenue = await repo.save(venue);
-
-      // Invalidate caches
-      await CacheService.invalidateMultiple([
-        `${this.CACHE_PREFIX}all`,
-        `${this.CACHE_PREFIX}${savedVenue.venueId}`,
-        `${this.CACHE_PREFIX}manager:${savedVenue.managerId}`,
-        `${this.CACHE_PREFIX}search:*`,
-      ]);
-
-      return {
-        success: true,
-        data: savedVenue,
-        message: "Venue saved successfully",
-      };
-    } catch (error) {
-      console.error("Error saving venue:", error);
-      return {
-        success: false,
-        message: `Failed to save venue: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      };
-    }
+static async save(
+  venue: Venue
+): Promise<{ success: boolean; data?: Venue; message?: string }> {
+  if (!venue.venueName || !venue.capacity || !venue.location || !venue.amount) {
+    return {
+      success: false,
+      message: "Required fields: venueName, capacity, location, amount.",
+    };
   }
+
+  try {
+    const repo = AppDataSource.getRepository(Venue);
+
+    // Find any venue with same name and location, regardless of organization
+    const duplicate = await repo.findOne({
+      where: {
+        venueName: venue.venueName,
+        location: venue.location
+      }
+    });
+
+    if (
+      duplicate &&
+      duplicate.venueId !== venue.venueId
+    ) {
+      const sameOrg = duplicate.organizationId === venue.organizationId;
+      return {
+        success: false,
+        message: sameOrg
+          ? `Venue "${venue.venueName}" at "${venue.location}" already exists in your organization.`
+          : `Venue "${venue.venueName}" at "${venue.location}" is already registered under another organization.`,
+        data: duplicate,
+      };
+    }
+
+    const savedVenue = await repo.save(venue);
+
+    await CacheService.invalidateMultiple([
+      `${this.CACHE_PREFIX}all`,
+      `${this.CACHE_PREFIX}${savedVenue.venueId}`,
+      `${this.CACHE_PREFIX}manager:${savedVenue.managerId}`,
+      `${this.CACHE_PREFIX}search:*`,
+    ]);
+
+    return {
+      success: true,
+      data: savedVenue,
+      message: "Venue saved successfully",
+    };
+  } catch (error: any) {
+    console.error("Error saving venue:", error);
+    return {
+      success: false,
+      message: "Failed to save venue."
+    };
+  }
+}
+
+
 
   // Get venue by ID
   static async getById(
