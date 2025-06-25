@@ -1,180 +1,299 @@
-// src/controllers/TicketTypeController.ts
 import { Request, Response } from 'express';
 import { TicketTypeService } from '../services/tickets/TicketTypeService';
-import { TicketTypeRequestInterface } from '../interfaces/TicketTypeInterface';
+import { TicketTypeRequestInterface, TicketTypeResponseInterface } from '../interfaces/TicketTypeInterface';
 import { TicketCategory } from '../interfaces/Index';
+import { validate } from 'class-validator';
+import { TicketType } from '../models/TicketType';
 import { EventRepository } from '../repositories/eventRepository';
 
 export class TicketTypeController {
-    // No need for service instance since all methods are static
-    
-    /**
-     * Handles the creation of a new TicketType.
-     * Delegates to the TicketTypeService for business logic and data persistence.
-     */
-    static async createTicketType(req: Request, res: Response): Promise<Response> {
-        try {
-            const ticketTypeData: TicketTypeRequestInterface = req.body;
-
-            // --- Basic input validation before hitting the service ---
-            if (!ticketTypeData.eventId) {
-                return res.status(400).json({ message: 'Missing required field: eventId.' });
-            }
-            // Check if event exists
-            const eventResult = await EventRepository.getById(ticketTypeData.eventId);
-            if (!eventResult.success || !eventResult.data) {
-                return res.status(404).json({ message: `Event with ID ${ticketTypeData.eventId} not found.` });
-            }
-            if (!ticketTypeData.ticketName || !ticketTypeData.price || !ticketTypeData.ticketCategory) {
-                return res.status(400).json({ message: 'Missing required fields: ticketName, price, and ticketCategory.' });
-            }
-            if (typeof ticketTypeData.price !== 'number' || ticketTypeData.price <= 0) {
-                return res.status(400).json({ message: 'Price must be a positive number.' });
-            }
-            if (!Object.values(TicketCategory).includes(ticketTypeData.ticketCategory)) {
-                return res.status(400).json({ message: 'Invalid ticket category provided.' });
-            }
-            // --- End validation ---
-
-            const newTicketType = await TicketTypeService.createTicketType(ticketTypeData);
-
-            // Convert to response format using the service's method
-            const responseData = {
-                ticketTypeId: newTicketType.ticketTypeId,
-                ticketName: newTicketType.ticketName,
-                price: newTicketType.price,
-                description: newTicketType.description,
-                ticketCategory: newTicketType.ticketCategory,
-                promoName: newTicketType.promoName,
-                promoDescription: newTicketType.promoDescription,
-                deletedAt: newTicketType.deletedAt ? newTicketType.deletedAt.toISOString() : undefined,
-            };
-
-            return res.status(201).json(responseData);
-
-        } catch (error: any) {
-            console.error('Error creating ticket type:', error);
-            return res.status(500).json({ message: 'Failed to create ticket type', error: error.message || 'Internal server error' });
-        }
+  /**
+   * Handles the creation of a new TicketType.
+   * Only logged-in users who created the event or are in the event's organization can create tickets for approved events.
+   */
+  static async createTicketType(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.userId; // Assumes auth middleware attaches userId
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized: User not logged in.' });
+      return;
     }
 
-    /**
-     * Retrieves all active TicketTypes.
-     * Delegates to the TicketTypeService.
-     */
-    static async getAllTicketTypes(req: Request, res: Response): Promise<Response> {
-        try {
-            const ticketTypes = await TicketTypeService.getAllTicketTypeResponses();
-            return res.status(200).json(ticketTypes);
-        } catch (error: any) {
-            console.error('Error fetching all ticket types:', error);
-            return res.status(500).json({ message: 'Failed to fetch ticket types', error: error.message || 'Internal server error' });
-        }
+    const ticketTypeData: TicketTypeRequestInterface = req.body;
+
+    try {
+      // --- Basic input validation ---
+      if (!ticketTypeData.eventId) {
+        res.status(400).json({ success: false, message: 'Missing required field: eventId.' });
+        return;
+      }
+      if (!ticketTypeData.ticketName || !ticketTypeData.price || !ticketTypeData.ticketCategory) {
+        res.status(400).json({ success: false, message: 'Missing required fields: ticketName, price, and ticketCategory.' });
+        return;
+      }
+      if (typeof ticketTypeData.price !== 'number' || ticketTypeData.price <= 0) {
+        res.status(400).json({ success: false, message: 'Price must be a positive number.' });
+        return;
+      }
+      if (!Object.values(TicketCategory).includes(ticketTypeData.ticketCategory)) {
+        res.status(400).json({ success: false, message: 'Invalid ticket category provided.' });
+        return;
+      }
+
+      // --- Validate against TicketType model ---
+      const ticketType = new TicketType();
+      Object.assign(ticketType, ticketTypeData);
+      const validationErrors = await validate(ticketType, { skipMissingProperties: true });
+      if (validationErrors.length > 0) {
+        const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
+        res.status(400).json({ success: false, message: `Validation failed: ${errorMessages.join(', ')}` });
+        return;
+      }
+
+      // --- Check if event exists and is approved ---
+      const eventResult = await EventRepository.getById(ticketTypeData.eventId);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ success: false, message: `Event with ID ${ticketTypeData.eventId} not found.` });
+        return;
+      }
+      if (eventResult.data.status !== 'APPROVED') {
+        res.status(400).json({ success: false, message: 'Tickets can only be created for approved events.' });
+        return;
+      }
+
+      // --- Check user authorization ---
+      const isCreator = eventResult.data.createdByUserId === userId || eventResult.data.organizerId === userId;
+      const isInOrganization =
+        eventResult.data.organizationId &&
+        eventResult.data.organization &&
+        Array.isArray(eventResult.data.organization.users) &&
+        eventResult.data.organization.users.some(u => u.userId === userId);
+      if (!isCreator && !isInOrganization) {
+        res.status(403).json({ success: false, message: 'Unauthorized: You cannot create tickets for this event.' });
+        return;
+      }
+
+      // --- Create ticket type ---
+      const newTicketType = await TicketTypeService.createTicketType({ ...ticketTypeData, createdByUserId: userId });
+
+      // --- Convert to response format ---
+      const responseData = TicketTypeResponseInterface.fromEntity({
+        ...newTicketType,
+        createdByUserId: newTicketType.createdByUserId || userId,
+      });
+
+      res.status(201).json({ success: true, message: 'Ticket type created successfully.', data: responseData });
+    } catch (error: any) {
+      console.error('Error creating ticket type:', error);
+      res.status(500).json({ success: false, message: 'Failed to create ticket type', error: error.message || 'Internal server error' });
+    }
+  }
+
+  /**
+   * Retrieves all active TicketTypes for an event.
+   */
+  static async getTicketTypesByEvent(req: Request, res: Response): Promise<void> {
+    const { eventId } = req.params;
+
+    try {
+      // --- Validate eventId ---
+      if (!eventId) {
+        res.status(400).json({ success: false, message: 'Missing required parameter: eventId.' });
+        return;
+      }
+
+      // --- Check if event exists ---
+      const eventResult = await EventRepository.getById(eventId);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ success: false, message: `Event with ID ${eventId} not found.` });
+        return;
+      }
+
+      // --- Fetch ticket types ---
+      const ticketTypes = await TicketTypeService.getAllTicketTypeResponses();
+      const eventTicketTypes = ticketTypes.filter(t => t.eventId === eventId);
+
+      res.status(200).json({ success: true, message: 'Ticket types fetched successfully.', data: eventTicketTypes });
+    } catch (error: any) {
+      console.error('Error fetching ticket types by event:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch ticket types', error: error.message || 'Internal server error' });
+    }
+  }
+
+  /**
+   * Retrieves a single TicketType by ID.
+   */
+  static async getTicketTypeById(req: Request, res: Response): Promise<void> {
+    const { ticketTypeId } = req.params;
+
+    try {
+      const ticketType = await TicketTypeService.getTicketTypeResponseById(ticketTypeId);
+
+      if (!ticketType) {
+        res.status(404).json({ success: false, message: `Ticket type with ID ${ticketTypeId} not found.` });
+        return;
+      }
+
+      res.status(200).json({ success: true, message: 'Ticket type fetched successfully.', data: ticketType });
+    } catch (error: any) {
+      console.error('Error fetching ticket type by ID:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch ticket type', error: error.message || 'Internal server error' });
+    }
+  }
+
+  /**
+   * Updates an existing TicketType.
+   * Only authorized users can update tickets.
+   */
+  static async updateTicketType(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized: User not logged in.' });
+      return;
     }
 
-    /**
-     * Retrieves a single TicketType by ID.
-     * Delegates to the TicketTypeService.
-     */
-    static async getTicketTypeById(req: Request, res: Response): Promise<Response> {
-        try {
-            const { ticketTypeId } = req.params;
+    const { ticketTypeId } = req.params;
+    const updateData: Partial<TicketTypeRequestInterface> = req.body;
 
-            const ticketType = await TicketTypeService.getTicketTypeResponseById(ticketTypeId);
+    try {
+      // --- Basic input validation ---
+      if (updateData.ticketCategory && !Object.values(TicketCategory).includes(updateData.ticketCategory)) {
+        res.status(400).json({ success: false, message: 'Invalid ticket category provided.' });
+        return;
+      }
+      if (updateData.price !== undefined && (typeof updateData.price !== 'number' || updateData.price <= 0)) {
+        res.status(400).json({ success: false, message: 'Price must be a positive number if provided.' });
+        return;
+      }
 
-            if (!ticketType) {
-                return res.status(404).json({ message: `Ticket type with ID ${ticketTypeId} not found.` });
-            }
+      // --- Validate against TicketType model ---
+      const ticketType = new TicketType();
+      Object.assign(ticketType, updateData);
+      const validationErrors = await validate(ticketType, { skipMissingProperties: true });
+      if (validationErrors.length > 0) {
+        const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
+        res.status(400).json({ success: false, message: `Validation failed: ${errorMessages.join(', ')}` });
+        return;
+      }
 
-            return res.status(200).json(ticketType);
-        } catch (error: any) {
-            console.error('Error fetching ticket type by ID:', error);
-            return res.status(500).json({ message: 'Failed to fetch ticket type', error: error.message || 'Internal server error' });
-        }
+      // --- Check if ticket type exists ---
+      const existingTicketType = await TicketTypeService.getTicketTypeById(ticketTypeId);
+      if (!existingTicketType) {
+        res.status(404).json({ success: false, message: `Ticket type with ID ${ticketTypeId} not found.` });
+        return;
+      }
+
+      // --- Check if event exists and is approved ---
+      const eventId = updateData.eventId || existingTicketType.eventId;
+      const eventResult = await EventRepository.getById(eventId);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ success: false, message: `Event with ID ${eventId} not found.` });
+        return;
+      }
+      if (eventResult.data.status !== 'APPROVED') {
+        res.status(400).json({ success: false, message: 'Tickets can only be updated for approved events.' });
+        return;
+      }
+
+      // --- Check user authorization ---
+      const isCreator = eventResult.data.createdByUserId === userId || eventResult.data.organizerId === userId;
+      const isInOrganization =
+        eventResult.data.organizationId &&
+        eventResult.data.organization &&
+        Array.isArray(eventResult.data.organization.users) &&
+        eventResult.data.organization.users.some(u => u.userId === userId);
+      if (!isCreator && !isInOrganization) {
+        res.status(403).json({ success: false, message: 'Unauthorized: You cannot update tickets for this event.' });
+        return;
+      }
+
+      // --- Update ticket type ---
+      const updatedTicketType = await TicketTypeService.updateTicketType(ticketTypeId, updateData);
+      if (!updatedTicketType) {
+        res.status(404).json({ success: false, message: `Ticket type with ID ${ticketTypeId} not found.` });
+        return;
+      }
+
+      // --- Convert to response format ---
+      const responseData = TicketTypeResponseInterface.fromEntity({
+        ...updatedTicketType,
+        createdByUserId: updatedTicketType.createdByUserId || userId,
+      });
+
+      res.status(200).json({ success: true, message: 'Ticket type updated successfully.', data: responseData });
+    } catch (error: any) {
+      console.error('Error updating ticket type:', error);
+      res.status(500).json({ success: false, message: 'Failed to update ticket type', error: error.message || 'Internal server error' });
+    }
+  }
+
+  /**
+   * Soft deletes a TicketType.
+   * Only authorized users can delete tickets.
+   */
+  static async deleteTicketType(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized: User not logged in.' });
+      return;
     }
 
-    /**
-     * Updates an existing TicketType.
-     * Delegates to the TicketTypeService.
-     */
-    static async updateTicketType(req: Request, res: Response): Promise<Response> {
-        try {
-            const { ticketTypeId } = req.params;
-            const updateData: Partial<TicketTypeRequestInterface> = req.body;
+    const { ticketTypeId } = req.params;
 
-            if (!updateData.eventId) {
-                return res.status(400).json({ message: 'Missing required field: eventId.' });
-            }
-            // Check if event exists
-            const eventResult = await EventRepository.getById(updateData.eventId);
-            if (!eventResult.success || !eventResult.data) {
-                return res.status(404).json({ message: `Event with ID ${updateData.eventId} not found.` });
-            }
-            // --- Basic input validation for updates ---
-            if (updateData.ticketCategory && !Object.values(TicketCategory).includes(updateData.ticketCategory)) {
-                return res.status(400).json({ message: 'Invalid ticket category provided for update.' });
-            }
-            if (updateData.price !== undefined && (typeof updateData.price !== 'number' || updateData.price <= 0)) {
-                return res.status(400).json({ message: 'Price must be a positive number if provided.' });
-            }
-            // --- End validation ---
+    try {
+      // --- Check if ticket type exists ---
+      const existingTicketType = await TicketTypeService.getTicketTypeById(ticketTypeId);
+      if (!existingTicketType) {
+        res.status(404).json({ success: false, message: `Ticket type with ID ${ticketTypeId} not found.` });
+        return;
+      }
 
-            const updatedTicketType = await TicketTypeService.updateTicketType(ticketTypeId, updateData);
+      // --- Check if event exists and is approved ---
+      const eventResult = await EventRepository.getById(existingTicketType.eventId);
+      if (!eventResult.success || !eventResult.data) {
+        res.status(404).json({ success: false, message: `Event with ID ${existingTicketType.eventId} not found.` });
+        return;
+      }
+      if (eventResult.data.status !== 'APPROVED') {
+        res.status(400).json({ success: false, message: 'Tickets can only be deleted for approved events.' });
+        return;
+      }
 
-            if (!updatedTicketType) {
-                return res.status(404).json({ message: `Ticket type with ID ${ticketTypeId} not found.` });
-            }
+      // --- Check user authorization ---
+      const isCreator = eventResult.data.createdByUserId === userId || eventResult.data.organizerId === userId;
+      const isInOrganization =
+        eventResult.data.organizationId &&
+        eventResult.data.organization &&
+        Array.isArray(eventResult.data.organization.users) &&
+        eventResult.data.organization.users.some(u => u.userId === userId);
+      if (!isCreator && !isInOrganization) {
+        res.status(403).json({ success: false, message: 'Unauthorized: You cannot delete tickets for this event.' });
+        return;
+      }
 
-            // Convert to response format
-            const responseData = {
-                ticketTypeId: updatedTicketType.ticketTypeId,
-                ticketName: updatedTicketType.ticketName,
-                price: updatedTicketType.price,
-                description: updatedTicketType.description,
-                ticketCategory: updatedTicketType.ticketCategory,
-                promoName: updatedTicketType.promoName,
-                promoDescription: updatedTicketType.promoDescription,
-                deletedAt: updatedTicketType.deletedAt ? updatedTicketType.deletedAt.toISOString() : undefined,
-            };
+      // --- Delete ticket type ---
+      const success = await TicketTypeService.deleteTicketType(ticketTypeId);
+      if (!success) {
+        res.status(404).json({ success: false, message: `Ticket type with ID ${ticketTypeId} not found or could not be deleted.` });
+        return;
+      }
 
-            return res.status(200).json(responseData);
-        } catch (error: any) {
-            console.error('Error updating ticket type:', error);
-            return res.status(500).json({ message: 'Failed to update ticket type', error: error.message || 'Internal server error' });
-        }
+      res.status(200).json({ success: true, message: 'Ticket type deleted successfully.' });
+    } catch (error: any) {
+      console.error('Error deleting ticket type:', error);
+      res.status(500).json({ success: false, message: 'Failed to delete ticket type', error: error.message || 'Internal server error' });
     }
+  }
 
-    /**
-     * Soft deletes a TicketType.
-     * Delegates to the TicketTypeService.
-     */
-    static async deleteTicketType(req: Request, res: Response): Promise<Response> {
-        try {
-            const { ticketTypeId } = req.params;
-
-            const success = await TicketTypeService.deleteTicketType(ticketTypeId);
-
-            if (!success) {
-                return res.status(404).json({ message: `Ticket type with ID ${ticketTypeId} not found or could not be deleted.` });
-            }
-
-            return res.status(204).send();
-        } catch (error: any) {
-            console.error('Error deleting ticket type:', error);
-            return res.status(500).json({ message: 'Failed to delete ticket type', error: error.message || 'Internal server error' });
-        }
+  /**
+   * Gets ticket count statistics by category.
+   */
+  static async getTicketCountByCategory(req: Request, res: Response): Promise<void> {
+    try {
+      const counts = await TicketTypeService.countTicketsByCategory();
+      res.status(200).json({ success: true, message: 'Ticket counts fetched successfully.', data: counts });
+    } catch (error: any) {
+      console.error('Error fetching ticket counts by category:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch ticket counts', error: error.message || 'Internal server error' });
     }
-
-    /**
-     * Gets ticket count statistics by category.
-     */
-    static async getTicketCountByCategory(req: Request, res: Response): Promise<Response> {
-        try {
-            const counts = await TicketTypeService.countTicketsByCategory();
-            return res.status(200).json(counts);
-        } catch (error: any) {
-            console.error('Error fetching ticket counts by category:', error);
-            return res.status(500).json({ message: 'Failed to fetch ticket counts', error: error.message || 'Internal server error' });
-        }
-    }
+  }
 }

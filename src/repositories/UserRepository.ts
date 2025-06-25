@@ -100,7 +100,7 @@ export class UserRepository {
         user.roleId = guestRole.roleId;
       } else if (user.roleId && !user.role) {
         const existingRole = await roleRepository.findOne({
-          where: { roleId: user.roleId },
+          where: { roleId: user.roleId }
         });
         if (existingRole) {
           user.role = existingRole;

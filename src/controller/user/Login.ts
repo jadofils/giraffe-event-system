@@ -194,8 +194,18 @@ export class LoginController {
         userRepository,
         async () => {
           return await userRepository.findOne({
-            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-            relations: ["organizations", "role","role.permissions"],
+            where: [
+              { email: identifier },
+              { username: identifier },
+              { phoneNumber: identifier }
+            ],
+            relations: [
+              "organizations",
+              "organizations.venues",
+              "organizations.venues.events", // <-- Add this line
+              "role",
+              "role.permissions"
+            ],
           });
         },
         CACHE_TTL
@@ -229,13 +239,13 @@ export class LoginController {
       }
 
       const firstOrganization = user.organizations[0];
-      if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
-        res.status(500).json({ success: false, message: "Invalid organization ID format." });
-        return;
-      }
 
-      // Prepare organization data for JWT
+      // Filter venues and only include approved events for each venue
+      const venuesWithApprovedEvents = (firstOrganization.venues || []).map(venue => ({
+        ...venue,
+        events: (venue.events || []).filter(event => event.status === "APPROVED")
+      }));
+
       const organization = {
         organizationId: firstOrganization.organizationId,
         organizationName: firstOrganization.organizationName,
@@ -244,6 +254,7 @@ export class LoginController {
         contactPhone: firstOrganization.contactPhone,
         address: firstOrganization.address,
         organizationType: firstOrganization.organizationType,
+        venues: venuesWithApprovedEvents
       };
 
       // Generate JWT token
@@ -294,7 +305,7 @@ export class LoginController {
           username: user.username,
           phoneNumber: user.phoneNumber,
           roles: user.role,
-          organizations: user.organizations,
+          organization // <-- now includes venues and only approved events
         },
         token,
       });
