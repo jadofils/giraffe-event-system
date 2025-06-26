@@ -211,21 +211,28 @@ export class UserController {
           continue;
       }
 
-      // === Optional: Send welcome email ===
-      try {
-        const emailSent = await PasswordService.sendDefaultPassword(
-          email!,
-          completeUser.lastName,
-          completeUser.firstName,
-          completeUser.username,
-          req
-        );
-
-        if (!emailSent) {
-          console.warn(`Email not sent to ${email}, but user created.`);
+      // === Optional: Send welcome email and set default password in DB ===
+      let generatedPassword = undefined;
+      // Only generate and set a default password if user did NOT provide one
+      if (!password) {
+        try {
+          generatedPassword = PasswordService.generatePassword();
+          const emailSent = await PasswordService.sendDefaultPasswordWithPassword(
+            email!,
+            completeUser.lastName,
+            completeUser.firstName,
+            completeUser.username,
+            generatedPassword,
+            req
+          );
+          if (!emailSent) {
+            console.warn(`Email not sent to ${email}, but user created.`);
+          }
+          completeUser.password = await bcrypt.hash(generatedPassword, 10);
+          await AppDataSource.getRepository(User).save(completeUser);
+        } catch (emailErr) {
+          console.error("Email sending error:", emailErr);
         }
-      } catch (emailErr) {
-        console.error("Email sending error:", emailErr);
       }
 
         // === Add successful result ===

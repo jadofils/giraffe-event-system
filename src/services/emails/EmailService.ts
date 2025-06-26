@@ -79,25 +79,25 @@ static async sendTicketEmail({
   static sendEmail(email: string, arg1: string, emailContent: string) {
     throw new Error("Method not implemented.");
   }
-  private static readonly PASSWORD_LENGTH = 12;
-  private static readonly EXPIRY_HOURS = 24;
-  private static readonly SALT_ROUNDS = 10;
-  private static readonly EMAIL_TEMPLATES = {
+  public static readonly PASSWORD_LENGTH = 12;
+  public static readonly EXPIRY_HOURS = 24;
+  public static readonly SALT_ROUNDS = 10;
+  public static readonly EMAIL_TEMPLATES = {
     welcome: 'welcome-email-template',
     reset: 'reset-password-template'
   };
 
-  private static log(level: 'info' | 'warn' | 'error', message: string, ...meta: any[]) {
+  public static log(level: 'info' | 'warn' | 'error', message: string, ...meta: any[]) {
     const prefix = level.toUpperCase();
     console[level](`${prefix}: ${message}`, ...meta);
   }
 
-  private static generatePassword(length = this.PASSWORD_LENGTH): string {
+  public static generatePassword(length = this.PASSWORD_LENGTH): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   }
 
-  private static getTransporter() {
+  public static getTransporter() {
     if (!process.env.GMAIL_USER || !process.env.GMAIL_PASSWORD) {
       throw new Error('GMAIL credentials not configured');
     }
@@ -111,7 +111,7 @@ static async sendTicketEmail({
     });
   }
 
-  private static generateWelcomeEmailContent(
+  public static generateWelcomeEmailContent(
     email: string, 
     password: string, 
     username: string, 
@@ -148,7 +148,7 @@ static async sendTicketEmail({
       <p><strong>Password:</strong> ${password}</p>
     </div>
     <p style="margin-top: 20px;">
-      <a href="https://your-app-link.com/login">Login here</a>. Please change your password immediately. This password is valid for ${this.EXPIRY_HOURS} hours.
+      <a href="https://giraffe-space.vercel.app/logindefaultpassword">Login here</a>. Please change your password immediately. This password is valid for ${this.EXPIRY_HOURS} hours.
     </p>
     <div class="footer">
       &copy; 2025 GiraffeSpace. All rights reserved. <br/>
@@ -159,7 +159,7 @@ static async sendTicketEmail({
 </html>`;
   }
 
-  private static generateResetEmailContent(resetLink: string): string {
+  public static generateResetEmailContent(resetLink: string): string {
     return `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
   <h2 style="color: #333;">Password Reset Request</h2>
@@ -174,7 +174,7 @@ static async sendTicketEmail({
 </div>`;
   }
 
-  private static setSessionData(
+  public static setSessionData(
     req: Request,
     data: {
       password: string;
@@ -198,7 +198,7 @@ static async sendTicketEmail({
     req.session.firstname = data.firstname;
   }
 
-  private static clearSessionData(req: Request) {
+  public static clearSessionData(req: Request) {
     if (!req.session) return;
 
     delete req.session.defaultPassword;
@@ -296,22 +296,44 @@ static async sendTicketEmail({
     }
   }
 
+  /**
+   * Sends the default password (provided) to the user via email and sets session data.
+   */
+  public static async sendDefaultPasswordWithPassword(
+    email: string,
+    lastName: string,
+    firstName: string,
+    username: string,
+    password: string,
+    req: Request
+  ): Promise<boolean> {
+    try {
+      const expiry = Date.now() + this.EXPIRY_HOURS * 60 * 60 * 1000;
+      this.setSessionData(req, {
+        password,
+        email,
+        expiry,
+        username,
+        lastname: lastName,
+        firstname: firstName
+      });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+      const transporter = this.getTransporter();
+      const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: email,
+        subject: `Your Temporary Login Credentials (Valid for ${this.EXPIRY_HOURS} Hours)` ,
+        html: this.generateWelcomeEmailContent(email, password, username, firstName, lastName),
+      };
+      this.log('info', `Sending email to ${email}`);
+      const info = await transporter.sendMail(mailOptions);
+      this.log('info', 'Email sent successfully:', info.response);
+      return true;
+    } catch (error) {
+      this.log('error', 'Error in sendDefaultPasswordWithPassword:', error);
+      return false;
+    }
+  }
 
   public static async sendPasswordResetEmail(email: string, resetLink: string): Promise<void> {
     try {
@@ -331,9 +353,6 @@ static async sendTicketEmail({
       throw error;
     }
   }
-
-
-   
 
   public static async sendSuccessPasswordForgetEmail(
     email: string,
@@ -367,11 +386,11 @@ static async sendTicketEmail({
           </div>
   
           <p>Please keep your password safe and do not share it with anyone.</p>
-          <p>You can now <a href="https://your-frontend-url.com/login">log in here</a> with your new password.</p>
+          <p>You can now <a href="https://giraffe-space.vercel.app/login">log in here</a> with your new password.</p>
   
           <div class="footer">
             &copy; ${new Date().getFullYear()} Your Company. All rights reserved.<br>
-            <a href="https://your-frontend-url.com/support">Contact Support</a> if you didn’t request this change.
+            <a href="https://giraffe-space.vercel.app/logindefaultpassword/support">Contact Support</a> if you didn't request this change.
           </div>
         </div>
       </body>

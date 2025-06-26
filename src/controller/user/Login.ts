@@ -20,7 +20,6 @@ export class LoginController {
    */
   static async loginWithDefaultPassword(req: Request, res: Response): Promise<void> {
     if (!AppDataSource.isInitialized) {
-      console.error("[Login Attempt] Database not initialized");
       res.status(500).json({ success: false, message: "Database not initialized" });
       return;
     }
@@ -28,7 +27,6 @@ export class LoginController {
     const { identifier, password } = req.body;
 
     if (!identifier || !password) {
-      console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
       res.status(400).json({ success: false, message: "Please enter both identifier and password." });
       return;
     }
@@ -36,79 +34,45 @@ export class LoginController {
     const userRepository = AppDataSource.getRepository(User);
 
     try {
-      const cacheKey = `user:identifier:${identifier}`;
-      const user = await CacheService.getOrSetSingle(
-        cacheKey,
-        userRepository,
-        async () => {
-          return await userRepository.findOne({
-            where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-            relations: ["role", "organizations"],
-          });
-        },
-        CACHE_TTL
-      );
+      const user = await userRepository.findOne({
+        where: [
+          { email: identifier },
+          { username: identifier },
+          { phoneNumber: identifier }
+        ],
+        relations: ["role", "role.permissions", "organizations"],
+      });
 
       if (!user) {
-        console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
-        res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
+        res.status(404).json({ success: false, message: "No account found with that email, username, or phone number." });
         return;
       }
 
       // Validate user UUID
       if (!LoginController.UUID_REGEX.test(user.userId)) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
         res.status(500).json({ success: false, message: "Invalid user ID format." });
         return;
       }
 
-      // Verify session data
-      if (
-        !req.session?.defaultPassword ||
-        !(
-          req.session.defaultEmail === user.email ||
-          req.session.username === user.username ||
-          req.session.phoneNumber === user.phoneNumber
-        )
-      ) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid session data`);
-        res.status(401).json({ success: false, message: "Session data doesn't match user account." });
-        return;
-      }
-
-      // Password verification
+      // Password verification (default password is now the user's password)
       let isMatch = false;
-      let isSessionPasswordLogin = false;
-
-      if (req.session.defaultPassword === password) {
-        isMatch = true;
-        isSessionPasswordLogin = true;
-        PasswordService.invalidateDefaultPassword(req, user.email);
-        // Clear session data
-        req.session.defaultPassword = undefined;
-        req.session.defaultEmail = undefined;
-        req.session.username = undefined;
-        req.session.phoneNumber = undefined;
-      } else if (user.password) {
+      if (user.password) {
         isMatch = await bcrypt.compare(password, user.password);
       }
 
       if (!isMatch) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
         res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
         return;
       }
 
       // Validate organization
       if (!user.organizations || user.organizations.length === 0) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
         res.status(401).json({ success: false, message: "User is not associated with any organization." });
         return;
       }
 
       const firstOrganization = user.organizations[0];
       if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
         res.status(500).json({ success: false, message: "Invalid organization ID format." });
         return;
       }
@@ -137,28 +101,33 @@ export class LoginController {
 
       const { password: _, ...userData } = user;
 
-      console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
-
-      user.role.permissions.forEach(permission => {
-        console.log({
+      // Generate password reset token
+      const resetToken = jwt.sign(
+        {
           userId: user.userId,
+          email: user.email,
           username: user.username,
-          roleId: user.role.roleId,
-          roleName: user.role.roleName,
-          permissionId: permission.id,
-          permissionName: permission.name,
-          permissionDescription: permission.description,
-        });
-      });
+          purpose: "password_reset",
+        },
+        SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+
+      // Create reset link
+      const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
+      const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+
+      // Send reset link to user's email
+      await PasswordService.sendPasswordResetEmail(user.email, resetLink);
 
       res.status(200).json({
         success: true,
-        message: isSessionPasswordLogin ? "Login successful! Please create a new password." : "Login successful!",
-        user: { ...userData, needsPasswordReset: isSessionPasswordLogin },
+        message: "Login successful! Please check your email to reset your password.",
+        user: { ...userData, needsPasswordReset: true },
         token,
+        resetLink, // Optionally return the link for testing
       });
     } catch (error) {
-      console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
       res.status(500).json({
         success: false,
         message: "Something went wrong while logging in.",
