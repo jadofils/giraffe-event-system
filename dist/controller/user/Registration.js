@@ -167,15 +167,22 @@ class UserController {
                         });
                         continue;
                     }
-                    // === Optional: Send welcome email ===
-                    try {
-                        const emailSent = yield EmailService_1.default.sendDefaultPassword(email, completeUser.lastName, completeUser.firstName, completeUser.username, req);
-                        if (!emailSent) {
-                            console.warn(`Email not sent to ${email}, but user created.`);
+                    // === Optional: Send welcome email and set default password in DB ===
+                    let generatedPassword = undefined;
+                    // Only generate and set a default password if user did NOT provide one
+                    if (!password) {
+                        try {
+                            generatedPassword = EmailService_1.default.generatePassword();
+                            const emailSent = yield EmailService_1.default.sendDefaultPasswordWithPassword(email, completeUser.lastName, completeUser.firstName, completeUser.username, generatedPassword);
+                            if (!emailSent) {
+                                console.warn(`Email not sent to ${email}, but user created.`);
+                            }
+                            completeUser.password = yield bcryptjs_1.default.hash(generatedPassword, 10);
+                            yield Database_1.AppDataSource.getRepository(User_1.User).save(completeUser);
                         }
-                    }
-                    catch (emailErr) {
-                        console.error("Email sending error:", emailErr);
+                        catch (emailErr) {
+                            console.error("Email sending error:", emailErr);
+                        }
                     }
                     // === Add successful result ===
                     const userResponse = {
@@ -638,7 +645,7 @@ class UserController {
                 const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
                 const user = yield userRepository.findOne({
                     where: { userId },
-                    relations: ["role", "organization"], // Include related entities
+                    relations: ["role", "organizations"], // <-- Use "organizations" instead of "organization"
                 });
                 if (!user) {
                     res.status(404).json({ success: false, message: "User not found" });

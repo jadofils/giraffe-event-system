@@ -44,17 +44,23 @@ class OrganizationRepository {
      * @param id Organization UUID
      * @returns Organization with users
      */
+    /**
+     * Retrieves an organization by its ID, including related users and venues.
+     * @param id The UUID of the organization.
+     * @returns An object indicating success/failure and the organization data.
+     */
     static getById(id) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!id || !this.UUID_REGEX.test(id)) {
                 return { success: false, message: "Valid organization ID is required" };
             }
             try {
-                const cacheKey = `org:id:${id}`;
+                const cacheKey = `${this.CACHE_PREFIX}id:${id}:withVenuesAndUsers`; // More specific cache key
                 const organization = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, Database_1.AppDataSource.getRepository(Organization_1.Organization), () => __awaiter(this, void 0, void 0, function* () {
+                    // Eagerly load 'users', 'users.role', and 'venues' relations
                     return yield Database_1.AppDataSource.getRepository(Organization_1.Organization).findOne({
                         where: { organizationId: id },
-                        relations: ["users", "users.role"],
+                        relations: ["users", "users.role", "venues"], // FIX: Added "venues" relation here
                     });
                 }), CACHE_TTL);
                 if (!organization) {
@@ -63,8 +69,8 @@ class OrganizationRepository {
                 return { success: true, data: organization };
             }
             catch (error) {
-                console.error(`[Organization Fetch Error] ID: ${id}:`, error);
-                return { success: false, message: "Failed to fetch organization" };
+                console.error(`[Organization Fetch Error] ID: ${id}:`, error.message);
+                return { success: false, message: `Failed to fetch organization: ${error.message || "Unknown error"}` };
             }
         });
     }
@@ -694,3 +700,4 @@ class OrganizationRepository {
 }
 exports.OrganizationRepository = OrganizationRepository;
 OrganizationRepository.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+OrganizationRepository.CACHE_PREFIX = "org:";

@@ -8,61 +8,74 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isDatabaseSeeded = exports.initializeDatabase = exports.AppDataSource = void 0;
+exports.initializeDatabase = exports.AppDataSource = void 0;
 const typeorm_1 = require("typeorm");
-const IndependentUserOrganizationSeeder_1 = __importDefault(require("../seeds/IndependentUserOrganizationSeeder"));
-const typeorm_extension_1 = require("typeorm-extension");
-const AdminRoleSeeder_1 = require("../seeds/AdminRoleSeeder");
-const PermissionSeeder_1 = require("../seeds/PermissionSeeder");
+const Role_1 = require("../models/Role");
+const User_1 = require("../models/User");
+const Venue_1 = require("../models/Venue");
+const TicketType_1 = require("../models/TicketType");
+const Event_1 = require("../models/Event");
+const Resources_1 = require("../models/Resources");
+const VenueResource_1 = require("../models/VenueResource");
+const EventResource_1 = require("../models/EventResource");
+const Feedback_1 = require("../models/Feedback");
+const Permission_1 = require("../models/Permission");
+const VenuePayment_1 = require("../models/VenuePayment");
+const Notification_1 = require("../models/Notification");
+const Organization_1 = require("../models/Organization");
+const Registration_1 = require("../models/Registration");
+const Payment_1 = require("../models/Payment");
+const Invoice_1 = require("../models/Invoice");
+const InstallmentPlan_1 = require("../models/InstallmentPlan");
+const Budget_1 = require("../models/Budget");
+const VenueBooking_1 = require("../models/VenueBooking");
+const VenueInvoice_1 = require("../models/VenueInvoice");
+// Determine if we are in production
+const isProduction = process.env.NODE_ENV === "production";
 exports.AppDataSource = new typeorm_1.DataSource({
     type: "postgres",
     url: process.env.DB_URL,
     synchronize: true,
     logging: false,
-    entities: ["src/models/**/*.ts"],
-    migrations: ["src/models/migrations/*.ts"],
+    entities: [
+        User_1.User,
+        Venue_1.Venue,
+        TicketType_1.TicketType,
+        Event_1.Event,
+        Resources_1.Resource,
+        VenueResource_1.VenueResource,
+        EventResource_1.EventResource,
+        Feedback_1.Feedback,
+        Role_1.Role,
+        Permission_1.Permission,
+        VenuePayment_1.VenuePayment,
+        Notification_1.Notification,
+        Organization_1.Organization,
+        Registration_1.Registration,
+        Payment_1.Payment,
+        Invoice_1.Invoice,
+        InstallmentPlan_1.InstallmentPlan,
+        Budget_1.Budget,
+        VenueBooking_1.VenueBooking,
+        VenueInvoice_1.VenueInvoice,
+    ],
+    migrations: [
+        isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",
+    ],
     extra: {
         connectionTimeoutMillis: 30000,
     },
-    ssl: process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: true }
-        : false, // Adjust SSL for development
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
     schema: "public",
 });
 // Track if seeding has been completed
-let isSeedingCompleted = false;
+// let isSeedingCompleted = false;
 // Modified initialization function
 const initializeDatabase = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!exports.AppDataSource.isInitialized) {
             yield exports.AppDataSource.initialize();
-            // console.log("Database connection established!");
-            // Only run seeding if it hasn't been completed yet
-            if (!isSeedingCompleted) {
-                //  console.log("\n🌱 Starting database seeding process...");
-                // Seed permissions first
-                console.log("🔐 Seeding permissions...");
-                yield PermissionSeeder_1.PermissionSeeder.seed();
-                // Seed admin role (with drop logic)
-                yield seedAdminRole();
-                yield seedDefaultRoles();
-                yield runSeeders();
-                // console.log("Seeding admin role with all permissions...");
-                yield AdminRoleSeeder_1.AdminRoleSeeder.seed();
-                //console.log("Admin role seeding completed!");
-                isSeedingCompleted = true;
-                // console.log("\n✅ Database seeding completed successfully!");
-                // console.log(
-                //   "📊 Database is ready for use with all required roles and organizations."
-                // );
-            }
-            else {
-                //console.log("\n✅ Database already seeded - skipping seeding process.");
-            }
         }
     }
     catch (error) {
@@ -71,61 +84,3 @@ const initializeDatabase = () => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.initializeDatabase = initializeDatabase;
-// Function to run all seeders
-function runSeeders() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const seeder = new IndependentUserOrganizationSeeder_1.default();
-            const factoryManager = new typeorm_extension_1.SeederFactoryManager();
-            // Run the independent organization seeder
-            yield seeder.run(exports.AppDataSource, factoryManager);
-            // console.log("Database seeding completed!");
-        }
-        catch (error) {
-            // console.error("Error during database seeding:", error);
-            throw error; // Re-throw to handle it in the application
-        }
-    });
-}
-// Function to seed default roles
-function seedDefaultRoles() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const roleRepository = exports.AppDataSource.getRepository("Role");
-            // No default roles to seed
-        }
-        catch (error) {
-            //console.error("Error seeding default roles:", error);
-            throw error;
-        }
-    });
-}
-// Export a function to check if seeding is completed
-const isDatabaseSeeded = () => {
-    return isSeedingCompleted;
-};
-exports.isDatabaseSeeded = isDatabaseSeeded;
-function seedAdminRole() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const roleRepository = exports.AppDataSource.getRepository("Role");
-        // Check if ADMIN role exists
-        const adminExists = yield roleRepository.findOne({
-            where: { roleName: "ADMIN" },
-        });
-        if (adminExists) {
-            //  console.log("✅ 'ADMIN' role already exists. No deletion performed.");
-            //  console.log(
-            //     "ℹ️  If you need to create new roles or assign roles, please do so via the admin panel or appropriate endpoint."
-            //   );
-            return;
-        }
-        // Create the ADMIN role
-        const adminRole = roleRepository.create({
-            roleName: "ADMIN",
-            permissions: ["read:all", "write:all", "delete:all"],
-            description: "Administrator role",
-        });
-        yield roleRepository.save(adminRole);
-        console.log("🎉 'ADMIN' role created successfully!");
-    });
-}

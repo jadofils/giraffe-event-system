@@ -39,6 +39,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/apiRoutes.ts
 const express_1 = __importStar(require("express"));
 const path_1 = __importDefault(require("path"));
+// Swagger UI setup
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const yamljs_1 = __importDefault(require("yamljs"));
 const UserRoutes_1 = require("./UserRoutes");
 const RoleRoutes_1 = __importDefault(require("./RoleRoutes"));
 const OrganizationRoutes_1 = require("./OrganizationRoutes");
@@ -52,6 +55,7 @@ const InstallmentPlanRoutes_1 = __importDefault(require("./InstallmentPlanRoutes
 const EventRoutes_1 = __importDefault(require("./EventRoutes"));
 const PermissionRoutes_1 = __importDefault(require("./PermissionRoutes"));
 const Venue_1 = require("./Venue");
+const RegistrationRoutes_1 = __importDefault(require("./RegistrationRoutes"));
 const router = (0, express_1.Router)();
 router.use("/static", express_1.default.static(path_1.default.join(__dirname, "..", "..", "uploads"))); // Adjust path as needed
 // Use versioned routes
@@ -59,12 +63,13 @@ router.use("/users", UserRoutes_1.userRoutes);
 router.use("/roles", RoleRoutes_1.default);
 router.use("/organizations", OrganizationRoutes_1.organizationRoutes); // This makes `/api/v1/organizations/*` available
 router.use("/tickets", TicketTyeRoutes_1.default); // This makes `/api/v1/tickets-type/*` available
+router.use("/registrations", RegistrationRoutes_1.default);
 //resources
 router.use("/resources", ResourceRoutes_1.default);
 router.use("/venue", Venue_1.venueRoute); // This makes `/api/v1/venue/*` available
 router.use("/event", EventRoutes_1.default);
 // Event Booking routes
-router.use("/event-bookings", VenueBookingRoutes_1.default); // This makes `/api/v1/event-bookings/*` available
+router.use("/venue-bookings", VenueBookingRoutes_1.default); // This makes `/api/v1/event-bookings/*` available
 //routes for registration
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes_1.default);
@@ -74,4 +79,6 @@ router.use("/payments", PaymentRoutes_1.default);
 router.use("/installments", InstallmentPlanRoutes_1.default);
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes_1.default);
+const swaggerDocument = yamljs_1.default.load(path_1.default.join(__dirname, "../config/Swagger.yaml"));
+router.use("/giraffe-space/swagger-docs", swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swaggerDocument));
 exports.default = router;

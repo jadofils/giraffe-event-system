@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Notification = void 0;
 // src/entity/Notification.ts
 const typeorm_1 = require("typeorm");
+const Venue_1 = require("./Venue");
 const class_validator_1 = require("class-validator");
 let Notification = class Notification {
 };
@@ -33,6 +34,17 @@ __decorate([
     (0, class_validator_1.IsUUID)('4', { message: 'eventId must be a valid UUID' }),
     __metadata("design:type", Object)
 ], Notification.prototype, "eventId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)('4', { message: 'venueId must be a valid UUID' }),
+    __metadata("design:type", Object)
+], Notification.prototype, "venueId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.notifications, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    __metadata("design:type", Venue_1.Venue)
+], Notification.prototype, "venue", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     (0, class_validator_1.IsNotEmpty)({ message: 'message is required' }),

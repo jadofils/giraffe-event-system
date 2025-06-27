@@ -19,36 +19,33 @@ class PasswordService {
     static sendTicketEmail(_a) {
         return __awaiter(this, arguments, void 0, function* ({ to, subject, eventName, eventDate, venueName, ticketPdf, qrCode }) {
             try {
-                // Configure Nodemailer transporter
                 const transporter = nodemailer_1.default.createTransport({
                     service: 'gmail',
                     auth: {
-                        user: process.env.EMAIL_USER, // Set your email environment variable
-                        pass: process.env.EMAIL_PASS // Set your password securely
+                        user: process.env.EMAIL_USER,
+                        pass: process.env.EMAIL_PASS
                     }
                 });
-                // Email content
                 const mailOptions = {
                     from: `"Event Tickets" <${process.env.EMAIL_USER}>`,
                     to,
                     subject,
                     html: `
-                <h2>Your Ticket for ${eventName}</h2>
-                <p><strong>Event Date:</strong> ${eventDate.toDateString()}</p>
-                <p><strong>Venue:</strong> ${venueName}</p>
-                <p>Attached is your ticket. Please present the QR code below at the event.</p>
-                ${qrCode ? `<img src="${qrCode}" alt="QR Code" width="150"/>` : ''}
-                <p>Thank you for booking with us!</p>
-            `,
+          <h2>Your Ticket for ${eventName}</h2>
+          <p><strong>Event Date:</strong> ${eventDate.toDateString()}</p>
+          <p><strong>Venue:</strong> ${venueName}</p>
+          <p>Attached is your ticket. Please present the QR code below at the event.</p>
+          ${qrCode ? `<img src="${qrCode}" alt="QR Code" width="150"/>` : ''}
+          <p>Thank you for booking with us!</p>
+        `,
                     attachments: [
                         {
                             filename: `${eventName}_Ticket.pdf`,
-                            content: ticketPdf, // Attach ticket PDF
+                            content: ticketPdf,
                             contentType: 'application/pdf'
                         }
                     ]
                 };
-                // Send email
                 yield transporter.sendMail(mailOptions);
                 console.log(`Ticket email sent successfully to ${to}`);
                 return true;
@@ -58,9 +55,6 @@ class PasswordService {
                 return false;
             }
         });
-    }
-    static sendEmail(email, arg1, emailContent) {
-        throw new Error("Method not implemented.");
     }
     static log(level, message, ...meta) {
         const prefix = level.toUpperCase();
@@ -87,157 +81,88 @@ class PasswordService {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+body { font-family: Arial, sans-serif; background: #FFFFFF; color: #000000; }
+.container { max-width: 600px; margin: 30px auto; background: #FFFFFF; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+.header { background-color: #003087; color: #FFFFFF; padding: 20px; text-align: center; font-size: 28px; }
+.logo { display: block; margin: 0 auto 20px; width: 150px; }
+.credentials { background: #f5f5f5; padding: 15px; border: 1px solid #ddd; border-radius: 10px; font-family: monospace; margin-top: 20px; }
+.button { display: inline-block; background-color: #003087; color: #FFFFFF; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin: 20px 0; }
+.footer { background: #003087; color: #FFFFFF; text-align: center; padding: 15px; font-size: 14px; }
+.footer a { color: #FFFFFF; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+<img src="https://www.ur.ac.rw/IMG/logo/logo_ur.jpg" alt="University of Rwanda Logo" class="logo" />
+<div class="header">Welcome to University of Rwanda</div>
+<h2>Hello ${firstName} ${lastName},</h2>
+<p>Welcome to the <strong>University of Rwanda</strong> platform. Your account has been created successfully.</p>
+<div class="credentials">
+<strong>Your login credentials:</strong><br/>
+Username: <b>${username}</b><br/>
+First Name: <b>${firstName}</b><br/>
+Last Name: <b>${lastName}</b><br/>
+Email: <b>${email}</b><br/>
+Password: <b>${password}</b><br/>
+</div>
+<p style="margin-top:20px;">Please use these credentials to log in for the first time. You will be required to change your password after logging in.</p>
+<div class="footer">
+© ${new Date().getFullYear()} University of Rwanda. All rights reserved.<br/>
+Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
+</div>
+</div>
+</body>
+</html>`;
+    }
+    static generateResetEmailContent(resetLink, username) {
+        return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
-    body { font-family: "Outfit", sans-serif; background: #f0f2f5; color: #333; }
-    .container { max-width: 600px; margin: 30px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    .header { background-color: #00618b; color: white; padding: 20px; text-align: center; font-size: 28px; font-family: "Itim", serif; }
-    .credentials { background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 10px; font-family: monospace; margin-top: 20px; }
-    .footer { background: #00618b; color: white; text-align: center; padding: 15px; font-size: 14px; }
-    .footer a { color: #ddd; text-decoration: underline; }
+    body { font-family: Arial, sans-serif; background: #FFFFFF; color: #000000; }
+    .container { max-width: 600px; margin: 30px auto; background: #FFFFFF; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .header { background-color: #003087; color: #FFFFFF; padding: 20px; text-align: center; font-size: 28px; }
+    .logo { display: block; margin: 0 auto 20px; width: 150px; }
+    .button { display: inline-block; background-color: #003087; color: #FFFFFF; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin: 20px 0; }
+    .footer { background: #003087; color: #FFFFFF; text-align: center; padding: 15px; font-size: 14px; }
+    .footer a { color: #FFFFFF; text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">Welcome to GiraffeSpace!</div>
-    <div>
-      <img src="https://images.unsplash.com/photo-1596495577886-d920f1fb7238" alt="Event" style="width: 100%; border-bottom: 2px solid #1557b0;" />
+    <img src="https://www.ur.ac.rw/IMG/logo/logo_ur.jpg" alt="University of Rwanda Logo" class="logo" />
+    <div class="header">University of Rwanda Password Reset</div>
+    <h2>Hello ${username},</h2>
+    <p>You've requested to reset your password for your University of Rwanda account.</p>
+    <p>Click the button below to set a new password:</p>
+    <div style="text-align: center;">
+      <a href="${resetLink}" class="button">Reset Your Password</a>
     </div>
-    <h2>Hello: ${firstName} ${lastName},</h2>
-    <p>We're excited to welcome you to <strong>GiraffeSpace</strong> — your go-to platform for seamless event management. 🎉</p>
-    <p>You now have access to your account. Here are your temporary login credentials:</p>
-    <div class="credentials">
-      <p><strong>Username:</strong> ${username}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Password:</strong> ${password}</p>
-    </div>
-    <p style="margin-top: 20px;">
-      <a href="https://your-app-link.com/login">Login here</a>. Please change your password immediately. This password is valid for ${this.EXPIRY_HOURS} hours.
-    </p>
+    <p><strong>This link will expire in 1 hour.</strong></p>
+    <p>If you didn't request a password reset, please contact our support team at <a href="mailto:support@ur.ac.rw">support@ur.ac.rw</a>.</p>
     <div class="footer">
-      &copy; 2025 GiraffeSpace. All rights reserved. <br/>
-      Need help? <a href="mailto:support@giraffespace.com">Contact support</a>
+      © ${new Date().getFullYear()} University of Rwanda. All rights reserved.<br/>
+      Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
     </div>
   </div>
 </body>
 </html>`;
     }
-    static generateResetEmailContent(resetLink) {
-        return `
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-  <h2 style="color: #333;">Password Reset Request</h2>
-  <p>You requested a password reset. Click the button below to set a new password:</p>
-  <div style="text-align: center; margin: 30px 0;">
-    <a href="${resetLink}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">Reset Password</a>
-  </div>
-  <p><strong>This link will expire in 1 hour.</strong></p>
-  <p>If you didn't request a password reset, you can safely ignore this email.</p>
-  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-  <p style="font-size: 12px; color: #777;">This is an automated email. Please do not reply to this message.</p>
-</div>`;
-    }
-    static setSessionData(req, data) {
-        if (!req.session) {
-            this.log('error', 'Session object is undefined');
-            return;
-        }
-        req.session.defaultPassword = data.password;
-        req.session.defaultEmail = data.email;
-        req.session.passwordExpiry = data.expiry;
-        req.session.username = data.username;
-        req.session.lastname = data.lastname;
-        req.session.firstname = data.firstname;
-    }
-    static clearSessionData(req) {
-        if (!req.session)
-            return;
-        delete req.session.defaultPassword;
-        delete req.session.defaultEmail;
-        delete req.session.passwordExpiry;
-        delete req.session.username;
-        delete req.session.lastname;
-        delete req.session.firstname;
-    }
-    static sendDefaultPassword(email, lastName, firstName, username, req) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const password = this.generatePassword();
-                const expiry = Date.now() + this.EXPIRY_HOURS * 60 * 60 * 1000;
-                this.setSessionData(req, {
-                    password,
-                    email,
-                    expiry,
-                    username,
-                    lastname: lastName,
-                    firstname: firstName
-                });
-                const transporter = this.getTransporter();
-                const mailOptions = {
-                    from: process.env.GMAIL_USER,
-                    to: email,
-                    subject: `Your Temporary Login Credentials (Valid for ${this.EXPIRY_HOURS} Hours)`,
-                    html: this.generateWelcomeEmailContent(email, password, username, firstName, lastName),
-                };
-                this.log('info', `Sending email to ${email}`);
-                const info = yield transporter.sendMail(mailOptions);
-                this.log('info', 'Email sent successfully:', info.response);
-                return true;
-            }
-            catch (error) {
-                this.log('error', 'Error in sendDefaultPassword:', error);
-                return false;
-            }
-        });
-    }
-    static invalidateDefaultPassword(req, email) {
-        if (!req.session) {
-            this.log('warn', 'Session object is undefined while invalidating default password');
-            return;
-        }
-        if (req.session.defaultEmail === email) {
-            this.clearSessionData(req);
-            this.log('info', `Default password invalidated for email: ${email}`);
-        }
-        else {
-            this.log('warn', `Email mismatch during password invalidation. Provided: ${email}, Session: ${req.session.defaultEmail}`);
-        }
-    }
-    static verifyDefaultPassword(email, password, req) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                if (!req.session) {
-                    this.log('error', 'Session object is undefined');
-                    return false;
-                }
-                const { session } = req;
-                const isVerified = (session.defaultPassword === password &&
-                    session.defaultEmail === email &&
-                    session.passwordExpiry &&
-                    Date.now() <= session.passwordExpiry);
-                if (!isVerified) {
-                    this.log('warn', 'Verification failed: Invalid password or expired.');
-                    return false;
-                }
-                this.clearSessionData(req);
-                this.log('info', 'Password verified successfully.');
-                return true;
-            }
-            catch (error) {
-                this.log('error', 'Error verifying password:', error);
-                return false;
-            }
-        });
-    }
-    static sendPasswordResetEmail(email, resetLink) {
+    static sendPasswordResetEmail(email, resetLink, username) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const transporter = this.getTransporter();
                 const mailOptions = {
                     from: process.env.GMAIL_USER,
                     to: email,
-                    subject: 'Password Reset Request',
-                    html: this.generateResetEmailContent(resetLink),
+                    subject: 'Reset Your University of Rwanda Password',
+                    html: this.generateResetEmailContent(resetLink, username),
                 };
                 yield transporter.sendMail(mailOptions);
                 this.log('info', `Password reset email sent to ${email}`);
@@ -248,51 +173,70 @@ class PasswordService {
             }
         });
     }
-    static sendSuccessPasswordForgetEmail(email, username, password) {
+    static sendDefaultPasswordWithPassword(email, lastName, firstName, username, password) {
         return __awaiter(this, void 0, void 0, function* () {
-            const emailContent = `
-      <html>
-      <head>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Itim&family=Outfit&display=swap');
-  
-          body { font-family: "Outfit", sans-serif; background: #f0f2f5; color: #333; }
-          .container { max-width: 600px; margin: 30px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-          .header { background-color: #00618b; color: white; padding: 20px; text-align: center; font-size: 28px; font-family: "Itim", serif; }
-          .credentials { background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 10px; font-family: monospace; margin-top: 20px; }
-          .footer { background: #00618b; color: white; text-align: center; padding: 15px; font-size: 14px; }
-          .footer a { color: #ddd; text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            Password Reset Successful
-          </div>
-          <p>Hello <strong>${username}</strong>,</p>
-          <p>Your password has been successfully changed. Below are your updated credentials:</p>
-  
-          <div class="credentials">
-            <p><strong>Password:</strong> ${password}</p>
-          </div>
-  
-          <p>Please keep your password safe and do not share it with anyone.</p>
-          <p>You can now <a href="https://your-frontend-url.com/login">log in here</a> with your new password.</p>
-  
-          <div class="footer">
-            &copy; ${new Date().getFullYear()} Your Company. All rights reserved.<br>
-            <a href="https://your-frontend-url.com/support">Contact Support</a> if you didn’t request this change.
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
             try {
                 const transporter = this.getTransporter();
                 const mailOptions = {
                     from: process.env.GMAIL_USER,
                     to: email,
-                    subject: 'Your Password Has Been Changed',
+                    subject: `Your Temporary University of Rwanda Login Credentials (Valid for ${this.EXPIRY_HOURS} Hours)`,
+                    html: this.generateWelcomeEmailContent(email, password, username, firstName, lastName),
+                };
+                this.log('info', `Sending welcome email to ${email}`);
+                const info = yield transporter.sendMail(mailOptions);
+                this.log('info', 'Welcome email sent successfully:', info.response);
+                return true;
+            }
+            catch (error) {
+                this.log('error', 'Error in sendDefaultPasswordWithPassword:', error);
+                return false;
+            }
+        });
+    }
+    static sendSuccessPasswordForgetEmail(email, username) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const emailContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #FFFFFF; color: #000000; }
+    .container { max-width: 600px; margin: 30px auto; background: #FFFFFF; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .header { background-color: #003087; color: #FFFFFF; padding: 20px; text-align: center; font-size: 28px; }
+    .logo { display: block; margin: 0 auto 20px; width: 150px; }
+    .button { display: inline-block; background-color: #003087; color: #FFFFFF; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin: 20px 0; }
+    .footer { background: #003087; color: #FFFFFF; text-align: center; padding: 15px; font-size: 14px; }
+    .footer a { color: #FFFFFF; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://www.ur.ac.rw/IMG/logo/logo_ur.jpg" alt="University of Rwanda Logo" class="logo" />
+    <div class="header">Password Reset Successful</div>
+    <h2>Hello ${username},</h2>
+    <p>Your password for your University of Rwanda account has been successfully changed.</p>
+    <p>You can now log in with your new password.</p>
+    <div style="text-align: center;">
+      <a href="https://your-app-url.vercel.app/login" class="button">Login to Your Account</a>
+    </div>
+    <p>Please keep your password secure and do not share it with anyone.</p>
+    <p>If you didn't request this change, please contact our support team immediately at <a href="mailto:support@ur.ac.rw">support@ur.ac.rw</a>.</p>
+    <div class="footer">
+      © ${new Date().getFullYear()} University of Rwanda. All rights reserved.<br/>
+      Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
+    </div>
+  </div>
+</body>
+</html>`;
+            try {
+                const transporter = this.getTransporter();
+                const mailOptions = {
+                    from: process.env.GMAIL_USER,
+                    to: email,
+                    subject: 'Your University of Rwanda Password Has Been Changed',
                     html: emailContent,
                 };
                 yield transporter.sendMail(mailOptions);
@@ -308,8 +252,4 @@ class PasswordService {
 PasswordService.PASSWORD_LENGTH = 12;
 PasswordService.EXPIRY_HOURS = 24;
 PasswordService.SALT_ROUNDS = 10;
-PasswordService.EMAIL_TEMPLATES = {
-    welcome: 'welcome-email-template',
-    reset: 'reset-password-template'
-};
 exports.default = PasswordService;

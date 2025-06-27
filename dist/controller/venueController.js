@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -41,35 +8,197 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueController = void 0;
+const cloudinary_1 = __importDefault(require("../config/cloudinary"));
+const streamifier_1 = __importDefault(require("streamifier"));
+const VenueInterface_1 = require("../interfaces/VenueInterface");
 const eventRepository_1 = require("../repositories/eventRepository");
 const venueRepository_1 = require("../repositories/venueRepository");
 const VenueResourceRepository_1 = require("../repositories/VenueResourceRepository");
+const Venue_1 = require("../models/Venue");
+const Database_1 = require("../config/Database");
+const Resources_1 = require("../models/Resources");
+const VenueResource_1 = require("../models/VenueResource");
+const OrganizationRepository_1 = require("../repositories/OrganizationRepository");
+const EventTypeEnum_1 = require("../interfaces/Enums/EventTypeEnum");
 class VenueController {
-    // Create a single venue
     static create(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-            const { venueName, capacity, location, amount, managerId, latitude, longitude, googleMapsLink, } = req.body;
+            var _a, _b, _c, _d;
+            const authenticatedReq = req;
+            const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+            const organizationIdFromUser = (_b = authenticatedReq.user) === null || _b === void 0 ? void 0 : _b.organizationId; // Organization ID from authenticated user token
+            // Determine user's role for status assignment (admin = APPROVED, others = PENDING)
+            let userRole = undefined;
+            if (((_c = authenticatedReq.user) === null || _c === void 0 ? void 0 : _c.role) &&
+                typeof authenticatedReq.user.role === "object" &&
+                authenticatedReq.user.role.roleName) {
+                userRole = String(authenticatedReq.user.role.roleName).toLowerCase();
+            }
+            else if (typeof ((_d = authenticatedReq.user) === null || _d === void 0 ? void 0 : _d.role) === "string") {
+                userRole = authenticatedReq.user.role.toLowerCase();
+            }
+            const body = authenticatedReq.body;
+            const files = req.files || {};
+            // Handle image uploads (mainPhoto and subPhotos)
+            let mainPhotoUrl = undefined;
+            let subPhotoUrls = [];
+            // Helper to upload a buffer to Cloudinary
+            const uploadToCloudinary = (file) => {
+                return new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary_1.default.uploader.upload_stream({ folder: "venues" }, (error, result) => {
+                        if (error)
+                            return reject(error);
+                        if (!result)
+                            return reject(new Error("No result from Cloudinary"));
+                        resolve(result.secure_url);
+                    });
+                    streamifier_1.default.createReadStream(file.buffer).pipe(uploadStream);
+                });
+            };
+            if (files.mainPhoto && files.mainPhoto[0]) {
+                try {
+                    mainPhotoUrl = yield uploadToCloudinary(files.mainPhoto[0]);
+                }
+                catch (err) {
+                    res.status(500).json({
+                        success: false,
+                        message: "Failed to upload main photo",
+                        error: err,
+                    });
+                    return;
+                }
+            }
+            if (files.subPhotos && Array.isArray(files.subPhotos)) {
+                for (const file of files.subPhotos) {
+                    try {
+                        const url = yield uploadToCloudinary(file);
+                        subPhotoUrls.push(url);
+                    }
+                    catch (err) {
+                        res.status(500).json({
+                            success: false,
+                            message: "Failed to upload sub photo",
+                            error: err,
+                        });
+                        return;
+                    }
+                }
+            }
+            // Check for authenticated user ID
             if (!userId) {
                 res
                     .status(401)
                     .json({ success: false, message: "Authentication required." });
                 return;
             }
+            // Get TypeORM repositories for interacting with the database
+            const resourceRepository = Database_1.AppDataSource.getRepository(Resources_1.Resource);
+            const venueResourceRepository = Database_1.AppDataSource.getRepository(VenueResource_1.VenueResource);
+            const venueRepository = Database_1.AppDataSource.getRepository(Venue_1.Venue); // Direct access to Venue entity repository
+            /**
+             * Helper function to process and associate resources with a newly created venue.
+             * It handles both existing resources (by ID) and new resources (by full details).
+             * @param venue The Venue entity to associate resources with.
+             * @param resourcesData An array of resource objects from the request body.
+             */
+            const processAndAssociateResources = (venue, resourcesData) => __awaiter(this, void 0, void 0, function* () {
+                if (resourcesData && resourcesData.length > 0) {
+                    for (const resData of resourcesData) {
+                        let resource = null;
+                        // Check if resourceId is provided in the request data (meaning it's an existing resource)
+                        if (resData.resourceId) {
+                            if (!OrganizationRepository_1.OrganizationRepository.UUID_REGEX.test(resData.resourceId)) {
+                                console.warn(`Invalid resourceId format for existing resource: ${resData.resourceId}. Skipping association.`);
+                                continue;
+                            }
+                            resource = yield resourceRepository.findOne({
+                                where: { resourceId: resData.resourceId },
+                            });
+                            if (!resource) {
+                                console.warn(`Resource with ID ${resData.resourceId} not found for venue ${venue.venueId}. Skipping association.`);
+                                continue; // Skip this resource if it doesn't exist
+                            }
+                        }
+                        else if (resData.resourceName &&
+                            resData.description &&
+                            typeof resData.costPerUnit === "number" &&
+                            resData.costPerUnit > 0) {
+                            // If resourceId is not provided, attempt to create a new resource
+                            const newResource = new Resources_1.Resource();
+                            newResource.resourceName = resData.resourceName;
+                            newResource.description = resData.description;
+                            newResource.costPerUnit = resData.costPerUnit;
+                            try {
+                                resource = yield resourceRepository.save(newResource); // Save the new resource to get its ID
+                                console.log(`Created new resource: ${newResource.resourceName}`);
+                            }
+                            catch (error) {
+                                console.error(`Failed to create new resource '${resData.resourceName}' for venue ${venue.venueId}:`, error.message);
+                                continue; // Skip association if new resource creation fails
+                            }
+                        }
+                        else {
+                            console.warn("Invalid resource data provided. Requires 'resourceId' OR 'resourceName', 'description', 'costPerUnit' (positive number). Skipping.", resData);
+                            continue; // Skip if resource data is malformed
+                        }
+                        // If a valid resource (existing or newly created) is found, proceed to associate it with the venue
+                        if (resource &&
+                            typeof resData.quantity === "number" &&
+                            resData.quantity > 0) {
+                            const venueResource = new VenueResource_1.VenueResource();
+                            venueResource.venue = venue; // Link to the venue
+                            venueResource.resource = resource; // Link to the resource
+                            venueResource.quantity = resData.quantity; // Set the quantity of this resource for the venue
+                            try {
+                                yield venueResourceRepository.save(venueResource); // Save the VenueResource association
+                                console.log(`Associated ${resData.quantity} units of resource '${resource.resourceName}' with venue '${venue.venueName}'.`);
+                            }
+                            catch (error) {
+                                console.error(`Failed to associate resource '${resource.resourceName}' with venue '${venue.venueName}':`, error.message);
+                            }
+                        }
+                        else if (resource) {
+                            console.warn(`Invalid quantity for resource '${resource.resourceName}': ${resData.quantity}. Quantity must be a positive number. Skipping association.`);
+                        }
+                    }
+                }
+            });
+            // --- Handle Single Venue Creation (if request body is an object) ---
+            const { venueName, capacity, location, amount, latitude, longitude, googleMapsLink, organizationId, // Extract organizationId directly from the body
+            resources, // Extract resources array directly from the body
+            amenities, venueType, contactPerson, contactEmail, contactPhone, websiteURL, } = body; // Augment type to acknowledge 'resources' property
+            // Determine and validate target organization ID
+            let targetOrganizationId = undefined;
+            if (organizationId) {
+                // Validate organizationId if provided in the request body
+                if (!OrganizationRepository_1.OrganizationRepository.UUID_REGEX.test(organizationId)) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Invalid organization ID (UUID) provided.",
+                    });
+                    return;
+                }
+                targetOrganizationId = organizationId;
+            }
+            else if (organizationIdFromUser) {
+                // Fallback to organizationId from the authenticated user's token
+                targetOrganizationId = organizationIdFromUser;
+            }
+            else {
+                // If no organizationId is provided in body or from user, return an error
+                res.status(400).json({
+                    success: false,
+                    message: "Organization ID is required for venue creation and assignment.",
+                });
+                return;
+            }
+            // Basic validation for essential venue fields (delegated to VenueRepository.create)
+            // This initial check here is redundant if VenueRepository.create handles it, but good for early exit.
             if (!venueName || !capacity || !location || !amount) {
                 res.status(400).json({
                     success: false,
@@ -78,80 +207,82 @@ class VenueController {
                 return;
             }
             try {
+                // Prepare data for the new venue
                 const newVenueData = {
                     venueName,
                     capacity,
                     location,
                     amount,
-                    managerId,
+                    managerId: userId,
                     latitude,
                     longitude,
                     googleMapsLink,
+                    organizationId: targetOrganizationId, // Use the validated/determined organizationId
+                    status: userRole === "admin" ? Venue_1.VenueStatus.APPROVED : Venue_1.VenueStatus.PENDING,
+                    amenities,
+                    venueType,
+                    contactPerson,
+                    contactEmail,
+                    contactPhone,
+                    websiteURL,
+                    mainPhotoUrl,
+                    subPhotoUrls,
                 };
-                const createResult = yield venueRepository_1.VenueRepository.create(newVenueData);
+                // Use the static VenueRepository.create method to create a Venue object instance
+                const createResult = venueRepository_1.VenueRepository.create(newVenueData);
                 if (!createResult.success || !createResult.data) {
                     res.status(400).json({ success: false, message: createResult.message });
                     return;
                 }
-                const saveResult = yield venueRepository_1.VenueRepository.save(createResult.data);
-                if (saveResult.success && saveResult.data) {
-                    res.status(201).json({
-                        success: true,
-                        message: "Venue created successfully.",
-                        data: saveResult.data,
+                // Save the Venue entity to the database to get its primary key (venueId)
+                const savedVenueResult = yield venueRepository_1.VenueRepository.save(createResult.data);
+                if (!savedVenueResult.success || !savedVenueResult.data) {
+                    res.status(400).json({
+                        success: false,
+                        message: savedVenueResult.message || "Failed to save venue to database.",
                     });
+                    return;
+                }
+                const savedVenue = savedVenueResult.data;
+                console.log(`Successfully created venue: ${savedVenue.venueName} (ID: ${savedVenue.venueId})`);
+                // Process and associate resources for the newly created venue
+                yield processAndAssociateResources(savedVenue, resources);
+                let assignmentMessage = "Venue created successfully.";
+                let assignmentSuccess = true;
+                // Assign the newly created venue to the organization using the repository method
+                if (targetOrganizationId && savedVenue.venueId) {
+                    const assignResult = yield OrganizationRepository_1.OrganizationRepository.addVenuesToOrganization(targetOrganizationId, [savedVenue.venueId]);
+                    if (!assignResult.success) {
+                        console.error(`Failed to assign venue '${savedVenue.venueName}' (ID: ${savedVenue.venueId}) to organization '${targetOrganizationId}': ${assignResult.message}`);
+                        assignmentMessage = `Venue created, but failed to assign to organization: ${assignResult.message}`;
+                        assignmentSuccess = false;
+                    }
+                    else {
+                        console.log(`Successfully assigned venue '${savedVenue.venueName}' to organization '${targetOrganizationId}'.`);
+                    }
                 }
                 else {
-                    res.status(500).json({
-                        success: false,
-                        message: saveResult.message || "Failed to save venue.",
-                    });
+                    assignmentMessage =
+                        "Venue created, but assignment to organization skipped due to missing organization ID or venue ID.";
+                    assignmentSuccess = false;
                 }
+                // Fetch the complete venue object with all its relations (manager, organization, and newly added resources)
+                const venueWithRelations = yield venueRepository.findOne({
+                    where: { venueId: savedVenue.venueId },
+                    relations: ["manager", "organization", "resources"], // Eager load all related entities
+                });
+                res.status(201).json({
+                    success: assignmentSuccess, // Reflect overall success, or partial success with warning
+                    message: assignmentMessage,
+                    data: venueWithRelations,
+                });
             }
             catch (err) {
-                console.error("Error creating venue:", err);
+                console.error("Error creating venue:", err.message);
                 res.status(500).json({
                     success: false,
                     message: "Failed to create venue due to a server error.",
-                });
-            }
-        });
-    }
-    // Create multiple venues
-    static createMultiple(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-            const venuesData = req.body.venues;
-            if (!userId) {
-                res
-                    .status(401)
-                    .json({ success: false, message: "Authentication required." });
-                return;
-            }
-            if (!venuesData || !Array.isArray(venuesData) || venuesData.length === 0) {
-                res.status(400).json({
-                    success: false,
-                    message: "An array of venue data is required.",
-                });
-                return;
-            }
-            try {
-                const createResult = yield venueRepository_1.VenueRepository.createMultiple(venuesData);
-                res.status(createResult.success ? 201 : 207).json({
-                    success: createResult.success,
-                    message: createResult.success
-                        ? "All venues created successfully."
-                        : "Some venues failed to create.",
-                    data: createResult.venues,
-                    errors: createResult.errors,
-                });
-            }
-            catch (err) {
-                console.error("Error creating multiple venues:", err);
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to create venues due to a server error.",
+                    error: err instanceof Error ? err.message : "Unknown error",
                 });
             }
         });
@@ -241,13 +372,12 @@ class VenueController {
             }
         });
     }
-    // Update venue
     static update(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             const { id } = req.params;
             const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-            const { venueName, capacity, location, amount, managerId, latitude, longitude, googleMapsLink, } = req.body;
+            const { venueName, capacity, location, amount, managerId, latitude, longitude, googleMapsLink, amenities, venueType, contactPerson, contactEmail, contactPhone, websiteURL, status, } = req.body;
             if (!id) {
                 res
                     .status(400)
@@ -260,17 +390,50 @@ class VenueController {
                     .json({ success: false, message: "Authentication required." });
                 return;
             }
+            // Log request body for debugging
+            console.log("Update request body:", req.body);
+            // Construct update data, omitting undefined fields
+            const updateData = {};
+            if (venueName !== undefined)
+                updateData.venueName = venueName;
+            if (capacity !== undefined)
+                updateData.capacity = capacity;
+            if (location !== undefined)
+                updateData.location = location;
+            if (amount !== undefined)
+                updateData.amount = amount;
+            if (managerId !== undefined)
+                updateData.managerId = managerId;
+            if (latitude !== undefined)
+                updateData.latitude = latitude;
+            if (longitude !== undefined)
+                updateData.longitude = longitude;
+            if (googleMapsLink !== undefined)
+                updateData.googleMapsLink = googleMapsLink;
+            if (amenities !== undefined)
+                updateData.amenities = amenities;
+            if (venueType !== undefined)
+                updateData.venueType = venueType;
+            if (contactPerson !== undefined)
+                updateData.contactPerson = contactPerson;
+            if (contactEmail !== undefined)
+                updateData.contactEmail = contactEmail;
+            if (contactPhone !== undefined)
+                updateData.contactPhone = contactPhone;
+            if (websiteURL !== undefined)
+                updateData.websiteURL = websiteURL;
+            if (status !== undefined)
+                updateData.status = status;
+            // Validate update data
+            const validationErrors = VenueInterface_1.VenueInterface.validate(updateData);
+            if (validationErrors.length > 0) {
+                res.status(400).json({
+                    success: false,
+                    message: `Validation errors: ${validationErrors.join(", ")}`,
+                });
+                return;
+            }
             try {
-                const updateData = {
-                    venueName,
-                    capacity,
-                    location,
-                    amount,
-                    managerId,
-                    latitude,
-                    longitude,
-                    googleMapsLink,
-                };
                 const updateResult = yield venueRepository_1.VenueRepository.update(id, updateData);
                 if (updateResult.success && updateResult.data) {
                     res.status(200).json({
@@ -513,33 +676,58 @@ class VenueController {
                 return;
             }
             try {
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                    res
-                        .status(400)
-                        .json({ success: false, message: "Invalid date format." });
-                    return;
-                }
+                // Use plain string comparison for dates and times
+                const startDateStr = String(startDate);
+                const endDateStr = String(endDate);
+                const startTimeStr = String(startTime);
+                const endTimeStr = String(endTime);
                 const venueResult = yield venueRepository_1.VenueRepository.getById(venueId);
                 if (!venueResult.success || !venueResult.data) {
                     res.status(404).json({ success: false, message: "Venue not found." });
                     return;
                 }
-                // Combine date and time for precise overlap check
-                const startDateTime = startTime
-                    ? new Date(`${startDate}T${startTime}:00Z`)
-                    : start;
-                const endDateTime = endTime ? new Date(`${endDate}T${endTime}:00Z`) : end;
+                // Helper to parse date and time (YYYY-MM-DD, HH:mm or HH:mm AM/PM) to minutes since epoch
+                function parseDateTime(dateStr, timeStr) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+                        return null;
+                    let [hour, minute] = [0, 0];
+                    let t = timeStr.trim();
+                    let ampm = null;
+                    if (/am|pm/i.test(t)) {
+                        ampm = t.slice(-2).toLowerCase();
+                        t = t.slice(0, -2).trim();
+                    }
+                    const parts = t.split(":");
+                    if (parts.length !== 2)
+                        return null;
+                    hour = parseInt(parts[0], 10);
+                    minute = parseInt(parts[1], 10);
+                    if (isNaN(hour) || isNaN(minute))
+                        return null;
+                    if (ampm) {
+                        if (ampm === "pm" && hour !== 12)
+                            hour += 12;
+                        if (ampm === "am" && hour === 12)
+                            hour = 0;
+                    }
+                    const date = new Date(`${dateStr}T00:00:00Z`);
+                    if (isNaN(date.getTime()))
+                        return null;
+                    return date.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000;
+                }
+                const startDateTime = parseDateTime(startDateStr, startTimeStr);
+                const endDateTime = parseDateTime(endDateStr, endTimeStr);
+                if (startDateTime === null || endDateTime === null) {
+                    res.status(400).json({ success: false, message: "Invalid date or time format." });
+                    return;
+                }
                 const eventsResult = yield eventRepository_1.EventRepository.getByVenueId(venueId);
                 if (eventsResult.success && eventsResult.data) {
                     const conflictingEvents = eventsResult.data.filter((event) => {
-                        const eventStart = event.startTime
-                            ? new Date(`${event.startDate.toISOString().split("T")[0]}T${event.startTime}:00Z`)
-                            : event.startDate;
-                        const eventEnd = event.endTime
-                            ? new Date(`${event.endDate.toISOString().split("T")[0]}T${event.endTime}:00Z`)
-                            : event.endDate;
+                        const eventStart = parseDateTime(event.startDate, event.startTime);
+                        const eventEnd = parseDateTime(event.endDate, event.endTime);
+                        if (eventStart === null || eventEnd === null)
+                            return false;
                         return (eventStart <= endDateTime &&
                             eventEnd >= startDateTime &&
                             event.status !== "CANCELLED");
@@ -841,85 +1029,233 @@ class VenueController {
             }
         });
     }
-    // Create a venue and assign resources in one request
-    static createVenueWithResources(req, res) {
+    /**
+   * GET /api/v1/venues/check-availability
+   * Query params:
+   *   - startDate
+   *   - endDate
+   *   - startTime
+   *   - endTime
+   *   - bufferMinutes (optional, default = 30)
+   */
+    static checkAvailability(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-            const _b = req.body, { resources } = _b, venueData = __rest(_b, ["resources"]);
-            if (!userId) {
-                res
-                    .status(401)
-                    .json({ success: false, message: "Authentication required." });
-                return;
-            }
-            if (!venueData.venueName ||
-                !venueData.capacity ||
-                !venueData.location ||
-                !venueData.amount) {
-                res
-                    .status(400)
-                    .json({
-                    success: false,
-                    message: "Required fields: venueName, capacity, location, amount.",
-                });
-                return;
-            }
             try {
-                // Create the venue
-                const createResult = yield venueRepository_1.VenueRepository.create(venueData);
-                if (!createResult.success || !createResult.data) {
-                    res.status(400).json({ success: false, message: createResult.message });
-                    return;
-                }
-                const saveResult = yield venueRepository_1.VenueRepository.save(createResult.data);
-                if (!saveResult.success || !saveResult.data) {
-                    res
-                        .status(500)
-                        .json({
+                const { startDate, endDate, startTime, endTime, bufferMinutes = "30" } = req.query;
+                // Validate required parameters
+                if (!startDate || !endDate || !startTime || !endTime) {
+                    res.status(400).json({
                         success: false,
-                        message: saveResult.message || "Failed to save venue.",
+                        message: "Missing required query parameters: startDate, endDate, startTime, or endTime"
                     });
                     return;
                 }
-                let assignedResources = [];
-                if (Array.isArray(resources) && resources.length > 0) {
-                    // Support creating new resources inline
-                    const resourceAssignments = [];
-                    for (const r of resources) {
-                        if (r.resource) {
-                            // Create the resource first
-                            const created = yield Promise.resolve().then(() => __importStar(require("../repositories/ResourceRepository"))).then((m) => m.ResourceRepository.createResource(r.resource));
-                            resourceAssignments.push({
-                                resourceId: created.resourceId,
-                                quantity: r.quantity,
-                            });
-                        }
-                        else if (r.resourceId) {
-                            resourceAssignments.push({
-                                resourceId: r.resourceId,
-                                quantity: r.quantity,
-                            });
-                        }
-                    }
-                    assignedResources = yield VenueResourceRepository_1.VenueResourceRepository.addResourcesToVenue(saveResult.data.venueId, resourceAssignments);
+                const result = yield venueRepository_1.VenueRepository.findFullyAvailableVenues(startDate, endDate, startTime, endTime, parseInt(bufferMinutes, 10));
+                if (result.success) {
+                    res.status(200).json({
+                        success: true,
+                        data: result.data,
+                        message: `${((_a = result.data) === null || _a === void 0 ? void 0 : _a.length) || 0} venue(s) fully available for the requested time range.`
+                    });
                 }
-                res.status(201).json({
-                    success: true,
-                    message: "Venue and resources created successfully.",
-                    data: { venue: saveResult.data, resources: assignedResources },
+                else {
+                    res.status(400).json({
+                        success: false,
+                        message: result.message ||
+                            "No venues available for the requested time range."
+                    });
+                }
+            }
+            catch (error) {
+                console.error("Controller error:", error);
+                res.status(500).json({
+                    success: false,
+                    message: "Server error while checking venue availability.",
+                    error: error instanceof Error ? error.message : String(error)
                 });
             }
-            catch (err) {
-                console.error("Error creating venue with resources:", err);
+        });
+    }
+    static approveVenue(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = req.user;
+            if (!user ||
+                !user.role ||
+                String(user.role.roleName || user.role).toLowerCase() !== "admin") {
+                res
+                    .status(403)
+                    .json({ success: false, message: "Only admin can approve venues." });
+                return;
+            }
+            const { id } = req.params;
+            const result = yield venueRepository_1.VenueRepository.update(id, {
+                status: Venue_1.VenueStatus.APPROVED,
+            });
+            if (result.success && result.data) {
+                res.json({
+                    success: true,
+                    message: "Venue approved.",
+                    data: result.data,
+                });
+            }
+            else {
+                res.status(400).json({ success: false, message: result.message });
+            }
+        });
+    }
+    /**
+     * Retrieves all approved venues.
+     * @param req The Express request object.
+     * @param res The Express response object.
+     */
+    static listApprovedVenues(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield venueRepository_1.VenueRepository.getApprovedVenues();
+                if (result.success) {
+                    res.status(200).json(result);
+                }
+                else {
+                    res.status(500).json({
+                        success: false,
+                        message: result.message || "Failed to retrieve approved venues",
+                    });
+                }
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: "An unexpected error occurred while retrieving approved venues.",
+                    error: (error === null || error === void 0 ? void 0 : error.message) || error,
+                });
+            }
+        });
+    }
+    static cancelVenue(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = req.user;
+            if (!user ||
+                !user.role ||
+                String(user.role.roleName || user.role).toLowerCase() !== "admin") {
+                res
+                    .status(403)
+                    .json({ success: false, message: "Only admin can cancel venues." });
+                return;
+            }
+            const { id } = req.params;
+            const { feedback } = req.body;
+            if (!feedback) {
+                res.status(400).json({
+                    success: false,
+                    message: "Feedback is required for cancellation.",
+                });
+                return;
+            }
+            const result = yield venueRepository_1.VenueRepository.update(id, {
+                status: Venue_1.VenueStatus.CANCELLED,
+                cancellationReason: feedback,
+            });
+            if (result.success && result.data) {
+                res.json({
+                    success: true,
+                    message: "Venue cancelled.",
+                    data: result.data,
+                });
+            }
+            else {
+                res.status(400).json({ success: false, message: result.message });
+            }
+        });
+    }
+    static getEventsByVenue(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { venueId } = req.params;
+            if (!venueId) {
+                res.status(400).json({ success: false, message: "venueId is required" });
+                return;
+            }
+            try {
+                const result = yield eventRepository_1.EventRepository.getByVenueId(venueId);
+                if (result.success && result.data) {
+                    res.status(200).json({ success: true, data: result.data });
+                }
+                else {
+                    res.status(404).json({
+                        success: false,
+                        message: result.message || "No events found for this venue.",
+                    });
+                }
+            }
+            catch (error) {
                 res
                     .status(500)
-                    .json({
-                    success: false,
-                    message: "Failed to create venue with resources.",
-                });
+                    .json({ success: false, message: "Failed to get events for venue." });
+            }
+        });
+    }
+    static listPublicApprovedEvents(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield eventRepository_1.EventRepository.getPublicApprovedEvents();
+            if (result.success && result.data) {
+                res.status(200).json({ success: true, data: result.data });
+            }
+            else {
+                res.status(500).json({ success: false, message: result.message });
+            }
+        });
+    }
+    static listEventTypes(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            res.status(200).json({
+                success: true,
+                data: Object.values(EventTypeEnum_1.EventType),
+            });
+        });
+    }
+    static getVenuesWithApprovedEvents(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield venueRepository_1.VenueRepository.getVenuesWithApprovedEvents();
+                if (result.success && result.data) {
+                    res.status(200).json({ success: true, data: result.data });
+                }
+                else {
+                    res.status(404).json({ success: false, message: result.message || "No venues with approved events found." });
+                }
+            }
+            catch (error) {
+                res.status(500).json({ success: false, message: "Failed to fetch venues with approved events." });
+            }
+        });
+    }
+    static getVenuesWithApprovedEventsViaBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield venueRepository_1.VenueRepository.getVenuesWithApprovedEventsViaBookings();
+                if (result.success && result.data) {
+                    res.status(200).json({ success: true, data: result.data });
+                }
+                else {
+                    res.status(404).json({ success: false, message: result.message || "No venues with approved events found." });
+                }
+            }
+            catch (error) {
+                res.status(500).json({ success: false, message: "Failed to fetch venues with approved events." });
             }
         });
     }
 }
 exports.VenueController = VenueController;
+// Create a single venue or multiple venues
+/**
+ * Handles the creation of one or more venues,
+ * including associated resources and assignment to an organization.
+ *
+ * Supports both single venue object and array of venue objects in the request body.
+ *
+ * @param req The Express request object, expected to be AuthenticatedRequest.
+ * @param res The Express response object.
+ * @returns A JSON response indicating success or failure of venue creation and assignment.
+ */
+VenueController.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

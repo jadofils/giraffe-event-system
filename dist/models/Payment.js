@@ -16,6 +16,7 @@ const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");
 const Event_1 = require("./Event");
 const PaymentStatusEnum_1 = require("../interfaces/Enums/PaymentStatusEnum");
+const Venue_1 = require("./Venue");
 let Payment = class Payment {
 };
 exports.Payment = Payment;
@@ -50,6 +51,15 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'eventId' }),
     __metadata("design:type", Event_1.Event)
 ], Payment.prototype, "event", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], Payment.prototype, "venueId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.payments, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    __metadata("design:type", Venue_1.Venue)
+], Payment.prototype, "venue", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Date)

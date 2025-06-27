@@ -18,10 +18,15 @@ const VenueBooking_1 = require("./VenueBooking");
 const Event_1 = require("./Event");
 const Registration_1 = require("./Registration");
 const VenueResource_1 = require("./VenueResource");
+const Feedback_1 = require("./Feedback");
+const Invoice_1 = require("./Invoice");
+const Payment_1 = require("./Payment");
+const Notification_1 = require("./Notification");
 var VenueStatus;
 (function (VenueStatus) {
     VenueStatus["PENDING"] = "PENDING";
     VenueStatus["APPROVED"] = "APPROVED";
+    VenueStatus["CANCELLED"] = "CANCELLED";
     VenueStatus["REJECTED"] = "REJECTED";
 })(VenueStatus || (exports.VenueStatus = VenueStatus = {}));
 let Venue = class Venue {
@@ -101,11 +106,11 @@ __decorate([
     __metadata("design:type", Organization_1.Organization)
 ], Venue.prototype, "organization", void 0);
 __decorate([
-    (0, typeorm_1.ManyToMany)(() => User_1.User, user => user.venues),
+    (0, typeorm_1.ManyToMany)(() => User_1.User, (user) => user.venues),
     (0, typeorm_1.JoinTable)({
         name: "venue_users",
         joinColumn: { name: "venueId", referencedColumnName: "venueId" },
-        inverseJoinColumn: { name: "userId", referencedColumnName: "userId" }
+        inverseJoinColumn: { name: "userId", referencedColumnName: "userId" },
     }),
     __metadata("design:type", Array)
 ], Venue.prototype, "users", void 0);
@@ -160,7 +165,27 @@ __decorate([
 __decorate([
     (0, typeorm_1.OneToMany)(() => VenueResource_1.VenueResource, (venueResource) => venueResource.venue),
     __metadata("design:type", Array)
-], Venue.prototype, "venueResources", void 0);
+], Venue.prototype, "resources", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => Feedback_1.Feedback, (feedback) => feedback.venue),
+    __metadata("design:type", Array)
+], Venue.prototype, "feedbacks", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => Notification_1.Notification, (notification) => notification.venue),
+    __metadata("design:type", Array)
+], Venue.prototype, "notifications", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (venueBooking) => venueBooking.venue),
+    __metadata("design:type", Array)
+], Venue.prototype, "eventVenueBookings", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => Payment_1.Payment, (payment) => payment.venue),
+    __metadata("design:type", Array)
+], Venue.prototype, "payments", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => Invoice_1.Invoice, (invoice) => invoice.venue),
+    __metadata("design:type", Array)
+], Venue.prototype, "invoices", void 0);
 __decorate([
     (0, typeorm_1.Column)({
         type: "enum",
@@ -181,6 +206,24 @@ __decorate([
     (0, typeorm_1.DeleteDateColumn)(),
     __metadata("design:type", Date)
 ], Venue.prototype, "deletedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "varchar", nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Length)(3, 200, {
+        message: "cancellationReason must be between 3 and 200 characters",
+    }),
+    __metadata("design:type", String)
+], Venue.prototype, "cancellationReason", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], Venue.prototype, "mainPhotoUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "simple-array", nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Array)
+], Venue.prototype, "subPhotoUrls", void 0);
 exports.Venue = Venue = __decorate([
     (0, typeorm_1.Entity)("venues")
 ], Venue);

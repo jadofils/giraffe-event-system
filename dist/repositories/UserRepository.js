@@ -96,7 +96,7 @@ class UserRepository {
                 }
                 else if (user.roleId && !user.role) {
                     const existingRole = yield roleRepository.findOne({
-                        where: { roleId: user.roleId },
+                        where: { roleId: user.roleId }
                     });
                     if (existingRole) {
                         user.role = existingRole;
@@ -221,24 +221,9 @@ class UserRepository {
                         "organizations",
                         "venues",
                         "venues.bookings",
-                        "venues.invoices",
-                        "venues.payments",
                         "venues.resources",
                         "venues.feedbacks",
-                        "venues.notifications",
-                        "venues.eventVenueBookings",
-                        "events",
-                        "eventVenues",
-                        "eventVenues.organizations",
-                        "eventVenueBookings",
-                        "registrationsAsAttendee",
-                        "registrationsAsAttendee.event",
-                        "registrationsAsAttendee.ticketType",
-                        "registrationsAsAttendee.venue",
-                        "feedbacks",
-                        "notifications",
-                        "invoices",
-                        "payments",
+                        "registrations",
                     ],
                 });
                 if (!user) {

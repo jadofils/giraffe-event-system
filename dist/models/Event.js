@@ -48,26 +48,26 @@ __decorate([
     __metadata("design:type", String)
 ], Event.prototype, "eventType", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp with time zone', nullable: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsDateString)({}, { message: 'Start date must be a valid date' }),
-    __metadata("design:type", Date)
+    (0, typeorm_1.Column)({ type: 'varchar', length: 10, nullable: true }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'Start date is required' }),
+    (0, class_validator_1.Length)(10, 10, { message: 'Start date must be in YYYY-MM-DD format' }),
+    __metadata("design:type", String)
 ], Event.prototype, "startDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp with time zone', nullable: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsDateString)({}, { message: 'End date must be a valid date' }),
-    __metadata("design:type", Date)
+    (0, typeorm_1.Column)({ type: 'varchar', length: 10, nullable: true }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'End date is required' }),
+    (0, class_validator_1.Length)(10, 10, { message: 'End date must be in YYYY-MM-DD format' }),
+    __metadata("design:type", String)
 ], Event.prototype, "endDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    (0, class_validator_1.IsOptional)(),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 8, nullable: true }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'Start time is required' }),
     (0, class_validator_1.IsString)({ message: 'Start time must be a string' }),
     __metadata("design:type", String)
 ], Event.prototype, "startTime", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    (0, class_validator_1.IsOptional)(),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 8, nullable: true }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'End time is required' }),
     (0, class_validator_1.IsString)({ message: 'End time must be a string' }),
     __metadata("design:type", String)
 ], Event.prototype, "endTime", void 0);
@@ -148,12 +148,7 @@ __decorate([
     __metadata("design:type", String)
 ], Event.prototype, "eventCategory", void 0);
 __decorate([
-    (0, typeorm_1.ManyToMany)(() => VenueBooking_1.VenueBooking, (venueBooking) => venueBooking.events),
-    (0, typeorm_1.JoinTable)({
-        name: 'event_venue_bookings',
-        joinColumn: { name: 'eventId', referencedColumnName: 'eventId' },
-        inverseJoinColumn: { name: 'bookingId', referencedColumnName: 'bookingId' },
-    }),
+    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (venueBooking) => venueBooking.event),
     __metadata("design:type", Array)
 ], Event.prototype, "venueBookings", void 0);
 __decorate([

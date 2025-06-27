@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Feedback = void 0;
 // src/entity/Feedback.ts
 const typeorm_1 = require("typeorm");
+const Venue_1 = require("./Venue");
 const class_validator_1 = require("class-validator");
 let Feedback = class Feedback {
 };
@@ -41,6 +42,17 @@ __decorate([
     (0, class_validator_1.Max)(5, { message: 'rating must be at most $constraint1' }),
     __metadata("design:type", Number)
 ], Feedback.prototype, "rating", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)('4', { message: 'venueId must be a valid UUID' }),
+    __metadata("design:type", String)
+], Feedback.prototype, "venueId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.feedbacks, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    __metadata("design:type", Venue_1.Venue)
+], Feedback.prototype, "venue", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     (0, class_validator_1.IsOptional)(),

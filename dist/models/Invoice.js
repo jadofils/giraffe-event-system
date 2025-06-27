@@ -21,6 +21,8 @@ const Event_1 = require("./Event");
 const Payment_1 = require("./Payment");
 const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");
+const Venue_1 = require("./Venue");
+const VenueBooking_1 = require("./VenueBooking");
 let Invoice = class Invoice {
 };
 exports.Invoice = Invoice;
@@ -88,9 +90,24 @@ __decorate([
     __metadata("design:type", User_1.User)
 ], Invoice.prototype, "user", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", Object)
+], Invoice.prototype, "venueId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.invoices, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    __metadata("design:type", Venue_1.Venue)
+], Invoice.prototype, "venue", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)(() => Payment_1.Payment, payment => payment.invoice),
     __metadata("design:type", Array)
 ], Invoice.prototype, "payments", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (venueBooking) => venueBooking.invoice),
+    __metadata("design:type", Array)
+], Invoice.prototype, "venueBookings", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => InstallmentPlan_1.InstallmentPlan, plan => plan.invoice),
     __metadata("design:type", Array)

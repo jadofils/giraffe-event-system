@@ -13,9 +13,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isAuthenticatedRequest = exports.authenticate = void 0;
-const express_1 = require("express");
-const venueController_1 = require("../controller/venueController");
-const IsAdmin_1 = require("../middlewares/IsAdmin");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const Database_1 = require("../config/Database");
 const User_1 = require("../models/User");
@@ -127,36 +124,4 @@ const isAuthenticatedRequest = (req) => {
     return 'user' in req && req.user !== undefined;
 };
 exports.isAuthenticatedRequest = isAuthenticatedRequest;
-const router = (0, express_1.Router)();
-// Get all venues
-router.get("/all", exports.authenticate, venueController_1.VenueController.getAll);
-// Get venue by ID
-router.get("/get/:id", exports.authenticate, venueController_1.VenueController.getById);
-// Search venues
-router.get("/search", exports.authenticate, venueController_1.VenueController.searchVenues);
-// Get venue count
-router.get("/count", exports.authenticate, venueController_1.VenueController.getVenueCount);
-// Create venue
-router.post("/add", exports.authenticate, venueController_1.VenueController.create);
-// Get venues by manager ID
-router.get("/manager-venues", exports.authenticate, venueController_1.VenueController.getByManagerId);
-// Update venue
-router.put("/update/:id", exports.authenticate, venueController_1.VenueController.update);
-// Delete venue
-router.delete("/remove/:id", exports.authenticate, venueController_1.VenueController.delete);
-// Assign manager to venue
-router.post("/assign-manager", exports.authenticate, venueController_1.VenueController.assignManagerToVenue);
-// Add resources to venue
-router.post("/:venueId/resources", exports.authenticate, venueController_1.VenueController.addResourcesToVenue);
-// Remove resource from venue
-router.delete("/:venueId/resources/:resourceId", exports.authenticate, venueController_1.VenueController.removeResourceFromVenue);
-// Get venue resources
-router.get("/:venueId/resources", exports.authenticate, venueController_1.VenueController.getVenueResources);
-// Create venue with resources
-router.post('/add-with-resources', exports.authenticate, venueController_1.VenueController.createVenueWithResources);
-// Update venue manager
-router.put("/update-manager/:id", exports.authenticate, venueController_1.VenueController.updateVenueManager);
-// Remove venue manager
-router.put("/remove-manager/:id", IsAdmin_1.isAdmin, venueController_1.VenueController.removeVenueManager);
 //router.use("/", checkAbsenceRoutes);
-exports.default = router;

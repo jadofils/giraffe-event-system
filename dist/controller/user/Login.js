@@ -74,92 +74,62 @@ class LoginController {
      */
     static loginWithDefaultPassword(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             if (!Database_1.AppDataSource.isInitialized) {
-                console.error("[Login Attempt] Database not initialized");
                 res.status(500).json({ success: false, message: "Database not initialized" });
                 return;
             }
             const { identifier, password } = req.body;
             if (!identifier || !password) {
-                console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
                 res.status(400).json({ success: false, message: "Please enter both identifier and password." });
                 return;
             }
             const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
             try {
-                const cacheKey = `user:identifier:${identifier}`;
-                const user = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, userRepository, () => __awaiter(this, void 0, void 0, function* () {
-                    return yield userRepository.findOne({
-                        where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-                        relations: ["role", "organizations"],
-                    });
-                }), CACHE_TTL);
+                const user = yield userRepository.findOne({
+                    where: [
+                        { email: identifier },
+                        { username: identifier },
+                        { phoneNumber: identifier }
+                    ],
+                    relations: ["role", "role.permissions", "organizations"],
+                });
                 if (!user) {
-                    console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
-                    res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
+                    res.status(404).json({ success: false, message: "No account found with that email, username, or phone number." });
                     return;
                 }
                 // Validate user UUID
                 if (!LoginController.UUID_REGEX.test(user.userId)) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
                     res.status(500).json({ success: false, message: "Invalid user ID format." });
-                    return;
-                }
-                // Verify session data
-                if (!((_a = req.session) === null || _a === void 0 ? void 0 : _a.defaultPassword) ||
-                    !(req.session.defaultEmail === user.email ||
-                        req.session.username === user.username ||
-                        req.session.phoneNumber === user.phoneNumber)) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid session data`);
-                    res.status(401).json({ success: false, message: "Session data doesn't match user account." });
                     return;
                 }
                 // Password verification
                 let isMatch = false;
-                let isSessionPasswordLogin = false;
-                if (req.session.defaultPassword === password) {
-                    isMatch = true;
-                    isSessionPasswordLogin = true;
-                    EmailService_1.default.invalidateDefaultPassword(req, user.email);
-                    // Clear session data
-                    req.session.defaultPassword = undefined;
-                    req.session.defaultEmail = undefined;
-                    req.session.username = undefined;
-                    req.session.phoneNumber = undefined;
-                }
-                else if (user.password) {
+                if (user.password) {
                     isMatch = yield bcrypt.compare(password, user.password);
                 }
                 if (!isMatch) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
                     res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
                     return;
                 }
                 // Validate organization
                 if (!user.organizations || user.organizations.length === 0) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
                     res.status(401).json({ success: false, message: "User is not associated with any organization." });
                     return;
                 }
                 const firstOrganization = user.organizations[0];
                 if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
                     res.status(500).json({ success: false, message: "Invalid organization ID format." });
                     return;
                 }
-                // Generate JWT token
+                // Generate JWT token for authentication
                 const token = jsonwebtoken_1.default.sign({
                     userId: user.userId,
                     email: user.email,
                     username: user.username,
                     phoneNumber: user.phoneNumber,
                     organizationId: firstOrganization.organizationId,
-                    needsPasswordReset: isSessionPasswordLogin,
-                    roles: {
-                        roleId: user.role.roleId,
-                        roleName: user.role.roleName,
-                    },
+                    roleId: user.role.roleId,
+                    roleName: user.role.roleName,
                 }, SECRET_KEY, { expiresIn: "24h" });
                 res.cookie("authToken", token, {
                     httpOnly: true,
@@ -168,23 +138,40 @@ class LoginController {
                     secure: process.env.NODE_ENV === "production",
                 });
                 const { password: _ } = user, userData = __rest(user, ["password"]);
-                console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
-                user.role.permissions.forEach(permission => {
-                    console.log({
-                        userId: user.userId,
-                        username: user.username,
-                        roleId: user.role.roleId,
-                        roleName: user.role.roleName,
-                        permissionId: permission.id,
-                        permissionName: permission.name,
-                        permissionDescription: permission.description,
+                // Generate password reset token
+                const resetToken = jsonwebtoken_1.default.sign({
+                    userId: user.userId,
+                    email: user.email,
+                    username: user.username,
+                    purpose: "password_reset",
+                }, SECRET_KEY, { expiresIn: "1h" });
+                // Create reset link
+                const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
+                const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+                // Log the reset link for debugging
+                console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
+                // Send reset link to user's email
+                try {
+                    yield EmailService_1.default.sendPasswordResetEmail(user.email, resetLink, user.username);
+                    console.log(`[Password Reset Email] Successfully sent to ${user.email}`);
+                }
+                catch (emailError) {
+                    console.error(`[Password Reset Email] Failed to send to ${user.email}:`, emailError);
+                    res.status(500).json({
+                        success: false,
+                        message: "Login successful, but failed to send password reset email.",
+                        user: Object.assign(Object.assign({}, userData), { needsPasswordReset: true }),
+                        token,
                     });
-                });
+                    return;
+                }
                 res.status(200).json({
                     success: true,
-                    message: isSessionPasswordLogin ? "Login successful! Please create a new password." : "Login successful!",
-                    user: Object.assign(Object.assign({}, userData), { needsPasswordReset: isSessionPasswordLogin }),
-                    token,
+                    message: "Login successful! Please check your email to reset your password.",
+                    user: Object.assign(Object.assign({}, userData), { needsPasswordReset: true }),
+                    token, // regular auth token
+                    resetToken, // <-- add the reset token for direct use in Postman/testing
+                    resetLink, // Optionally return the link for testing
                 });
             }
             catch (error) {
@@ -216,8 +203,18 @@ class LoginController {
                 const cacheKey = `user:identifier:${identifier}`;
                 const user = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, userRepository, () => __awaiter(this, void 0, void 0, function* () {
                     return yield userRepository.findOne({
-                        where: [{ email: identifier }, { username: identifier }, { phoneNumber: identifier }],
-                        relations: ["organizations", "role", "role.permissions"],
+                        where: [
+                            { email: identifier },
+                            { username: identifier },
+                            { phoneNumber: identifier }
+                        ],
+                        relations: [
+                            "organizations",
+                            "organizations.venues",
+                            "role",
+                            "role.permissions",
+                            "venues"
+                        ]
                     });
                 }), CACHE_TTL);
                 if (!user) {
@@ -244,12 +241,8 @@ class LoginController {
                     return;
                 }
                 const firstOrganization = user.organizations[0];
-                if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-                    console.log(`[Login Attempt] User ID: ${user.userId} - Invalid organization ID: ${firstOrganization.organizationId}`);
-                    res.status(500).json({ success: false, message: "Invalid organization ID format." });
-                    return;
-                }
-                // Prepare organization data for JWT
+                // Filter venues and only include approved events for each venue
+                const venuesWithApprovedEvents = (firstOrganization.venues || []).map(venue => (Object.assign(Object.assign({}, venue), { events: (venue.events || []).filter(event => event.status === "APPROVED") })));
                 const organization = {
                     organizationId: firstOrganization.organizationId,
                     organizationName: firstOrganization.organizationName,
@@ -265,7 +258,6 @@ class LoginController {
                     email: user.email,
                     username: user.username,
                     phoneNumber: user.phoneNumber,
-                    organization,
                     organizationId: firstOrganization.organizationId,
                     roles: {
                         roleId: user.role.roleId,
@@ -299,7 +291,7 @@ class LoginController {
                         username: user.username,
                         phoneNumber: user.phoneNumber,
                         roles: user.role,
-                        organizations: user.organizations,
+                        organization // <-- now includes venues and only approved events
                     },
                     token,
                 });

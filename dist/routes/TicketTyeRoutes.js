@@ -1,69 +1,24 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const AuthMiddleware_1 = require("../middlewares/AuthMiddleware");
 const TicketTypeController_1 = require("../controller/TicketTypeController");
-const AuthMiddleware_1 = require("../middlewares/AuthMiddleware"); // make sure this is imported
 const router = (0, express_1.Router)();
-// =======================
-// 📂 Public Ticket Type Routes
-// =======================
-// (If you want any public routes like viewing ticket types, put them here)
-// =======================
-// 🔒 Protected Ticket Type Routes
-// =======================
 router.use(AuthMiddleware_1.authenticate);
-// POST /api/ticket-types
-router.post("/", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield TicketTypeController_1.TicketTypeController.createTicketType(req, res);
-    }
-    catch (err) {
-        next(err);
-    }
-}));
-// GET /api/ticket-types
-router.get("/", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield TicketTypeController_1.TicketTypeController.getAllTicketTypes(req, res);
-    }
-    catch (err) {
-        next(err);
-    }
-}));
-// GET /api/ticket-types/:ticketTypeId
-router.get("/:ticketTypeId", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield TicketTypeController_1.TicketTypeController.getTicketTypeById(req, res);
-    }
-    catch (err) {
-        next(err);
-    }
-}));
-// PUT /api/ticket-types/:ticketTypeId
-router.put("/:ticketTypeId", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield TicketTypeController_1.TicketTypeController.updateTicketType(req, res);
-    }
-    catch (err) {
-        next(err);
-    }
-}));
-// DELETE /api/ticket-types/:ticketTypeId
-router.delete("/:ticketTypeId", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield TicketTypeController_1.TicketTypeController.deleteTicketType(req, res);
-    }
-    catch (err) {
-        next(err);
-    }
-}));
+// Create a new ticket type (protected)
+router.post('/', TicketTypeController_1.TicketTypeController.createTicketType);
+// Get all active ticket types for an event
+router.get('/event/:eventId', TicketTypeController_1.TicketTypeController.getTicketTypesByEvent);
+// Get ticket count statistics by category (STATIC route - must be before :ticketTypeId)
+router.get('/count-by-category', TicketTypeController_1.TicketTypeController.getTicketCountByCategory);
+// Get all tickets (STATIC route - must be before :ticketTypeId)
+router.get('/', TicketTypeController_1.TicketTypeController.getAllTickets);
+// Update isActive (STATIC route - must be before :ticketTypeId)
+router.patch('/:ticketTypeId/is-active', TicketTypeController_1.TicketTypeController.updateIsActive);
+// Get a single ticket type by ID (DYNAMIC route - must be after all static routes)
+router.get('/:ticketTypeId', TicketTypeController_1.TicketTypeController.getTicketTypeById);
+// Update an existing ticket type (protected)
+router.patch('/:ticketTypeId', AuthMiddleware_1.authenticate, TicketTypeController_1.TicketTypeController.updateTicketType);
+// Soft delete a ticket type (protected)
+router.delete('/:ticketTypeId', AuthMiddleware_1.authenticate, TicketTypeController_1.TicketTypeController.deleteTicketType);
 exports.default = router;

@@ -52,7 +52,7 @@ __decorate([
 __decorate([
     (0, typeorm_1.OneToMany)(() => VenueResource_1.VenueResource, (venueResource) => venueResource.resource),
     __metadata("design:type", Array)
-], Resource.prototype, "venueResources", void 0);
+], Resource.prototype, "resources", void 0);
 exports.Resource = Resource = __decorate([
     (0, typeorm_1.Entity)("resources")
 ], Resource);

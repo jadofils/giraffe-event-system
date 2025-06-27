@@ -17,6 +17,7 @@ const User_1 = require("./User");
 const VenueBooking_1 = require("./VenueBooking");
 const Venue_1 = require("./Venue");
 const VenueInvoice_1 = require("./VenueInvoice");
+const TicketType_1 = require("./TicketType");
 let Organization = class Organization {
 };
 exports.Organization = Organization;
@@ -109,6 +110,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => VenueInvoice_1.VenueInvoice, (venueInvoice) => venueInvoice.organization),
     __metadata("design:type", Array)
 ], Organization.prototype, "venueInvoices", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => TicketType_1.TicketType, (ticketType) => ticketType.organization),
+    __metadata("design:type", Array)
+], Organization.prototype, "ticketTypes", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ type: 'timestamp with time zone' }),
     __metadata("design:type", Date)
