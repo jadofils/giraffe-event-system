@@ -12,12 +12,14 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - REDIS_HOST=redis          # override .env REDIS_HOST to use the redis service
+      - REDIS_HOST=redis # override .env REDIS_HOST to use the redis service
       - REDIS_PORT=6379
     depends_on:
       - redis
 
   redis:
     image: redis:7-alpine
+    command:
+      ["redis-server", "--requirepass", "vvsMgfM0FnCjk4g018qPHnP9zrOruewv"]
     ports:
       - "6379:6379"

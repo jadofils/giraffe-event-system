@@ -1,6 +1,6 @@
 import { runSeeders } from "typeorm-extension";
 import { AppDataSource } from "./config/Database";
-import EventVenueSeeding from "./seeds/EventVenueSeeding";
+
 import IndependentOrganizationSeeder from "./seeds/IndependentUserOrganizationSeeder";
 import { PermissionSeeder } from "./seeds/PermissionSeeder";
 import { AdminRoleSeeder } from "./seeds/AdminRoleSeeder";
@@ -25,12 +25,6 @@ import { RoleInterface } from "./interfaces/RoleInterface";
     }
 
     console.log("\n🌱 Starting database seeding process...");
-
-    // Run seeders
-    await runSeeders(AppDataSource, {
-      seeds: [IndependentOrganizationSeeder, EventVenueSeeding],
-    });
-
     // Seed permissions first
     console.log("🔐 Seeding permissions...");
     await PermissionSeeder.seed();
