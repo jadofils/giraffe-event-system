@@ -218,12 +218,11 @@ export class UserController {
         try {
           generatedPassword = PasswordService.generatePassword();
           const emailSent = await PasswordService.sendDefaultPasswordWithPassword(
-            email!,
-            completeUser.lastName,
-            completeUser.firstName,
-            completeUser.username,
-            generatedPassword,
-            req
+          email!,
+          completeUser.lastName,
+          completeUser.firstName,
+          completeUser.username,
+          generatedPassword
           );
           if (!emailSent) {
             console.warn(`Email not sent to ${email}, but user created.`);

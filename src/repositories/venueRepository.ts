@@ -917,7 +917,14 @@ export class VenueRepository {
       const eventStart = parseTime(startDate, startTime);
       const eventEnd = parseTime(endDate, endTime);
 
-      // Validate input
+      // Validate input: start must be in the future
+      if (eventStart <= new Date()) {
+        return {
+          success: false,
+          message: "Start date/time must be in the future.",
+        };
+      }
+      // Validate input: end must be after start
       if (eventEnd <= eventStart) {
         return {
           success: false,
@@ -1032,33 +1039,47 @@ export class VenueRepository {
               .getOne();
 
             let previousEvent = undefined;
-            let nextAvailableTime = eventStart.toISOString();
+            let nextAvailableTime = undefined;
             if (previousBooking && previousBooking.event) {
-              previousEvent = {
-                startDate:
-                  previousBooking.event.startDate?.toISOString?.() || "",
-                startTime: previousBooking.event.startTime || "",
-                endDate: previousBooking.event.endDate?.toISOString?.() || "",
-                endTime: previousBooking.event.endTime || "",
-              };
-              // Calculate next available time: previous event's end + 15 minutes
-              let prevEndDate =
-                previousBooking.event.endDate instanceof Date
-                  ? new Date(previousBooking.event.endDate)
-                  : new Date(previousBooking.event.endDate);
-              let [endHour, endMinute] = (
-                previousBooking.event.endTime || "00:00"
-              )
-                .split(":")
-                .map(Number);
-              prevEndDate.setHours(endHour, endMinute, 0, 0);
-              prevEndDate = new Date(prevEndDate.getTime() + 15 * 60 * 1000); // add 15 minutes
-              nextAvailableTime = prevEndDate.toISOString();
+            previousEvent = {
+            startDate: previousBooking.event.startDate || "",
+            startTime: previousBooking.event.startTime || "",
+            endDate: previousBooking.event.endDate || "",
+            endTime: previousBooking.event.endTime || "",
+            };
+            // Calculate next available time: previous event's end + 15 minutes
+            function parseDateTime(dateStr: string, timeStr: string): number | null {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+            let [hour, minute] = [0, 0];
+            let t = timeStr.trim();
+            let ampm = null;
+            if (/am|pm/i.test(t)) {
+            ampm = t.slice(-2).toLowerCase();
+            t = t.slice(0, -2).trim();
+            }
+            const parts = t.split(":");
+            if (parts.length !== 2) return null;
+            hour = parseInt(parts[0], 10);
+            minute = parseInt(parts[1], 10);
+            if (isNaN(hour) || isNaN(minute)) return null;
+            if (ampm) {
+            if (ampm === "pm" && hour !== 12) hour += 12;
+            if (ampm === "am" && hour === 12) hour = 0;
+            }
+            const date = new Date(`${dateStr}T00:00:00Z`);
+            if (isNaN(date.getTime())) return null;
+            return date.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000;
+            }
+            const prevEndMillis = parseDateTime(previousBooking.event.endDate, previousBooking.event.endTime || "00:00");
+            if (prevEndMillis !== null) {
+            const nextMillis = prevEndMillis + 15 * 60 * 1000;
+            nextAvailableTime = new Date(nextMillis).toISOString();
+            }
             }
             availableVenues.push({
-              ...venue,
-              previousEvent,
-              nextAvailableTime,
+            ...venue,
+            previousEvent,
+            nextAvailableTime: nextAvailableTime || "",
             });
           } else {
             conflictingVenues.push({
@@ -1108,10 +1129,11 @@ export class VenueRepository {
         let minEndTime: string | null = null;
         for (const conflict of cachedResult.conflictingVenues) {
           for (const event of conflict.conflictingEvents) {
-            const endDate =
-              event.endDate instanceof Date
-                ? event.endDate
-                : new Date(event.endDate);
+              // event.endDate is always a string now; no instanceof Date check needed
+const endDate = typeof event.endDate === 'string'
+  ? event.endDate
+  : new Date(event.endDate).toISOString(); // fallback if needed
+
             const endTime = event.endTime || "00:00";
             let eventEnd = new Date(endDate);
             const [h, m] = endTime.split(":").map(Number);
@@ -1154,149 +1176,126 @@ export class VenueRepository {
   }
 
   static async findFullyAvailableVenues(
-    startDate: Date,
-    endDate: Date,
-    startTime: string,
-    endTime: string,
-    bufferMinutes: number = 30
+  startDate: string,
+  endDate: string,
+  startTime: string,
+  endTime: string,
+  bufferMinutes: number = 30
   ): Promise<{
-    success: boolean;
-    data?: Venue[];
-    message?: string;
-    error?: any;
+  success: boolean;
+  data?: Venue[];
+  message?: string;
+  error?: any;
   }> {
-    try {
-      const venues = await AppDataSource.getRepository(Venue).find({
-        where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
-        relations: ["manager", "organization"],
-      });
+  // Helper to parse date and time (YYYY-MM-DD, HH:mm or HH:mm AM/PM) to minutes since epoch
+  function parseDateTime(dateStr: string, timeStr: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  let [hour, minute] = [0, 0];
+  let t = timeStr.trim();
+  let ampm = null;
+  if (/am|pm/i.test(t)) {
+  ampm = t.slice(-2).toLowerCase();
+  t = t.slice(0, -2).trim();
+  }
+  const parts = t.split(":");
+  if (parts.length !== 2) return null;
+  hour = parseInt(parts[0], 10);
+  minute = parseInt(parts[1], 10);
+  if (isNaN(hour) || isNaN(minute)) return null;
+  if (ampm) {
+  if (ampm === "pm" && hour !== 12) hour += 12;
+  if (ampm === "am" && hour === 12) hour = 0;
+  }
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  if (isNaN(date.getTime())) return null;
+  return date.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000;
+  }
+  try {
+  const venues = await AppDataSource.getRepository(Venue).find({
+  where: { status: VenueStatus.APPROVED, deletedAt: IsNull() },
+  relations: ["manager", "organization"],
+  });
+  
+  if (!venues || venues.length === 0) {
+  return {
+  success: false,
+  message: "No approved venues found in the system.",
+  error: {
+  code: "NO_VENUES",
+  details: "VenueRepository returned 0 records.",
+  },
+  };
+  }
+  
+  const reqStart = parseDateTime(startDate, startTime);
+  const reqEnd = parseDateTime(endDate, endTime);
+  if (reqStart === null || reqEnd === null) {
+    return {
+      success: false,
+      message: "Invalid date or time format.",
+    };
+  }
+  // Validate input: start must be in the future
+  if (reqStart <= Date.now()) {
+    return {
+      success: false,
+      message: "Start date/time must be in the future.",
+    };
+  }
+  // Validate input: end must be after start
+  if (reqEnd <= reqStart) {
+    return {
+      success: false,
+      message: "End date/time must be after start date/time.",
+    };
+  }
 
-      if (!venues || venues.length === 0) {
-        return {
-          success: false,
-          message: "No approved venues found in the system.",
-          error: {
-            code: "NO_VENUES",
-            details: "VenueRepository returned 0 records.",
-          },
-        };
-      }
-
-      const parseTime = (date: Date, time: string): Date => {
-        const [hours, minutes] = time.split(":").map(Number);
-        const newDate = new Date(date);
-        newDate.setHours(hours, minutes, 0, 0);
-        return newDate;
-      };
-
-      const getDaysInRange = (start: Date, end: Date): Date[] => {
-        const days: Date[] = [];
-        let current = new Date(start);
-        while (current <= end) {
-          days.push(new Date(current));
-          current.setDate(current.getDate() + 1);
-        }
-        return days;
-      };
-
-      const reqDays = getDaysInRange(
-        new Date(
-          startDate.getFullYear(),
-          startDate.getMonth(),
-          startDate.getDate()
-        ),
-        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-      );
-
-      const availableVenues: Venue[] = [];
-
-      for (const venue of venues) {
-        const bookings = await AppDataSource.getRepository(VenueBooking)
-          .createQueryBuilder("booking")
-          .leftJoinAndSelect("booking.event", "event")
-          .where("booking.venueId = :venueId", { venueId: venue.venueId })
-          .andWhere("booking.approvalStatus = :status", { status: "approved" })
-          .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
-          .andWhere(
-            "event.startDate <= :reqEnd AND event.endDate >= :reqStart",
-            {
-              reqStart: startDate,
-              reqEnd: endDate,
-            }
-          )
-          .getMany();
-
-        let isAvailableAllDays = true;
-
-        for (const day of reqDays) {
-          const reqStart = parseTime(day, startTime);
-          const reqEnd = parseTime(day, endTime);
-
-          let hasOverlap = false;
-
-          for (const booking of bookings) {
-            if (!booking.event) continue;
-
-            const eventStartDay = new Date(
-              booking.event.startDate.getFullYear(),
-              booking.event.startDate.getMonth(),
-              booking.event.startDate.getDate()
-            );
-
-            const eventEndDay = new Date(
-              booking.event.endDate.getFullYear(),
-              booking.event.endDate.getMonth(),
-              booking.event.endDate.getDate()
-            );
-
-            if (day < eventStartDay || day > eventEndDay) continue;
-
-            const eventStart = parseTime(
-              day,
-              booking.event.startTime || "00:00"
-            );
-            const eventEnd = parseTime(day, booking.event.endTime || "23:59");
-
-            const bufferedStart = new Date(
-              eventStart.getTime() - bufferMinutes * 60000
-            );
-            const bufferedEnd = new Date(
-              eventEnd.getTime() + bufferMinutes * 60000
-            );
-
-            if (bufferedStart < reqEnd && reqStart < bufferedEnd) {
-              hasOverlap = true;
-              break;
-            }
-          }
-
-          if (hasOverlap) {
-            isAvailableAllDays = false;
-            break;
-          }
-        }
-
-        if (isAvailableAllDays) {
-          availableVenues.push(venue);
-        }
-      }
-
-      return {
-        success: true,
-        data: availableVenues,
-        message: `${availableVenues.length} venue(s) available for requested time range.`,
-      };
-    } catch (error: any) {
-      console.error("Repository error: findFullyAvailableVenues ->", error);
-      return {
-        success: false,
-        message: "Error occurred while checking venue availability.",
-        error: {
-          message: error?.message || "Unknown error",
-          stack: error?.stack || null,
-        },
-      };
-    }
+  const availableVenues: Venue[] = [];
+  
+  for (const venue of venues) {
+  const bookings = await AppDataSource.getRepository(VenueBooking)
+  .createQueryBuilder("booking")
+  .leftJoinAndSelect("booking.event", "event")
+  .where("booking.venueId = :venueId", { venueId: venue.venueId })
+  .andWhere("booking.approvalStatus = :status", { status: "approved" })
+  .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+  .getMany();
+  
+  let isAvailableAllDays = true;
+  
+  for (const booking of bookings) {
+  if (!booking.event) continue;
+  const eventStart = parseDateTime(booking.event.startDate, booking.event.startTime || "00:00");
+  const eventEnd = parseDateTime(booking.event.endDate, booking.event.endTime || "23:59");
+  if (eventStart === null || eventEnd === null) continue;
+  // Check for overlap with buffer
+  if (eventStart - bufferMinutes * 60000 < reqEnd && reqStart < eventEnd + bufferMinutes * 60000) {
+  isAvailableAllDays = false;
+  break;
+  }
+  }
+  
+  if (isAvailableAllDays) {
+  availableVenues.push(venue);
+  }
+  }
+  
+  return {
+  success: true,
+  data: availableVenues,
+  message: `${availableVenues.length} venue(s) available for requested time range.`,
+  };
+  } catch (error: any) {
+  console.error("Repository error: findFullyAvailableVenues ->", error);
+  return {
+  success: false,
+  message: "Error occurred while checking venue availability.",
+  error: {
+  message: error?.message || "Unknown error",
+  stack: error?.stack || null,
+  },
+  };
+  }
   }
 
   /**
@@ -1351,4 +1350,41 @@ export class VenueRepository {
       };
     }
   }
+
+  static async getVenuesWithApprovedEvents(): Promise<{ success: boolean; data?: any[]; message?: string }> {
+    try {
+      const venues = await AppDataSource.getRepository(Venue)
+        .createQueryBuilder("venue")
+        .leftJoinAndSelect("venue.events", "event")
+        .where("venue.deletedAt IS NULL")
+        .andWhere("event.status = :status", { status: "APPROVED" })
+        .getMany();
+      return { success: true, data: venues };
+    } catch (error) {
+      console.error("Error fetching venues with approved events:", error);
+      return { success: false, message: "Failed to fetch venues with approved events." };
+    }
+  }
+
+static async getVenuesWithApprovedEventsViaBookings(): Promise<{ success: boolean; data?: any[]; message?: string }> {
+  try {
+    const venues = await AppDataSource.getRepository(Venue)
+      .createQueryBuilder("venue")
+      .leftJoinAndSelect("venue.bookings", "booking")
+      .leftJoinAndSelect("booking.event", "event")
+      .where("event.status = :status", { status: "APPROVED" })
+      .andWhere("venue.deletedAt IS NULL")
+      .getMany();
+
+    // Filter out venues with no approved events
+    const venuesWithApprovedEvents = venues.filter(
+      v => v.bookings && v.bookings.some(b => b.event && b.event.status === "APPROVED")
+    );
+
+    return { success: true, data: venuesWithApprovedEvents };
+  } catch (error) {
+    console.error("Error fetching venues with approved events via bookings:", error);
+    return { success: false, message: "Failed to fetch venues with approved events via bookings." };
+  }
+}
 }

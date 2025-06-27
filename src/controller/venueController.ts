@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response}from "express";
 import cloudinary from "../config/cloudinary";
 import streamifier from "streamifier";
 
@@ -736,51 +736,61 @@ export class VenueController {
     }
 
     try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        res
-          .status(400)
-          .json({ success: false, message: "Invalid date format." });
-        return;
-      }
-
+      // Use plain string comparison for dates and times
+      const startDateStr = String(startDate);
+      const endDateStr = String(endDate);
+      const startTimeStr = String(startTime);
+      const endTimeStr = String(endTime);
+      
       const venueResult = await VenueRepository.getById(venueId);
       if (!venueResult.success || !venueResult.data) {
-        res.status(404).json({ success: false, message: "Venue not found." });
-        return;
+      res.status(404).json({ success: false, message: "Venue not found." });
+      return;
       }
-
-      // Combine date and time for precise overlap check
-      const startDateTime = startTime
-        ? new Date(`${startDate}T${startTime}:00Z`)
-        : start;
-      const endDateTime = endTime ? new Date(`${endDate}T${endTime}:00Z`) : end;
-
+      
+      // Helper to parse date and time (YYYY-MM-DD, HH:mm or HH:mm AM/PM) to minutes since epoch
+      function parseDateTime(dateStr: string, timeStr: string): number | null {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+      let [hour, minute] = [0, 0];
+      let t = timeStr.trim();
+      let ampm = null;
+      if (/am|pm/i.test(t)) {
+      ampm = t.slice(-2).toLowerCase();
+      t = t.slice(0, -2).trim();
+      }
+      const parts = t.split(":");
+      if (parts.length !== 2) return null;
+      hour = parseInt(parts[0], 10);
+      minute = parseInt(parts[1], 10);
+      if (isNaN(hour) || isNaN(minute)) return null;
+      if (ampm) {
+      if (ampm === "pm" && hour !== 12) hour += 12;
+      if (ampm === "am" && hour === 12) hour = 0;
+      }
+      const date = new Date(`${dateStr}T00:00:00Z`);
+      if (isNaN(date.getTime())) return null;
+      return date.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000;
+      }
+      
+      const startDateTime = parseDateTime(startDateStr, startTimeStr);
+      const endDateTime = parseDateTime(endDateStr, endTimeStr);
+      if (startDateTime === null || endDateTime === null) {
+      res.status(400).json({ success: false, message: "Invalid date or time format." });
+      return;
+      }
+      
       const eventsResult = await EventRepository.getByVenueId(venueId);
       if (eventsResult.success && eventsResult.data) {
-        const conflictingEvents = eventsResult.data.filter((event) => {
-          const eventStart = event.startTime
-            ? new Date(
-                `${event.startDate.toISOString().split("T")[0]}T${
-                  event.startTime
-                }:00Z`
-              )
-            : event.startDate;
-          const eventEnd = event.endTime
-            ? new Date(
-                `${event.endDate.toISOString().split("T")[0]}T${
-                  event.endTime
-                }:00Z`
-              )
-            : event.endDate;
-
-          return (
-            eventStart <= endDateTime &&
-            eventEnd >= startDateTime &&
-            event.status !== "CANCELLED"
-          );
-        });
+      const conflictingEvents = eventsResult.data.filter((event) => {
+      const eventStart = parseDateTime(event.startDate, event.startTime);
+      const eventEnd = parseDateTime(event.endDate, event.endTime);
+      if (eventStart === null || eventEnd === null) return false;
+      return (
+      eventStart <= endDateTime &&
+      eventEnd >= startDateTime &&
+      event.status !== "CANCELLED"
+      );
+      });
 
         if (conflictingEvents.length > 0) {
           res.status(200).json({
@@ -1133,13 +1143,14 @@ static async checkAvailability(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const result = await VenueRepository.findFullyAvailableVenues(
-      new Date(startDate as string),
-      new Date(endDate as string),
-      startTime as string,
-      endTime as string,
-      parseInt(bufferMinutes as string, 10)
-    );
+   const result = await VenueRepository.findFullyAvailableVenues(
+  startDate as string,
+  endDate as string,
+  startTime as string,
+  endTime as string,
+  parseInt(bufferMinutes as string, 10)
+);
+
 
     if (result.success) {
       res.status(200).json({
@@ -1300,4 +1311,29 @@ static async checkAvailability(req: Request, res: Response): Promise<void> {
       data: Object.values(EventType),
     });
   }
+
+  static async getVenuesWithApprovedEvents(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await VenueRepository.getVenuesWithApprovedEvents();
+    if (result.success && result.data) {
+      res.status(200).json({ success: true, data: result.data });
+    } else {
+      res.status(404).json({ success: false, message: result.message || "No venues with approved events found." });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch venues with approved events." });
+  }
+}
+static async getVenuesWithApprovedEventsViaBookings(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await VenueRepository.getVenuesWithApprovedEventsViaBookings();
+    if (result.success && result.data) {
+      res.status(200).json({ success: true, data: result.data });
+    } else {
+      res.status(404).json({ success: false, message: result.message || "No venues with approved events found." });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch venues with approved events." });
+  }
+}
 }

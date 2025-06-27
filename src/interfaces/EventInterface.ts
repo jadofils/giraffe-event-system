@@ -1,5 +1,5 @@
 import { EventStatus } from './Enums/EventStatusEnum';
-import { EventType} from './Enums/EventTypeEnum';
+import { EventType } from './Enums/EventTypeEnum';
 import { UserInterface } from './UserInterface';
 import { VenueInterface } from './VenueInterface';
 import { VenueBookingInterface } from './VenueBookingInterface';
@@ -13,10 +13,10 @@ export class EventInterface {
   description?: string | undefined;
   eventCategory?: string | undefined;
   eventType!: EventType;
-  startDate!: Date; // Note: Add to Event.ts
-  endDate!: Date; // Note: Add to Event.ts
-  startTime!: string; // Note: Add to Event.ts
-  endTime!: string; // Note: Add to Event.ts
+  startDate!: string; // plain date string (YYYY-MM-DD)
+  endDate!: string;   // plain date string (YYYY-MM-DD)
+  startTime!: string;
+  endTime!: string;
   maxAttendees?: number | undefined;
   status!: EventStatus;
   isFeatured!: boolean;
@@ -33,9 +33,9 @@ export class EventInterface {
   registrations?: RegistrationInterface[];
   payments?: PaymentInterface[];
   invoices?: InvoiceInterface[];
-  createdAt!: Date;
-  updatedAt!: Date;
-  deletedAt?: Date;
+  createdAt!: string;
+  updatedAt!: string;
+  deletedAt?: string;
 
   constructor(data: Partial<EventInterface>) {
     Object.assign(this, {
@@ -44,8 +44,8 @@ export class EventInterface {
       description: data.description ?? undefined,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || new Date(),
-      endDate: data.endDate || new Date(),
+      startDate: data.startDate || '',
+      endDate: data.endDate || '',
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
@@ -64,8 +64,8 @@ export class EventInterface {
       registrations: data.registrations || [],
       payments: data.payments || [],
       invoices: data.invoices || [],
-      createdAt: data.createdAt || new Date(),
-      updatedAt: data.updatedAt || new Date(),
+      createdAt: data.createdAt || '',
+      updatedAt: data.updatedAt || '',
       deletedAt: data.deletedAt,
     });
   }
@@ -112,8 +112,8 @@ export class EventInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate.toISOString(),
-      endDate: data.endDate.toISOString(),
+      startDate: data.startDate,
+      endDate: data.endDate,
       startTime: data.startTime,
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
@@ -133,8 +133,8 @@ export class EventInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate.toISOString(),
-      endDate: data.endDate.toISOString(),
+      startDate: data.startDate,
+      endDate: data.endDate,
       startTime: data.startTime,
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
@@ -148,9 +148,9 @@ export class EventInterface {
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
-      createdAt: data.createdAt.toISOString(),
-      updatedAt: data.updatedAt.toISOString(),
-      deletedAt: data.deletedAt?.toISOString(),
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+      deletedAt: data.deletedAt,
     });
   }
 }
@@ -180,8 +180,8 @@ export class EventRequestInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || new Date().toISOString(),
-      endDate: data.endDate || new Date().toISOString(),
+      startDate: data.startDate || '',
+      endDate: data.endDate || '',
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
@@ -193,7 +193,6 @@ export class EventRequestInterface {
       venueId: data.venueId || '',
     });
   }
-
   static toEntity(data: EventRequestInterface): EventInterface {
     return new EventInterface({
       eventId: data.eventId,
@@ -201,8 +200,8 @@ export class EventRequestInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: new Date(data.startDate),
-      endDate: new Date(data.endDate),
+      startDate: data.startDate,
+      endDate: data.endDate,
       startTime: data.startTime,
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
@@ -248,8 +247,8 @@ export class EventResponseInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || new Date().toISOString(),
-      endDate: data.endDate || new Date().toISOString(),
+      startDate: data.startDate || '',
+      endDate: data.endDate || '',
       startTime: data.startTime || '',
       endTime: data.endTime || '',
       maxAttendees: data.maxAttendees,
@@ -263,12 +262,11 @@ export class EventResponseInterface {
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
-      createdAt: data.createdAt || new Date().toISOString(),
-      updatedAt: data.updatedAt || new Date().toISOString(),
+      createdAt: data.createdAt || '',
+      updatedAt: data.updatedAt || '',
       deletedAt: data.deletedAt,
     });
   }
-
   static fromEntity(data: EventInterface): EventResponseInterface {
     return new EventResponseInterface({
       eventId: data.eventId,
@@ -276,8 +274,8 @@ export class EventResponseInterface {
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate.toISOString(),
-      endDate: data.endDate.toISOString(),
+      startDate: data.startDate,
+      endDate: data.endDate,
       startTime: data.startTime,
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
@@ -291,9 +289,9 @@ export class EventResponseInterface {
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
-      createdAt: data.createdAt.toISOString(),
-      updatedAt: data.updatedAt.toISOString(),
-      deletedAt: data.deletedAt?.toISOString(),
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+      deletedAt: data.deletedAt,
     });
   }
 }

@@ -20,26 +20,37 @@ export class ResetPasswordController {
    * @access Public (with valid token)
    */
   static async resetPassword(req: Request, res: Response): Promise<void> {
-    const { password, confirm_password } = req.body;
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("[Password Reset Attempt] Missing or invalid Authorization header");
-      res.status(401).json({ success: false, message: "Authentication token is required" });
-      return;
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    if (!token || !password || !confirm_password) {
-      console.log("[Password Reset Attempt] Missing token, password, or confirm_password");
-      res.status(400).json({ success: false, message: "Token, password, and confirmation are required" });
-      return;
-    }
+  const { password, confirm_password } = req.body;
+  let token = req.body.token || req.query.token;
+  
+  // Support token in Authorization header (Bearer or raw)
+  if (!token && req.headers.authorization) {
+  const authHeader = req.headers.authorization;
+  if (authHeader.startsWith('Bearer ')) {
+  token = authHeader.slice(7);
+  } else {
+  token = authHeader;
+  }
+  }
+  
+  if (!token || !password || !confirm_password) {
+  console.log("[Password Reset Attempt] Missing token, password, or confirm_password");
+  res.status(400).json({ success: false, message: "Token, password, and confirmation are required" });
+  return;
+  }
 
     if (password !== confirm_password) {
       console.log("[Password Reset Attempt] Passwords do not match");
       res.status(400).json({ success: false, message: "Password and confirmation do not match" });
+      return;
+    }
+
+    // Check if token has been used
+    const usedTokenKey = `used:reset:token:${token}`;
+    const isTokenUsed = await CacheService.get(usedTokenKey);
+    if (isTokenUsed) {
+      console.log(`[Password Reset Attempt] Token: ${token} - Token already used`);
+      res.status(400).json({ success: false, message: "This reset token has already been used" });
       return;
     }
 
@@ -52,21 +63,20 @@ export class ResetPasswordController {
         needsPasswordReset?: boolean;
         purpose?: string;
       };
+      console.log(`[Password Reset Attempt] Decoded token: ${JSON.stringify(decoded)}`);
 
-      if (decoded.purpose !== "password_reset" && !decoded.needsPasswordReset) {
+      if (decoded.purpose !== "password_reset") {
         console.log(`[Password Reset Attempt] User ID: ${decoded.userId} - Invalid token purpose`);
         res.status(403).json({ success: false, message: "This token is not authorized for password reset" });
         return;
       }
 
-      // Validate userId
       if (!ResetPasswordController.UUID_REGEX.test(decoded.userId)) {
         console.log(`[Password Reset Attempt] User ID: ${decoded.userId} - Invalid UUID format`);
         res.status(400).json({ success: false, message: "Invalid user ID format" });
         return;
       }
 
-      // Find user
       const userRepository = AppDataSource.getRepository(User);
       const cacheKey = `user:id:${decoded.userId}`;
       const user = await CacheService.getOrSetSingle(
@@ -91,6 +101,9 @@ export class ResetPasswordController {
       const hashedPassword = await bcrypt.hash(password, 10);
       user.password = hashedPassword;
       await userRepository.save(user);
+
+      // Mark token as used
+      await CacheService.set(usedTokenKey, true, 3600);
 
       // Invalidate cache
       await CacheService.invalidateMultiple([
@@ -123,15 +136,12 @@ export class ResetPasswordController {
         secure: process.env.NODE_ENV === "production",
       });
 
-      // Clear session data
-      if (req.session) {
-        PasswordService.invalidateDefaultPassword(req, user.email);
-        // Explicitly clear session data to prevent reuse of default password
-        req.session.defaultPassword = undefined;
-        req.session.defaultEmail = undefined;
-        req.session.username = undefined;
-        // TODO: Verify if PasswordService.invalidateDefaultPassword is necessary here,
-        // as the password has already been updated in the database
+      // Send success email
+      try {
+        await PasswordService.sendSuccessPasswordForgetEmail(user.email, user.username);
+        console.log(`[Password Reset Success] Success email sent to ${user.email}`);
+      } catch (emailError) {
+        console.error(`[Password Reset Success] Failed to send success email to ${user.email}:`, emailError);
       }
 
       console.log(`[Password Reset Success] User ID: ${user.userId}, Email: ${user.email}`);
@@ -228,9 +238,8 @@ export class ResetPasswordController {
       const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
 
       // Send email
-      await PasswordService.sendPasswordResetEmail(user.email, resetLink);
-
-      console.log(`[Password Reset Success] Email sent to: ${user.email}`);
+      await PasswordService.sendPasswordResetEmail(user.email, resetLink, user.username);
+      console.log(`[Password Reset Success] Email sent to: ${user.email}, Reset Link: ${resetLink}`);
 
       res.status(200).json({
         success: true,
@@ -248,28 +257,38 @@ export class ResetPasswordController {
    * @access Public
    */
   static async resendPasswordResetEmail(req: Request, res: Response): Promise<void> {
-    const { email, token } = req.body;
-
-    if (!email || !token) {
-      console.log(`[Password Reset Attempt] Email: ${email}, Token: ${token} - Missing email or token`);
-      res.status(400).json({ success: false, message: "Email and token are required" });
-      return;
+    const { email } = req.body;
+    let token = req.body.token || req.query.token;
+    // Support token in Authorization header (Bearer or raw)
+    if (!token && req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+    } else {
+    token = authHeader;
     }
-
+    }
+    
+    if (!email || !token) {
+    console.log(`[Password Reset Attempt] Email: ${email}, Token: ${token} - Missing email or token`);
+    res.status(400).json({ success: false, message: "Email and token are required" });
+    return;
+    }
+    
     try {
-      // Decode token (allow expired tokens)
-      const decoded = jwt.decode(token) as {
-        userId: string;
-        email: string;
-        username: string;
-        purpose?: string;
-      } | null;
-
-      if (!decoded || decoded.email !== email || decoded.purpose !== "password_reset") {
-        console.log(`[Password Reset Attempt] Email: ${email}, Token: ${token} - Invalid or mismatched token`);
-        res.status(400).json({ success: false, message: "Invalid or mismatched token" });
-        return;
-      }
+    // Decode token (allow expired tokens)
+    const decoded = jwt.decode(token) as {
+    userId: string;
+    email: string;
+    username: string;
+    purpose?: string;
+    } | null;
+    
+    if (!decoded || decoded.email !== email || decoded.purpose !== "password_reset") {
+    console.log(`[Password Reset Attempt] Email: ${email}, Token: ${token} - Invalid or mismatched token`);
+    res.status(400).json({ success: false, message: "Invalid or mismatched token" });
+    return;
+    }
 
       // Find user
       const userRepository = AppDataSource.getRepository(User);
@@ -332,16 +351,7 @@ export class ResetPasswordController {
       const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
 
       // Send email
-      await PasswordService.sendPasswordResetEmail(user.email, resetLink);
-
-      // Clear session data if present
-      if (req.session) {
-        req.session.defaultPassword = undefined;
-        req.session.defaultEmail = undefined;
-        req.session.username = undefined;
-        // Note: Not calling PasswordService.invalidateDefaultPassword here as it's typically tied to default password login
-      }
-
+      await PasswordService.sendPasswordResetEmail(user.email, resetLink, user.username);
       console.log(`[Password Reset Success] Email: ${email}, Token: ${token}, Resent email to: ${user.email}, Reset Link: ${resetLink}`);
 
       res.status(200).json({
@@ -352,6 +362,5 @@ export class ResetPasswordController {
       console.error(`[Password Reset Error] Email: ${email}, Token: ${token} - ${error instanceof Error ? error.message : "Unknown error"}`);
       res.status(500).json({ success: false, message: "Failed to resend password reset email" });
     }
-}
-
+  }
 }

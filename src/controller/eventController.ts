@@ -16,67 +16,98 @@ export class EventController {
   private static eventRepository = new EventRepository();
 
   static async createEvent(
-    req: Request,
-    res: Response,
-    next: NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
   ): Promise<void> {
-    try {
-      // Validate authentication
-      if (!req.user || !req.user.userId || !req.user.organizationId) {
-        res.status(401).json({
-          success: false,
-          message: "Unauthorized: User is not properly authenticated.",
-        });
-        return;
-      }
-
-      // Validate UUID format for organizationId and organizerId
-      if (!UUID_REGEX.test(req.user.organizationId)) {
-        res.status(400).json({
-          success: false,
-          message: "Invalid organization ID format in token.",
-        });
-        return;
-      }
-      if (!UUID_REGEX.test(req.user.userId)) {
-        res.status(400).json({
-          success: false,
-          message: "Invalid user ID format in token.",
-        });
-        return;
-      }
-
-      const eventData: Partial<EventInterface> = {
-        ...req.body,
-        organizerId: req.user.userId,
-        status: EventStatus.PENDING,
-      };
-
-      // Create event with organizationId from token
-      const createResult = await EventRepository.create(
-        eventData,
-        req.user.organizationId
-      );
-      if (!createResult.success || !createResult.data) {
-        res.status(400).json({ success: false, message: createResult.message });
-        return;
-      }
-
-      // Sanitize the event and venues to avoid circular structure
-      const sanitizedData = {
-        event: sanitizeEvent(createResult.data.event),
-        venues: createResult.data.venues?.map(sanitizeVenue),
-      };
-
-      res.status(201).json({
-        success: true,
-        data: sanitizedData,
-        message: "Event and venues associated successfully.",
-      });
-    } catch (error) {
-      console.error("Error in createEvent:", error);
-      next(error);
-    }
+  try {
+  // Validate authentication
+  if (!req.user || !req.user.userId || !req.user.organizationId) {
+  res.status(401).json({
+  success: false,
+  message: "Unauthorized: User is not properly authenticated.",
+  });
+  return;
+  }
+  
+  // Validate UUID format for organizationId and organizerId
+  if (!UUID_REGEX.test(req.user.organizationId)) {
+  res.status(400).json({
+  success: false,
+  message: "Invalid organization ID format in token.",
+  });
+  return;
+  }
+  if (!UUID_REGEX.test(req.user.userId)) {
+  res.status(400).json({
+  success: false,
+  message: "Invalid user ID format in token.",
+  });
+  return;
+  }
+  
+  // --- Conflict check before creating event ---
+  const bookingRepo = AppDataSource.getRepository(VenueBooking);
+  const { venues, startDate, endDate } = req.body;
+  if (!venues || !Array.isArray(venues) || !startDate || !endDate) {
+  res.status(400).json({
+  success: false,
+  message: "venues, startDate, and endDate are required for conflict check."
+  });
+  return;
+  }
+  for (const venueId of venues) {
+  const conflicts = await bookingRepo
+  .createQueryBuilder("booking")
+  .leftJoin("booking.event", "event")
+  .where("booking.venueId = :venueId", { venueId })
+  .andWhere("booking.approvalStatus = :bookingStatus", { bookingStatus: ApprovalStatus.APPROVED })
+  .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+  .andWhere(
+  "(event.startDate <= :endDate AND event.endDate >= :startDate)",
+  { startDate, endDate }
+  )
+  .getCount();
+  if (conflicts > 0) {
+  res.status(409).json({
+  success: false,
+  message: `Venue ${venueId} is already booked for an approved event on the same date(s).`,
+  venueId
+  });
+  return;
+  }
+  }
+  // --- End conflict check ---
+  
+  const eventData: Partial<EventInterface> = {
+  ...req.body,
+  organizerId: req.user.userId,
+  status: EventStatus.PENDING,
+  };
+  
+  // Create event with organizationId from token
+  const createResult = await EventRepository.create(
+  eventData,
+  req.user.organizationId
+  );
+  if (!createResult.success || !createResult.data) {
+  res.status(400).json({ success: false, message: createResult.message });
+  return;
+  }
+  
+  // Return the full event and venues
+  res.status(201).json({
+  success: true,
+  data: {
+  event: createResult.data.event, // full event object
+  venues: createResult.data.venues?.map(sanitizeVenue),
+  },
+  message: "Event and venues associated successfully.",
+  });
+  } catch (error) {
+  console.error("Error in createEvent:", error);
+  next(error);
+  }
   }
 
   static async approveEvent(
@@ -102,6 +133,10 @@ export class EventController {
       }
       // Refetch event with all relations (including venueBookings, venues, organizer, organization)
       const event = (await EventRepository.getById(id)).data!;
+
+      // === REJECT/CANCEL CONFLICTING PENDING EVENTS ===
+      const { rejectConflictingPendingEvents } = await import("../middlewares/rejectConflictingPendingEvents");
+      await rejectConflictingPendingEvents(event);
       // Eager-load venueBookings with venue, user, organization, and venue.organization
       const bookings = await AppDataSource.getRepository(VenueBooking).find({
         where: { eventId: id },

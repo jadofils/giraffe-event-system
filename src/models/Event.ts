@@ -20,7 +20,6 @@ import {
   IsInt,
   Min,
   IsBoolean,
-  IsDateString,
   IsString,
 } from 'class-validator';
 import { Venue } from './Venue';
@@ -54,23 +53,23 @@ export class Event {
   @IsEnum(EventType, { message: 'Event type must be one of: public, private' })
   eventType!: EventType;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
-  @IsOptional()
-  @IsDateString({}, { message: 'Start date must be a valid date' })
-  startDate!: Date;
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  @IsNotEmpty({ message: 'Start date is required' })
+  @Length(10, 10, { message: 'Start date must be in YYYY-MM-DD format' })
+  startDate!: string;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
-  @IsOptional()
-  @IsDateString({}, { message: 'End date must be a valid date' })
-  endDate!: Date;
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  @IsNotEmpty({ message: 'End date is required' })
+  @Length(10, 10, { message: 'End date must be in YYYY-MM-DD format' })
+  endDate!: string;
 
-  @Column({ nullable: true })
-  @IsOptional()
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  @IsNotEmpty({ message: 'Start time is required' })
   @IsString({ message: 'Start time must be a string' })
   startTime!: string;
 
-  @Column({ nullable: true })
-  @IsOptional()
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  @IsNotEmpty({ message: 'End time is required' })
   @IsString({ message: 'End time must be a string' })
   endTime!: string;
 
@@ -137,8 +136,8 @@ export class Event {
   @Length(0, 100, { message: 'Event category must be at most 100 characters' })
   eventCategory?: string;
 
-@OneToMany(() => VenueBooking, (venueBooking) => venueBooking.event)
-venueBookings!: VenueBooking[];
+  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.event)
+  venueBookings!: VenueBooking[];
   @OneToMany(() => Registration, (registration) => registration.event, { cascade: false })
   registrations!: Registration[];
 

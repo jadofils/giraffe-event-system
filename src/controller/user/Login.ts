@@ -18,123 +18,140 @@ export class LoginController {
    * @route POST /api/auth/login/default
    * @access Public
    */
-  static async loginWithDefaultPassword(req: Request, res: Response): Promise<void> {
-    if (!AppDataSource.isInitialized) {
-      res.status(500).json({ success: false, message: "Database not initialized" });
+static async loginWithDefaultPassword(req: Request, res: Response): Promise<void> {
+  if (!AppDataSource.isInitialized) {
+    res.status(500).json({ success: false, message: "Database not initialized" });
+    return;
+  }
+
+  const { identifier, password } = req.body;
+
+  if (!identifier || !password) {
+    res.status(400).json({ success: false, message: "Please enter both identifier and password." });
+    return;
+  }
+
+  const userRepository = AppDataSource.getRepository(User);
+
+  try {
+    const user = await userRepository.findOne({
+      where: [
+        { email: identifier },
+        { username: identifier },
+        { phoneNumber: identifier }
+      ],
+      relations: ["role", "role.permissions", "organizations"],
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: "No account found with that email, username, or phone number." });
       return;
     }
 
-    const { identifier, password } = req.body;
-
-    if (!identifier || !password) {
-      res.status(400).json({ success: false, message: "Please enter both identifier and password." });
+    // Validate user UUID
+    if (!LoginController.UUID_REGEX.test(user.userId)) {
+      res.status(500).json({ success: false, message: "Invalid user ID format." });
       return;
     }
 
-    const userRepository = AppDataSource.getRepository(User);
+    // Password verification
+    let isMatch = false;
+    if (user.password) {
+      isMatch = await bcrypt.compare(password, user.password);
+    }
 
+    if (!isMatch) {
+      res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
+      return;
+    }
+
+    // Validate organization
+    if (!user.organizations || user.organizations.length === 0) {
+      res.status(401).json({ success: false, message: "User is not associated with any organization." });
+      return;
+    }
+
+    const firstOrganization = user.organizations[0];
+    if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
+      res.status(500).json({ success: false, message: "Invalid organization ID format." });
+      return;
+    }
+
+    // Generate JWT token for authentication
+    const token = jwt.sign(
+      {
+        userId: user.userId,
+        email: user.email,
+        username: user.username,
+        phoneNumber: user.phoneNumber,
+        organizationId: firstOrganization.organizationId,
+        roleId: user.role.roleId,
+        roleName: user.role.roleName,
+      },
+      SECRET_KEY,
+      { expiresIn: "24h" }
+    );
+
+    res.cookie("authToken", token, {
+      httpOnly: true,
+      maxAge: COOKIE_EXPIRATION,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    const { password: _, ...userData } = user;
+
+    // Generate password reset token
+    const resetToken = jwt.sign(
+      {
+        userId: user.userId,
+        email: user.email,
+        username: user.username,
+        purpose: "password_reset",
+      },
+      SECRET_KEY,
+      { expiresIn: "1h" }
+    );
+
+    // Create reset link
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
+    const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+
+    // Log the reset link for debugging
+    console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
+
+    // Send reset link to user's email
     try {
-      const user = await userRepository.findOne({
-        where: [
-          { email: identifier },
-          { username: identifier },
-          { phoneNumber: identifier }
-        ],
-        relations: ["role", "role.permissions", "organizations"],
-      });
-
-      if (!user) {
-        res.status(404).json({ success: false, message: "No account found with that email, username, or phone number." });
-        return;
-      }
-
-      // Validate user UUID
-      if (!LoginController.UUID_REGEX.test(user.userId)) {
-        res.status(500).json({ success: false, message: "Invalid user ID format." });
-        return;
-      }
-
-      // Password verification (default password is now the user's password)
-      let isMatch = false;
-      if (user.password) {
-        isMatch = await bcrypt.compare(password, user.password);
-      }
-
-      if (!isMatch) {
-        res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
-        return;
-      }
-
-      // Validate organization
-      if (!user.organizations || user.organizations.length === 0) {
-        res.status(401).json({ success: false, message: "User is not associated with any organization." });
-        return;
-      }
-
-      const firstOrganization = user.organizations[0];
-      if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-        res.status(500).json({ success: false, message: "Invalid organization ID format." });
-        return;
-      }
-
-      // Generate JWT token
-      const token = jwt.sign(
-        {
-          userId: user.userId,
-          email: user.email,
-          username: user.username,
-          phoneNumber: user.phoneNumber,
-          organizationId: firstOrganization.organizationId,
-          roleId: user.role.roleId,
-          roleName: user.role.roleName,
-        },
-        SECRET_KEY,
-        { expiresIn: "24h" }
-      );
-
-      res.cookie("authToken", token, {
-        httpOnly: true,
-        maxAge: COOKIE_EXPIRATION,
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-        secure: process.env.NODE_ENV === "production",
-      });
-
-      const { password: _, ...userData } = user;
-
-      // Generate password reset token
-      const resetToken = jwt.sign(
-        {
-          userId: user.userId,
-          email: user.email,
-          username: user.username,
-          purpose: "password_reset",
-        },
-        SECRET_KEY,
-        { expiresIn: "1h" }
-      );
-
-      // Create reset link
-      const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
-      const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
-
-      // Send reset link to user's email
-      await PasswordService.sendPasswordResetEmail(user.email, resetLink);
-
-      res.status(200).json({
-        success: true,
-        message: "Login successful! Please check your email to reset your password.",
-        user: { ...userData, needsPasswordReset: true },
-        token,
-        resetLink, // Optionally return the link for testing
-      });
-    } catch (error) {
+      await PasswordService.sendPasswordResetEmail(user.email, resetLink, user.username);
+      console.log(`[Password Reset Email] Successfully sent to ${user.email}`);
+    } catch (emailError) {
+      console.error(`[Password Reset Email] Failed to send to ${user.email}:`, emailError);
       res.status(500).json({
         success: false,
-        message: "Something went wrong while logging in.",
-        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Login successful, but failed to send password reset email.",
+        user: { ...userData, needsPasswordReset: true },
+        token,
       });
+      return;
     }
+
+    res.status(200).json({
+    success: true,
+    message: "Login successful! Please check your email to reset your password.",
+    user: { ...userData, needsPasswordReset: true },
+    token, // regular auth token
+    resetToken, // <-- add the reset token for direct use in Postman/testing
+    resetLink, // Optionally return the link for testing
+    });
+  } catch (error) {
+    console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong while logging in.",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
+}
 
   /**
    * Login using user password
@@ -165,12 +182,13 @@ export class LoginController {
               { username: identifier },
               { phoneNumber: identifier }
             ],
-            relations: [
-              "organizations",
-              "organizations.venues",
-              "role",
-              "role.permissions"
-            ],
+          relations: [
+  "organizations",
+  "organizations.venues",
+  "role",
+  "role.permissions",
+  "venues"
+]
           });
         },
         CACHE_TTL

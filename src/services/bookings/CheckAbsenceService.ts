@@ -65,7 +65,7 @@ export class CheckAbsenceService {
         const currentDateStr = currentDate.toISOString().slice(0, 10);
         const dailyBookings = bookedSlots.filter(
           (booking) =>
-            booking.event && booking.event.startDate?.toISOString().slice(0, 10) === currentDateStr
+            booking.event && booking.event.startDate === currentDateStr
         );
 
         if (dailyBookings.length === 0) {

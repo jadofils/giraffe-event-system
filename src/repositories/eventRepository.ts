@@ -132,8 +132,8 @@ export class EventRepository {
       event.eventType = mappedEventType;
       event.organizerId = data.organizerId;
       event.organizationId = data.organizationId || eventOrgId;
-      event.startDate = new Date(data.startDate);
-      event.endDate = new Date(data.endDate);
+      event.startDate = data.startDate ;
+      event.endDate = data.endDate;
       event.startTime = data.startTime || "";
       event.endTime = data.endTime || "";
       event.description = data.description;
@@ -232,39 +232,27 @@ export class EventRepository {
         venues.push(...approvedVenues);
       }
 
-      // Check for conflicting events BEFORE saving the event
+      // Check for conflicting approved events for each venue BEFORE saving the event
       if (venueIds.length > 0) {
-        const conflictingEvents = await queryRunner.manager
-          .getRepository(Event)
-          .createQueryBuilder("event")
-          .leftJoinAndSelect("event.venues", "venue")
-          .where("LOWER(event.eventTitle) = LOWER(:title)", {
-            title: data.eventTitle,
-          })
-          .andWhere("event.organizationId = :organizationId", {
-            organizationId: eventOrgId,
-          })
-          .andWhere("event.startDate = :startDate", {
-            startDate: new Date(data.startDate),
-          })
-          .andWhere("event.startTime = :startTime", {
-            startTime: data.startTime || "",
-          })
-          .andWhere("venue.venueId IN (:...venueIds)", { venueIds })
-          .orderBy("event.createdAt", "DESC")
-          .getMany();
+        for (const venueId of venueIds) {
+          const conflictCount = await queryRunner.manager
+            .getRepository(VenueBooking)
+            .createQueryBuilder("booking")
+            .leftJoin("booking.event", "event")
+            .where("booking.venueId = :venueId", { venueId })
+            .andWhere("booking.approvalStatus = :bookingStatus", { bookingStatus: ApprovalStatus.APPROVED })
+            .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+            .andWhere(
+              "(event.startDate <= :endDate AND event.endDate >= :startDate)",
+              { startDate: data.startDate, endDate: data.endDate }
+            )
+            .getCount();
 
-        if (conflictingEvents.length > 0) {
-          const recentConflict = conflictingEvents.find((conflict) => {
-            const createdAt = new Date(conflict.createdAt).getTime();
-            return Date.now() - createdAt < 15 * 60 * 1000;
-          });
-
-          if (recentConflict) {
+          if (conflictCount > 0) {
             await queryRunner.rollbackTransaction();
             return {
               success: false,
-              message: `Event "${recentConflict.eventTitle}" already exists at this venue on the same date and time. Please wait at least 15 minutes before trying again.`,
+              message: `Venue ${venueId} is already booked for an approved event on the same date(s).`,
             };
           }
         }
@@ -373,13 +361,7 @@ export class EventRepository {
         async () =>
           await AppDataSource.getRepository(Event).findOne({
             where: { eventId: id },
-            relations: [
-              "organizer",
-              "organizer.role",
-              "venues",
-              "venueBookings",
-              "organization",
-            ],
+            relations: ["venues", "venueBookings", "organizer", "organization"]
           }),
         this.CACHE_TTL
       );
@@ -577,8 +559,8 @@ export class EventRepository {
   }
 
   static async getByDateRange(
-    startDate: Date,
-    endDate: Date
+    startDate: string,
+    endDate: string
   ): Promise<{ success: boolean; data?: Event[]; message?: string }> {
     if (!startDate || !endDate) {
       return { success: false, message: "Start and end dates are required" };
@@ -586,7 +568,7 @@ export class EventRepository {
 
     const cacheKey = `${
       this.CACHE_PREFIX
-    }date:${startDate.toISOString()}:${endDate.toISOString()}`;
+    }date:${startDate}:${endDate}`;
     try {
       const events = await CacheService.getOrSetMultiple(
         cacheKey,
@@ -672,8 +654,8 @@ export class EventRepository {
         eventType: updatedEventType,
         organizerId: data.organizerId ?? event.organizerId,
         organizationId: data.organizationId ?? event.organizationId,
-        startDate: data.startDate ? new Date(data.startDate) : event.startDate,
-        endDate: data.endDate ? new Date(data.endDate) : event.endDate,
+        startDate: data.startDate ? data.startDate : event.startDate,
+        endDate: data.endDate ? data.endDate : event.endDate,
         startTime: data.startTime ?? event.startTime,
         endTime: data.endTime ?? event.endTime,
         description: data.description ?? event.description,

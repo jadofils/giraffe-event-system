@@ -204,4 +204,5 @@ export class Venue {
   @Column({ type: "simple-array", nullable: true })
   @IsOptional()
   subPhotoUrls?: string[];
+  venueBookings: any;
 }

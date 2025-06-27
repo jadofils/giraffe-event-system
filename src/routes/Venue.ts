@@ -76,7 +76,10 @@ router.get("/:venueId/events", authenticate, VenueController.getEventsByVenue);
 router.get("/public-approved-events", VenueController.listPublicApprovedEvents);
 
 router.get("/event-types", VenueController.listEventTypes);
-
+router.get("/venue-conflicts", VenueController.checkVenueEventConflicts);
+router.get("/with-approved-events", VenueController.getVenuesWithApprovedEvents);
 // router.use("/", checkAbsenceRoutes);
+router.get("/with-approved-events-via-bookings", VenueController.getVenuesWithApprovedEventsViaBookings);
+
 
 export const venueRoute = router;
