@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EventController } from '../controller/eventController';
 import { authenticate } from '../middlewares/AuthMiddleware';
+import { checkVenueAvailability } from '../middlewares/checkVenueAvailability';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/:eventId/venue-bookings', EventController.getVenueBookings);
 router.use(authenticate);
 
 // Event Management
-router.post('/', EventController.createEvent);
+router.post('/',checkVenueAvailability, EventController.createEvent);
 router.put('/:id/approve', EventController.approveEvent);
 router.put('/:id', EventController.updateEvent);
 router.delete('/:id', EventController.deleteEvent);
