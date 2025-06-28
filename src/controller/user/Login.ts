@@ -115,7 +115,7 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
 
     // Create reset link
     const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
-    const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+    const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
 
     // Log the reset link for debugging
     console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
