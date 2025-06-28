@@ -14,7 +14,6 @@ export class AppConfig {
   static readonly PORT: number = parseInt(process.env.PORT || '3000', 10);
   static readonly API_PREFIX: string = process.env.API_PREFIX || '/api/v1';
   static readonly CORS_ORIGIN: string = process.env.CORS_ORIGIN || '*';
-  
   // JWT Authentication
   static readonly JWT_SECRET: string = process.env.JWT_SECRET || 'dsghjkaskakgskjhajlslakklsjfdhjhkajlsjlajskal';
   static readonly JWT_EXPIRATION: string = process.env.JWT_EXPIRATION || '1d';
@@ -102,3 +101,4 @@ export class AppConfig {
 
 // Validate config on import
 AppConfig.validate();
+console.log("The cors origin", AppConfig.CORS_ORIGIN);

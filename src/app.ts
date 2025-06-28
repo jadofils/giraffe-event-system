@@ -24,7 +24,7 @@ const app = express();
 // Apply standard Express middlewares
 app.use(helmet());
 app.use(cors({
-  origin: AppConfig.CORS_ORIGIN,
+  origin: AppConfig.CORS_ORIGIN === '*' ? true : AppConfig.CORS_ORIGIN,
   credentials: true
 }));
 app.use(express.json());
@@ -76,5 +76,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     ...(AppConfig.isDevelopment() && { stack: err.stack })
   });
 });
-
+console.log("this cors origin from app.ts:",AppConfig.CORS_ORIGIN)
 export default app;
