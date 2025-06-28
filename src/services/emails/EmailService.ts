@@ -243,7 +243,7 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
     <p>Your password for your University of Rwanda account has been successfully changed.</p>
     <p>You can now log in with your new password.</p>
     <div style="text-align: center;">
-      <a href="https://your-app-url.vercel.app/login" class="button">Login to Your Account</a>
+      <a href="https://giraffe-space.vercel.app/login" class="button">Login to Your Account</a>
     </div>
     <p>Please keep your password secure and do not share it with anyone.</p>
     <p>If you didn't request this change, please contact our support team immediately at <a href="mailto:support@ur.ac.rw">support@ur.ac.rw</a>.</p>

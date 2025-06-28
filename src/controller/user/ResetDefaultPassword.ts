@@ -348,7 +348,7 @@ export class ResetPasswordController {
 
       // Create reset link
       const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
-      const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+      const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
 
       // Send email
       await PasswordService.sendPasswordResetEmail(user.email, resetLink, user.username);
