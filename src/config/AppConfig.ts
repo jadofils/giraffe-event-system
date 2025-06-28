@@ -13,8 +13,7 @@ export class AppConfig {
   static readonly NODE_ENV: string = process.env.NODE_ENV || 'development';
   static readonly PORT: number = parseInt(process.env.PORT || '3000', 10);
   static readonly API_PREFIX: string = process.env.API_PREFIX || '/api/v1';
-  static readonly CORS_ORIGIN: string = process.env.CORS_ORIGIN || '*';
-  // JWT Authentication
+static readonly CORS_ORIGIN: string = process.env.CORS_ORIGIN || 'http://localhost:5000';  // JWT Authentication
   static readonly JWT_SECRET: string = process.env.JWT_SECRET || 'dsghjkaskakgskjhajlslakklsjfdhjhkajlsjlajskal';
   static readonly JWT_EXPIRATION: string = process.env.JWT_EXPIRATION || '1d';
   static readonly JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET || 'fgdhjahshlajsaghkslkajsjkajsjgagksjhahsk';

@@ -24,7 +24,14 @@ const app = express();
 // Apply standard Express middlewares
 app.use(helmet());
 app.use(cors({
-  origin: AppConfig.CORS_ORIGIN,
+  origin: (origin, callback) => {
+    const allowedOrigins = [AppConfig.CORS_ORIGIN];
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
