@@ -23,8 +23,7 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-ENV NODE_ENV production
-
+ENV NODE_ENV=production
 # ✅ Copy built code and dependencies
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json

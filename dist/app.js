@@ -56,8 +56,10 @@ const app = (0, express_1.default)();
 // Apply standard Express middlewares
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: AppConfig_1.AppConfig.CORS_ORIGIN,
-    credentials: true
+    origin: AppConfig_1.AppConfig.CORS_ORIGIN === '*' ? true : AppConfig_1.AppConfig.CORS_ORIGIN,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
 }));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -98,4 +100,5 @@ app.use((err, req, res, next) => {
     res.status(status).json(Object.assign({ status,
         message }, (AppConfig_1.AppConfig.isDevelopment() && { stack: err.stack })));
 });
+console.log("this cors origin from app.ts:", AppConfig_1.AppConfig.CORS_ORIGIN);
 exports.default = app;

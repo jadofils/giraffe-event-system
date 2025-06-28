@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const eventController_1 = require("../controller/eventController");
 const AuthMiddleware_1 = require("../middlewares/AuthMiddleware");
+const checkVenueAvailability_1 = require("../middlewares/checkVenueAvailability");
 const router = (0, express_1.Router)();
 // =======================
 // 📂 Public Event Routes
@@ -15,7 +16,7 @@ router.get('/:eventId/venue-bookings', eventController_1.EventController.getVenu
 // =======================
 router.use(AuthMiddleware_1.authenticate);
 // Event Management
-router.post('/', eventController_1.EventController.createEvent);
+router.post('/', checkVenueAvailability_1.checkVenueAvailability, eventController_1.EventController.createEvent);
 router.put('/:id/approve', eventController_1.EventController.approveEvent);
 router.put('/:id', eventController_1.EventController.updateEvent);
 router.delete('/:id', eventController_1.EventController.deleteEvent);

@@ -90,3 +90,4 @@ AppConfig.DEFAULT_EVENT_DURATION_HOURS = parseInt(process.env.DEFAULT_EVENT_DURA
 AppConfig.MAX_EVENT_CAPACITY = parseInt(process.env.MAX_EVENT_CAPACITY || '1000', 10);
 // Validate config on import
 AppConfig.validate();
+console.log("The cors origin", AppConfig.CORS_ORIGIN);
