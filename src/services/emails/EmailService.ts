@@ -1,5 +1,5 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -11,7 +11,7 @@ class PasswordService {
     eventDate,
     venueName,
     ticketPdf,
-    qrCode
+    qrCode,
   }: {
     to: string;
     subject: string;
@@ -23,11 +23,11 @@ class PasswordService {
   }): Promise<boolean> {
     try {
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        service: "gmail",
         auth: {
           user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        }
+          pass: process.env.EMAIL_PASS,
+        },
       });
 
       const mailOptions = {
@@ -39,23 +39,23 @@ class PasswordService {
           <p><strong>Event Date:</strong> ${eventDate.toDateString()}</p>
           <p><strong>Venue:</strong> ${venueName}</p>
           <p>Attached is your ticket. Please present the QR code below at the event.</p>
-          ${qrCode ? `<img src="${qrCode}" alt="QR Code" width="150"/>` : ''}
+          ${qrCode ? `<img src="${qrCode}" alt="QR Code" width="150"/>` : ""}
           <p>Thank you for booking with us!</p>
         `,
         attachments: [
           {
             filename: `${eventName}_Ticket.pdf`,
             content: ticketPdf,
-            contentType: 'application/pdf'
-          }
-        ]
+            contentType: "application/pdf",
+          },
+        ],
       };
 
       await transporter.sendMail(mailOptions);
       console.log(`Ticket email sent successfully to ${to}`);
       return true;
     } catch (error) {
-      console.error('Error sending ticket email:', error);
+      console.error("Error sending ticket email:", error);
       return false;
     }
   }
@@ -64,37 +64,45 @@ class PasswordService {
   public static readonly EXPIRY_HOURS = 24;
   public static readonly SALT_ROUNDS = 10;
 
-  public static log(level: 'info' | 'warn' | 'error', message: string, ...meta: any[]) {
+  public static log(
+    level: "info" | "warn" | "error",
+    message: string,
+    ...meta: any[]
+  ) {
     const prefix = level.toUpperCase();
     console[level](`${prefix}: ${message}`, ...meta);
   }
 
   public static generatePassword(length = this.PASSWORD_LENGTH): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    return Array.from(
+      { length },
+      () => chars[Math.floor(Math.random() * chars.length)]
+    ).join("");
   }
 
   public static getTransporter() {
     if (!process.env.GMAIL_USER || !process.env.GMAIL_PASSWORD) {
-      throw new Error('GMAIL credentials not configured');
+      throw new Error("GMAIL credentials not configured");
     }
 
     return nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASSWORD,
       },
     });
   }
-public static generateWelcomeEmailContent(
-email: string,
-password: string,
-username: string,
-firstName: string,
-lastName: string
-): string {
-return `
+  public static generateWelcomeEmailContent(
+    email: string,
+    password: string,
+    username: string,
+    firstName: string,
+    lastName: string
+  ): string {
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -113,7 +121,7 @@ body { font-family: Arial, sans-serif; background: #FFFFFF; color: #000000; }
 </head>
 <body>
 <div class="container">
-<img src="https://www.ur.ac.rw/IMG/logo/logo_ur.jpg" alt="University of Rwanda Logo" class="logo" />
+<img src="https://res.cloudinary.com/dxxqpejtl/image/upload/v1752156721/WhatsApp_Image_2025-07-10_at_16.09.40_ea1ac0d3_jfpqup.jpg" alt="University of Rwanda Logo" class="logo" />
 <div class="header">Welcome to University of Rwanda</div>
 <h2>Hello ${firstName} ${lastName},</h2>
 <p>Welcome to the <strong>University of Rwanda</strong> platform. Your account has been created successfully.</p>
@@ -124,6 +132,7 @@ First Name: <b>${firstName}</b><br/>
 Last Name: <b>${lastName}</b><br/>
 Email: <b>${email}</b><br/>
 Password: <b>${password}</b><br/>
+<p>Click To login:<a>https://giraffe-space.vercel.app/login</a></p>
 </div>
 <p style="margin-top:20px;">Please use these credentials to log in for the first time. You will be required to change your password after logging in.</p>
 <div class="footer">
@@ -133,10 +142,12 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
 </div>
 </body>
 </html>`;
-}
+  }
 
-
-  public static generateResetEmailContent(resetLink: string, username: string): string {
+  public static generateResetEmailContent(
+    resetLink: string,
+    username: string
+  ): string {
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -174,21 +185,29 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
 </html>`;
   }
 
-  public static async sendPasswordResetEmail(email: string, resetLink: string, username: string): Promise<void> {
+  public static async sendPasswordResetEmail(
+    email: string,
+    resetLink: string,
+    username: string
+  ): Promise<void> {
     try {
       const transporter = this.getTransporter();
 
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: email,
-        subject: 'Reset Your University of Rwanda Password',
+        subject: "Reset Your University of Rwanda Password",
         html: this.generateResetEmailContent(resetLink, username),
       };
 
       await transporter.sendMail(mailOptions);
-      this.log('info', `Password reset email sent to ${email}`);
+      this.log("info", `Password reset email sent to ${email}`);
     } catch (error) {
-      this.log('error', `Failed to send password reset email to ${email}:`, error);
+      this.log(
+        "error",
+        `Failed to send password reset email to ${email}:`,
+        error
+      );
       throw error;
     }
   }
@@ -206,19 +225,28 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
         from: process.env.GMAIL_USER,
         to: email,
         subject: `Your Temporary University of Rwanda Login Credentials (Valid for ${this.EXPIRY_HOURS} Hours)`,
-        html: this.generateWelcomeEmailContent(email, password, username, firstName, lastName),
+        html: this.generateWelcomeEmailContent(
+          email,
+          password,
+          username,
+          firstName,
+          lastName
+        ),
       };
-      this.log('info', `Sending welcome email to ${email}`);
+      this.log("info", `Sending welcome email to ${email}`);
       const info = await transporter.sendMail(mailOptions);
-      this.log('info', 'Welcome email sent successfully:', info.response);
+      this.log("info", "Welcome email sent successfully:", info.response);
       return true;
     } catch (error) {
-      this.log('error', 'Error in sendDefaultPasswordWithPassword:', error);
+      this.log("error", "Error in sendDefaultPasswordWithPassword:", error);
       return false;
     }
   }
 
-  public static async sendSuccessPasswordForgetEmail(email: string, username: string): Promise<void> {
+  public static async sendSuccessPasswordForgetEmail(
+    email: string,
+    username: string
+  ): Promise<void> {
     const emailContent = `
 <!DOCTYPE html>
 <html lang="en">
@@ -261,14 +289,18 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: email,
-        subject: 'Your University of Rwanda Password Has Been Changed',
+        subject: "Your University of Rwanda Password Has Been Changed",
         html: emailContent,
       };
 
       await transporter.sendMail(mailOptions);
-      this.log('info', `Password reset success email sent to ${email}`);
+      this.log("info", `Password reset success email sent to ${email}`);
     } catch (error) {
-      this.log('error', `Failed to send password reset success email to ${email}:`, error);
+      this.log(
+        "error",
+        `Failed to send password reset success email to ${email}:`,
+        error
+      );
       throw error;
     }
   }

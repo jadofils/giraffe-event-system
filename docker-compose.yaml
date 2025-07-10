@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: jado639/giraffe-event-system:latest
+    image: udenis123/giraffe-event-system:latest
     ports:
       - "3000:3000"
     env_file:
