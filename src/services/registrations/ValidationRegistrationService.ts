@@ -3,7 +3,7 @@
 import { Event } from "../../models/Event";
 import { User } from "../../models/User";
 import { TicketType } from "../../models/TicketType";
-import { Venue } from "../../models/Venue";
+import { Venue } from "../../models/Venue Tables/Venue";
 import { Registration } from "../../models/Registration";
 import { AppDataSource } from "../../config/Database";
 import { In, Repository } from "typeorm";
@@ -353,7 +353,9 @@ export class RegistrationService {
     // If boughtForIds is empty or not provided, tickets are for the logged-in user only
     if (!boughtForIds || boughtForIds.length === 0) {
       if (noOfTickets !== 1) {
-        errors.push("If no 'boughtForIds' are provided, you can only buy 1 ticket for yourself.");
+        errors.push(
+          "If no 'boughtForIds' are provided, you can only buy 1 ticket for yourself."
+        );
       }
     } else {
       // If boughtForIds is provided, it must match the number of tickets

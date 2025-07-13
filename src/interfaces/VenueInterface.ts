@@ -1,4 +1,48 @@
-import { VenueStatus } from "../models/Venue";
+import { VenueStatus } from "../models/Venue Tables/Venue";
+
+export interface BookingConditionRequest {
+  descriptionCondition?: string;
+  notaBene?: string;
+  transitionTime?: number;
+  depositRequiredPercent?: number;
+  depositRequiredTime?: number;
+  paymentComplementTimeBeforeEvent?: number;
+}
+
+export interface VenueVariableRequest {
+  venueAmount: number;
+  venueManagerId: string;
+}
+
+export interface VenueAmenityRequest {
+  resourceName: string;
+  quantity: number;
+  amenitiesDescription?: string;
+  costPerUnit?: number;
+}
+
+export interface VenueRequest {
+  venueName: string;
+  capacity: number;
+  venueLocation: string;
+  latitude?: number;
+  longitude?: number;
+  googleMapsLink?: string;
+  organizationId: string;
+  venueAmenitiesId?: string;
+  venueTypeId?: string;
+  mainPhotoUrl?: string;
+  photoGallery?: string[];
+  virtualTourUrl?: string;
+  venueDocuments?: any;
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  cancellationReason?: string;
+  visitPurposeOnly?: boolean;
+  bookingType?: "HOURLY" | "DAILY";
+  bookingConditions: BookingConditionRequest[];
+  venueVariable: VenueVariableRequest;
+  venueAmenities?: VenueAmenityRequest[];
+}
 
 export class VenueInterface {
   venueId!: string;

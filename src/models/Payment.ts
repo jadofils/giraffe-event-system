@@ -7,57 +7,57 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
-} from 'typeorm';
-import { Invoice } from './Invoice';
-import { Registration } from './Registration';
-import { InstallmentPlan } from './InstallmentPlan';
-import { Event } from './Event';
-import { PaymentStatus } from '../interfaces/Enums/PaymentStatusEnum';
-import { Venue } from './Venue';
+} from "typeorm";
+import { Invoice } from "./Invoice";
+import { Registration } from "./Registration";
+import { InstallmentPlan } from "./InstallmentPlan";
+import { Event } from "./Event";
+import { PaymentStatus } from "../interfaces/Enums/PaymentStatusEnum";
+import { Venue } from "./Venue Tables/Venue";
 
 @Entity()
 export class Payment {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   paymentId!: string;
 
   @Column()
   invoiceId!: string;
 
   @ManyToOne(() => Invoice, { eager: true })
-  @JoinColumn({ name: 'invoiceId' })
+  @JoinColumn({ name: "invoiceId" })
   invoice?: Invoice;
 
   @Column({ nullable: true })
   registrationId?: string;
 
   @ManyToOne(() => Registration, { eager: true })
-  @JoinColumn({ name: 'registrationId' })
+  @JoinColumn({ name: "registrationId" })
   registration?: Registration;
 
   @Column({ nullable: true })
   eventId?: string;
 
   @ManyToOne(() => Event, (event) => event.payments, { eager: true })
-  @JoinColumn({ name: 'eventId' })
+  @JoinColumn({ name: "eventId" })
   event?: Event;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   venueId?: string | null;
 
   @ManyToOne(() => Venue, (venue) => venue.payments, { nullable: true })
-  @JoinColumn({ name: 'venueId' })
+  @JoinColumn({ name: "venueId" })
   venue?: Venue;
 
   @Column()
   paymentDate!: Date;
 
-  @Column('decimal')
+  @Column("decimal")
   paidAmount!: number;
 
   @Column()
   paymentMethod!: string;
 
-  @Column({ type: 'enum', enum: PaymentStatus })
+  @Column({ type: "enum", enum: PaymentStatus })
   paymentStatus!: PaymentStatus;
 
   @Column({ nullable: true })
@@ -72,7 +72,7 @@ export class Payment {
   @Column()
   isSuccessful!: boolean;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   paymentResponse?: any;
 
   @Column()
@@ -84,19 +84,22 @@ export class Payment {
   @Column({ nullable: true })
   installmentPlanId?: string;
 
- @ManyToOne(() => InstallmentPlan, (installmentPlan) => installmentPlan.payments, { eager: true })
+  @ManyToOne(
+    () => InstallmentPlan,
+    (installmentPlan) => installmentPlan.payments,
+    { eager: true }
+  )
   installmentPlan!: InstallmentPlan;
-
 
   @Column({ nullable: true })
   paidBy?: string;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp with time zone' })
+  @UpdateDateColumn({ type: "timestamp with time zone" })
   updatedAt!: Date;
 
-  @DeleteDateColumn({ type: 'timestamp with time zone', nullable: true })
+  @DeleteDateColumn({ type: "timestamp with time zone", nullable: true })
   deletedAt?: Date;
 }

@@ -1,12 +1,10 @@
 import { DataSource } from "typeorm";
 import { Role } from "../models/Role";
 import { User } from "../models/User";
-import { Venue } from "../models/Venue";
+import { Venue } from "../models/Venue Tables/Venue";
 import { TicketType } from "../models/TicketType";
 import { Event } from "../models/Event";
-import { Resource } from "../models/Resources";
-import { VenueResource } from "../models/VenueResource";
-import { EventResource } from "../models/EventResource";
+import { VenueAmenities } from "../models/Venue Tables/VenueAmenities";
 import { Feedback } from "../models/Feedback";
 import { Permission } from "../models/Permission";
 import { VenuePayment } from "../models/VenuePayment";
@@ -19,6 +17,11 @@ import { InstallmentPlan } from "../models/InstallmentPlan";
 import { Budget } from "../models/Budget";
 import { VenueBooking } from "../models/VenueBooking";
 import { VenueInvoice } from "../models/VenueInvoice";
+import { BookingCondition } from "../models/Venue Tables/BookingCondition";
+import { VenueVariable } from "../models/Venue Tables/VenueVariable";
+import { VenueAvailabilitySlot } from "../models/Venue Tables/VenueAvailabilitySlot";
+import { VenueReview } from "../models/Venue Tables/VenueReview";
+import { VenueApproval } from "../models/Venue Tables/VenueApproval";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -33,9 +36,7 @@ export const AppDataSource = new DataSource({
     Venue,
     TicketType,
     Event,
-    Resource,
-    VenueResource,
-    EventResource,
+    VenueAmenities,
     Feedback,
     Role,
     Permission,
@@ -49,6 +50,11 @@ export const AppDataSource = new DataSource({
     Budget,
     VenueBooking,
     VenueInvoice,
+    BookingCondition,
+    VenueVariable,
+    VenueAvailabilitySlot,
+    VenueReview,
+    VenueApproval,
   ],
   migrations: [
     isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",
@@ -68,11 +74,9 @@ export const initializeDatabase = async (): Promise<void> => {
   try {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
-  
     }
   } catch (error) {
     //console.error("Error during database initialization:", error);
     throw error; // Re-throw to handle it in the application
   }
 };
-

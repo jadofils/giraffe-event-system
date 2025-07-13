@@ -1,6 +1,6 @@
 import { AppDataSource } from "../config/Database";
 import { Event } from "../models/Event";
-import { Venue } from "../models/Venue";
+import { Venue } from "../models/Venue Tables/Venue";
 import { VenueBooking } from "../models/VenueBooking";
 import { CacheService } from "../services/CacheService";
 import { EventInterface } from "../interfaces/EventInterface";
@@ -132,7 +132,7 @@ export class EventRepository {
       event.eventType = mappedEventType;
       event.organizerId = data.organizerId;
       event.organizationId = data.organizationId || eventOrgId;
-      event.startDate = data.startDate ;
+      event.startDate = data.startDate;
       event.endDate = data.endDate;
       event.startTime = data.startTime || "";
       event.endTime = data.endTime || "";
@@ -240,8 +240,12 @@ export class EventRepository {
             .createQueryBuilder("booking")
             .leftJoin("booking.event", "event")
             .where("booking.venueId = :venueId", { venueId })
-            .andWhere("booking.approvalStatus = :bookingStatus", { bookingStatus: ApprovalStatus.APPROVED })
-            .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+            .andWhere("booking.approvalStatus = :bookingStatus", {
+              bookingStatus: ApprovalStatus.APPROVED,
+            })
+            .andWhere("event.status = :eventStatus", {
+              eventStatus: "APPROVED",
+            })
             .andWhere(
               "(event.startDate <= :endDate AND event.endDate >= :startDate)",
               { startDate: data.startDate, endDate: data.endDate }
@@ -285,7 +289,7 @@ export class EventRepository {
         booking.userId = data.organizerId;
         booking.user = organizer;
         booking.organizationId = eventOrgId;
-        booking.totalAmountDue = venue.amount ?? 0;
+  
         booking.approvalStatus = ApprovalStatus.PENDING;
         booking.notes = `Event booking for ${savedEvent.eventTitle}`;
         booking.venue = venue;
@@ -361,7 +365,7 @@ export class EventRepository {
         async () =>
           await AppDataSource.getRepository(Event).findOne({
             where: { eventId: id },
-            relations: ["venues", "venueBookings", "organizer", "organization"]
+            relations: ["venues", "venueBookings", "organizer", "organization"],
           }),
         this.CACHE_TTL
       );
@@ -566,9 +570,7 @@ export class EventRepository {
       return { success: false, message: "Start and end dates are required" };
     }
 
-    const cacheKey = `${
-      this.CACHE_PREFIX
-    }date:${startDate}:${endDate}`;
+    const cacheKey = `${this.CACHE_PREFIX}date:${startDate}:${endDate}`;
     try {
       const events = await CacheService.getOrSetMultiple(
         cacheKey,
@@ -1148,8 +1150,6 @@ export class EventRepository {
         booking.userId = userId;
         booking.user = organizer;
         booking.organizationId = organizationId;
-        booking.totalAmountDue =
-          (data as any).totalAmountDue ?? venue.amount ?? 0;
         booking.venueInvoiceId = data.venueInvoiceId;
         booking.approvalStatus = ApprovalStatus.PENDING;
         booking.notes = `Event booking for ${event.eventTitle}`;
