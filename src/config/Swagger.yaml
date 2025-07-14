@@ -1,11 +1,26 @@
 openapi: 3.0.0
 info:
   title: Event Management System API
-  description: API for managing authentication and roles in the event management system.
+  description: API for managing authentication, users, organizations, roles, permissions, and venues in the event management system.
   version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Local development server
+
+tags:
+  - name: Auth
+    description: Authentication
+  - name: User
+    description: User management
+  - name: Organization
+    description: Organization management
+  - name: Permission
+    description: Permission management
+  - name: Role
+    description: Role management
+  - name: Venue
+    description: Venue management
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18,54 +33,76 @@ components:
       properties:
         username:
           type: string
+          example: johndoe
         email:
           type: string
           format: email
+          example: johndoe@example.com
         firstName:
           type: string
+          example: John
         lastName:
           type: string
+          example: Doe
         password:
           type: string
+          example: password123
         confirmPassword:
           type: string
+          example: password123
         roleId:
           type: string
           format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
         phoneNumber:
           type: string
+          example: "+1234567890"
         bio:
           type: string
+          example: "Event manager"
         profilePictureURL:
           type: string
           format: uri
+          example: "https://example.com/profile.jpg"
         preferredLanguage:
           type: string
+          example: en
         timezone:
           type: string
+          example: UTC
         emailNotificationsEnabled:
           type: boolean
+          example: true
         smsNotificationsEnabled:
           type: boolean
+          example: false
         socialMediaLinks:
           type: object
         dateOfBirth:
           type: string
           format: date
+          example: "1990-01-01"
         gender:
           type: string
+          example: male
         addressLine1:
           type: string
+          example: "123 Main St"
         addressLine2:
           type: string
+          example: "Apt 4B"
         city:
           type: string
+          example: "New York"
         stateProvince:
           type: string
+          example: "NY"
         postalCode:
           type: string
+          example: "10001"
         country:
           type: string
+          example: "USA"
       required:
         - username
         - email
@@ -77,80 +114,144 @@ components:
       properties:
         roleName:
           type: string
+          example: ADMIN
         permissions:
           type: array
           items:
             type: string
+          example: ["CREATE_USER", "DELETE_USER"]
         description:
           type: string
+          example: "Administrator role"
       required:
         - roleName
         - permissions
+    Venue:
+      type: object
+      properties:
+        venueId:
+          type: string
+          example: "venue-uuid-1"
+        venueName:
+          type: string
+          example: "Grand Hall"
+        capacity:
+          type: integer
+          example: 200
+        venueLocation:
+          type: string
+          example: "123 Main St"
+        mainPhotoUrl:
+          type: string
+          example: "https://example.com/photo.jpg"
+        photoGallery:
+          type: array
+          items:
+            type: string
+          example: ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]
+        status:
+          type: string
+          example: "APPROVED"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-06-01T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2024-06-01T12:00:00Z"
+      required:
+        - venueId
+        - venueName
+        - capacity
+        - venueLocation
+    Amenity:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "amenity-uuid-1"
+        resourceName:
+          type: string
+          example: "Projector"
+        quantity:
+          type: integer
+          example: 2
+        amenitiesDescription:
+          type: string
+          example: "HD projector"
+        costPerUnit:
+          type: number
+          example: 100.0
+      required:
+        - id
+        - resourceName
+        - quantity
+    BookingCondition:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "condition-uuid-1"
+        descriptionCondition:
+          type: string
+          example: "No outside food allowed."
+        notaBene:
+          type: string
+          example: "Please respect the property."
+        transitionTime:
+          type: integer
+          example: 60
+        depositRequiredPercent:
+          type: integer
+          example: 20
+        depositRequiredTime:
+          type: integer
+          example: 7
+        paymentComplementTimeBeforeEvent:
+          type: integer
+          example: 3
+      required:
+        - id
+        - descriptionCondition
+    VenueVariable:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "variable-uuid-1"
+        venueAmount:
+          type: number
+          example: 500.0
+        venueManagerId:
+          type: string
+          example: "manager-uuid-1"
+      required:
+        - id
+        - venueAmount
+        - venueManagerId
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "permission-uuid-1"
+        name:
+          type: string
+          example: "CREATE_USER"
+        description:
+          type: string
+          example: "Allows user creation"
+      required:
+        - id
+        - name
+
 paths:
-  /users/auth/register:
+  # --- Auth ---
+  /auth/login:
     post:
-      summary: Register a new user
-      description: Registers a new user with the provided details.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRegistration'
-      responses:
-        '201':
-          description: User registered successfully
-        '400':
-          description: Bad request, e.g., user already exists
-  /login:
-    post:
-      summary: Login with default password
-      description: Logs in a user using a default password.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRegistration'
-      responses:
-        '200':
-          description: Successful login
-        '401':
-          description: Unauthorized
-  /login-default-password:
-    post:
-      summary: Login with default password
-      description: Logs in a user with a default password.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRegistration'
-      responses:
-        '200':
-          description: Successful login
-        '401':
-          description: Unauthorized
-  /reset-default-password:
-    post:
-      summary: Reset default password
-      description: Resets a user's default password.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRegistration'
-      responses:
-        '200':
-          description: Password reset successfully
-        '400':
-          description: Bad request
-  /request-forget:
-    post:
-      summary: Request password reset
-      description: Requests a password reset link for the user.
+      tags: [Auth]
+      summary: Login
       requestBody:
         required: true
         content:
@@ -160,16 +261,25 @@ paths:
               properties:
                 email:
                   type: string
-                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  example: "password123"
       responses:
-        '200':
-          description: Reset link sent
-        '404':
-          description: User not found
-  /resend-reset-link:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "jwt.token.here"
+  /auth/login/default:
     post:
-      summary: Resend password reset link
-      description: Resends the password reset link to the user.
+      tags: [Auth]
+      summary: Login with default password
       requestBody:
         required: true
         content:
@@ -179,152 +289,520 @@ paths:
               properties:
                 email:
                   type: string
-                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  example: "defaultpass"
       responses:
-        '200':
-          description: Reset link resent
-        '404':
-          description: User not found
-  /users:
-    get:
-      summary: Get all users
-      description: Retrieves a list of all users.
-      security:
-        - bearerAuth: []
+        "200":
+          description: Login with default password
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "jwt.token.here"
+  /auth/add:
+    post:
+      tags: [Auth]
+      summary: Add a new auth user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
       responses:
-        '200':
-          description: Successful response
-        '401':
-          description: Unauthorized
-  /users/{userId}:
+        "501": { description: Not implemented }
+  /auth/all:
     get:
-      summary: Get user by ID
-      description: Retrieves a user by their ID.
+      tags: [Auth]
+      summary: Get all auth users
+      responses:
+        "501": { description: Not implemented }
+  /auth/get/{id}:
+    get:
+      tags: [Auth]
+      summary: Get auth user by ID
       parameters:
-        - name: userId
-          in: path
+        - in: path
+          name: id
           required: true
-          schema:
-            type: string
-            format: uuid
-      security:
-        - bearerAuth: []
+          schema: { type: string }
       responses:
-        '200':
-          description: Successful response
-        '404':
-          description: User not found
+        "501": { description: Not implemented }
+  /auth/update/{id}:
     put:
-      summary: Update user by ID
-      description: Updates a user by their ID.
+      tags: [Auth]
+      summary: Update auth user by ID
       parameters:
-        - name: userId
-          in: path
+        - in: path
+          name: id
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/UserRegistration'
-      security:
-        - bearerAuth: []
       responses:
-        '200':
-          description: User updated successfully
-        '400':
-          description: Bad request
+        "501": { description: Not implemented }
+  /auth/delete/{id}:
     delete:
-      summary: Delete user by ID
-      description: Deletes a user by their ID.
+      tags: [Auth]
+      summary: Delete auth user by ID
       parameters:
-        - name: userId
-          in: path
+        - in: path
+          name: id
           required: true
-          schema:
-            type: string
-            format: uuid
-      security:
-        - bearerAuth: []
+          schema: { type: string }
       responses:
-        '200':
-          description: User deleted successfully
-        '404':
-          description: User not found
+        "501": { description: Not implemented }
+  /auth/loginWithOtp:
+    post:
+      tags: [Auth]
+      summary: Login with OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: "user@example.com"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        "501": { description: Not implemented }
+  /auth/create-password:
+    post:
+      tags: [Auth]
+      summary: Create password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: "user@example.com"
+                password:
+                  type: string
+                  example: "newpassword"
+      responses:
+        "501": { description: Not implemented }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      responses:
+        "501": { description: Not implemented }
+
+  # --- Organization ---
+  /organizations/all:
+    get:
+      tags: [Organization]
+      summary: Get all organizations
+      responses:
+        "200":
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "org-uuid-1"
+                    name:
+                      type: string
+                      example: "Acme Corp"
+  /organizations/{id}:
+    get:
+      tags: [Organization]
+      summary: Get organization by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "org-uuid-1"
+                  name:
+                    type: string
+                    example: "Acme Corp"
+    put:
+      tags: [Organization]
+      summary: Update organization by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Acme Corp Updated"
+      responses:
+        "200":
+          description: Organization updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    delete:
+      tags: [Organization]
+      summary: Delete organization by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organization deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /organizations/bulk:
+    post:
+      tags: [Organization]
+      summary: Bulk create organizations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "Acme Corp"
+      responses:
+        "200":
+          description: Organizations created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  createdIds:
+                    type: array
+                    items:
+                      type: string
+                    example: ["org-uuid-1", "org-uuid-2"]
+  /organizations/{id}/users:
+    post:
+      tags: [Organization]
+      summary: Assign users to organization
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["user-uuid-1", "user-uuid-2"]
+      responses:
+        "200":
+          description: Users assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    delete:
+      tags: [Organization]
+      summary: Remove users from organization
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["user-uuid-1", "user-uuid-2"]
+      responses:
+        "200":
+          description: Users removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    get:
+      tags: [Organization]
+      summary: Get users in organization
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "user-uuid-1"
+                    username:
+                      type: string
+                      example: "johndoe"
+  /organizations/{organizationId}/venues:
+    post:
+      tags: [Organization]
+      summary: Add venues to organization
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                venueIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["venue-uuid-1", "venue-uuid-2"]
+      responses:
+        "200":
+          description: Venues added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    delete:
+      tags: [Organization]
+      summary: Remove venues from organization
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                venueIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["venue-uuid-1", "venue-uuid-2"]
+      responses:
+        "200":
+          description: Venues removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    get:
+      tags: [Organization]
+      summary: Get venues in organization
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of venues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+
+  # --- Permission ---
+  /permissions:
+    get:
+      tags: [Permission]
+      summary: Get all permissions
+      responses:
+        "200":
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+  # --- Role ---
   /roles:
-    get:
-      summary: Get all roles
-      description: Retrieves a list of all roles.
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Successful response
-        '401':
-          description: Unauthorized
     post:
-      summary: Add a new role
-      description: Creates a new role with the provided details.
+      tags: [Role]
+      summary: Create a role
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Role'
-      security:
-        - bearerAuth: []
       responses:
-        '201':
-          description: Role created successfully
-        '400':
-          description: Bad request
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+    get:
+      tags: [Role]
+      summary: Get all roles
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+  /roles/{id}:
+    get:
+      tags: [Role]
+      summary: Get role by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Role details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
     put:
+      tags: [Role]
       summary: Update role by ID
-      description: Updates a role by its ID.
       parameters:
-        - name: roleId
-          in: path
+        - in: path
+          name: id
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Role'
-      security:
-        - bearerAuth: []
       responses:
-        '200':
-          description: Role updated successfully
-        '404':
-          description: Role not found
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
     delete:
+      tags: [Role]
       summary: Delete role by ID
-      description: Deletes a role by its ID.
       parameters:
-        - name: roleId
-          in: path
+        - in: path
+          name: id
           required: true
-          schema:
-            type: string
-            format: uuid
-      security:
-        - bearerAuth: []
+          schema: { type: string }
       responses:
-        '200':
-          description: Role deleted successfully
-        '404':
-          description: Role not found
+        "200":
+          description: Role deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
   /roles/search-by-name:
     post:
+      tags: [Role]
       summary: Get role by name
-      description: Retrieves a role by its name.
       requestBody:
         required: true
         content:
@@ -334,21 +812,507 @@ paths:
               properties:
                 roleName:
                   type: string
-      security:
-        - bearerAuth: []
+                  example: "ADMIN"
       responses:
-        '200':
-          description: Successful response
-        '404':
-          description: Role not found
-  /permissions:
+        "200":
+          description: Role found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+
+  # --- Venue ---
+  /venue/add:
+    post:
+      tags: [Venue]
+      summary: Create a new venue (with file upload)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                venueName:
+                  type: string
+                  example: "Grand Hall"
+                capacity:
+                  type: integer
+                  example: 200
+                venueLocation:
+                  type: string
+                  example: "123 Main St"
+                mainPhoto:
+                  type: string
+                  format: binary
+                photoGallery:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                virtualTour:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Venue created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  venueId:
+                    type: string
+                    example: "venue-uuid-1"
+  /venue/all:
     get:
-      summary: Get all permissions
-      description: Retrieves a list of all permissions.
-      security:
-        - bearerAuth: []
+      tags: [Venue]
+      summary: Get all venues (admin only, with manager info)
       responses:
-        '200':
-          description: Successful response
-        '401':
-          description: Unauthorized
+        "200":
+          description: List of venues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+  /venue/{id}:
+    get:
+      tags: [Venue]
+      summary: Get venue by ID (with all related data)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Venue details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+  /venue/organizations/{organizationId}/venues:
+    get:
+      tags: [Venue]
+      summary: Get all venues for an organization
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of venues for organization
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+  /venue/managers/{managerId}/venues:
+    get:
+      tags: [Venue]
+      summary: Get all venues managed by a specific manager
+      parameters:
+        - in: path
+          name: managerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of venues for manager
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+  /venue/{venueId}/amenities:
+    get:
+      tags: [Venue]
+      summary: Get all amenities for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of amenities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Amenity'
+    put:
+      tags: [Venue]
+      summary: Update all amenities for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Amenity'
+      responses:
+        "200":
+          description: Amenities updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+    post:
+      tags: [Venue]
+      summary: Add one or more amenities to a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Amenity'
+      responses:
+        "201":
+          description: Amenity(ies) added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  addedAmenities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Amenity'
+  /venue/{venueId}/amenities/{amenityId}:
+    get:
+      tags: [Venue]
+      summary: Get a specific amenity by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: amenityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Amenity details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Amenity'
+    put:
+      tags: [Venue]
+      summary: Update a specific amenity by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: amenityId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Amenity'
+      responses:
+        "200":
+          description: Amenity updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Amenity'
+    delete:
+      tags: [Venue]
+      summary: Remove a specific amenity from a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: amenityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Amenity removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /venue/{venueId}/booking-conditions:
+    get:
+      tags: [Venue]
+      summary: Get all booking conditions for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of booking conditions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingCondition'
+    put:
+      tags: [Venue]
+      summary: Update all booking conditions for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/BookingCondition'
+      responses:
+        "200":
+          description: Booking conditions updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /venue/{venueId}/booking-conditions/{conditionId}:
+    get:
+      tags: [Venue]
+      summary: Get a specific booking condition by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: conditionId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Booking condition details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCondition'
+    put:
+      tags: [Venue]
+      summary: Update a specific booking condition by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: conditionId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCondition'
+      responses:
+        "200":
+          description: Booking condition updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCondition'
+  /venue/{venueId}/variables:
+    get:
+      tags: [Venue]
+      summary: Get all variables for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of variables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VenueVariable'
+    put:
+      tags: [Venue]
+      summary: Update all variables for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/VenueVariable'
+      responses:
+        "200":
+          description: Variables updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /venue/{venueId}/variables/{variableId}:
+    get:
+      tags: [Venue]
+      summary: Get a specific variable by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: variableId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Variable details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueVariable'
+    put:
+      tags: [Venue]
+      summary: Update a specific variable by ID for a venue
+      parameters:
+        - in: path
+          name: venueId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: variableId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueVariable'
+      responses:
+        "200":
+          description: Variable updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueVariable'
+  /venue/{id}/approve:
+    patch:
+      tags: [Venue]
+      summary: Approve a venue (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Venue approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /venue/{id}/approve-public:
+    patch:
+      tags: [Venue]
+      summary: Approve a venue for public (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Venue approved for public
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /venue/{id}/reject:
+    patch:
+      tags: [Venue]
+      summary: Reject a venue (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Venue rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true

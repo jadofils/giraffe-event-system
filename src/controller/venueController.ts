@@ -134,10 +134,10 @@ export class VenueController {
       },
       withDeleted: true,
     });
-    if (isVenueManager && existingVenue) {
-      // If rejected, allow update and set to pending
+    if ((isVenueManager || isAdmin) && existingVenue) {
+      // If rejected, allow update and set to pending (manager) or approved (admin)
       if (existingVenue.status === VenueStatus.REJECTED) {
-        // Update fields and set to pending
+        // Update fields
         existingVenue.capacity = data.capacity;
         existingVenue.latitude = data.latitude;
         existingVenue.longitude = data.longitude;
@@ -147,14 +147,28 @@ export class VenueController {
         existingVenue.photoGallery = data.photoGallery;
         existingVenue.virtualTourUrl = data.virtualTourUrl;
         existingVenue.venueDocuments = data.venueDocuments;
-        existingVenue.status = VenueStatus.PENDING;
         existingVenue.cancellationReason = undefined;
+        if (isAdmin) {
+          existingVenue.status = VenueStatus.APPROVED;
+        } else {
+          existingVenue.status = VenueStatus.PENDING;
+        }
         await venueRepo.save(existingVenue);
-        res.status(200).json({ success: true, venueId: existingVenue.venueId, message: "Venue updated and set to pending for review." });
+        res.status(200).json({
+          success: true,
+          venueId: existingVenue.venueId,
+          message: `Venue updated and set to ${
+            isAdmin ? "approved" : "pending"
+          } for review.`,
+        });
         return;
       } else {
         // Prevent duplicate
-        res.status(409).json({ success: false, message: "Venue with the same name and location already exists for this organization." });
+        res.status(409).json({
+          success: false,
+          message:
+            "Venue with the same name and location already exists for this organization.",
+        });
         return;
       }
     }
@@ -416,783 +430,6 @@ export class VenueController {
     }
   }
 
-  // // Get venue by ID
-  // static async getById(req: Request, res: Response): Promise<void> {
-  //   const { id } = req.params;
-  //   if (!id) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const result = await VenueRepository.getById(id);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "Venue not found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting venue by ID:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get venue by ID." });
-  //   }
-  // }
-
-  // // Get venues by manager ID
-  // static async getByManagerId(req: Request, res: Response): Promise<void> {
-  //   const userId = req.user?.userId;
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const result = await VenueRepository.getByManagerId(userId);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "No venues found for this manager.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting venues by manager ID:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to get venues by manager ID.",
-  //     });
-  //   }
-  // }
-
-  // // Get all venues
-  // static async getAll(req: Request, res: Response): Promise<void> {
-  //   try {
-  //     const result = await VenueRepository.getAll();
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(200).json({
-  //         success: false,
-  //         message: result.message || "No venues found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting all venues:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get all venues." });
-  //   }
-  // }
-
-  // static async update(req: Request, res: Response): Promise<void> {
-  //   const { id } = req.params;
-  //   const userId = req.user?.userId;
-  //   const {
-  //     venueName,
-  //     capacity,
-  //     location,
-  //     amount,
-  //     managerId,
-  //     latitude,
-  //     longitude,
-  //     googleMapsLink,
-  //     amenities,
-  //     venueType,
-  //     contactPerson,
-  //     contactEmail,
-  //     contactPhone,
-  //     websiteURL,
-  //     status,
-  //   }: Partial<VenueInterface> = req.body;
-
-  //   if (!id) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   // Log request body for debugging
-  //   console.log("Update request body:", req.body);
-
-  //   // Construct update data, omitting undefined fields
-  //   const updateData: Partial<VenueInterface> = {};
-  //   if (venueName !== undefined) updateData.venueName = venueName;
-  //   if (capacity !== undefined) updateData.capacity = capacity;
-  //   if (location !== undefined) updateData.location = location;
-  //   if (amount !== undefined) updateData.amount = amount;
-  //   if (managerId !== undefined) updateData.managerId = managerId;
-  //   if (latitude !== undefined) updateData.latitude = latitude;
-  //   if (longitude !== undefined) updateData.longitude = longitude;
-  //   if (googleMapsLink !== undefined)
-  //     updateData.googleMapsLink = googleMapsLink;
-  //   if (amenities !== undefined) updateData.amenities = amenities;
-  //   if (venueType !== undefined) updateData.venueType = venueType;
-  //   if (contactPerson !== undefined) updateData.contactPerson = contactPerson;
-  //   if (contactEmail !== undefined) updateData.contactEmail = contactEmail;
-  //   if (contactPhone !== undefined) updateData.contactPhone = contactPhone;
-  //   if (websiteURL !== undefined) updateData.websiteURL = websiteURL;
-  //   if (status !== undefined) updateData.status = status;
-
-  //   // Validate update data
-  //   const validationErrors = VenueInterface.validate(updateData);
-  //   if (validationErrors.length > 0) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: `Validation errors: ${validationErrors.join(", ")}`,
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     const updateResult = await VenueRepository.update(id, updateData);
-  //     if (updateResult.success && updateResult.data) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "Venue updated successfully.",
-  //         data: updateResult.data,
-  //       });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: updateResult.message || "Venue not found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error updating venue:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to update venue due to a server error.",
-  //     });
-  //   }
-  // }
-  // // Update venue manager
-  // static async updateVenueManager(req: Request, res: Response): Promise<void> {
-  //   const userId = req.user?.userId;
-  //   const { venueId, managerId } = req.body;
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   if (!venueId || !managerId) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "Venue ID and manager ID are required.",
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     const result = await VenueRepository.updateVenueManager(
-  //       venueId,
-  //       managerId
-  //     );
-  //     if (result.success && result.data) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "Venue manager updated successfully.",
-  //         data: result.data,
-  //       });
-  //     } else {
-  //       res.status(400).json({
-  //         success: false,
-  //         message: result.message || "Failed to update venue manager.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error updating venue manager:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to update venue manager due to a server error.",
-  //     });
-  //   }
-  // }
-
-  // // Remove venue manager
-  // static async removeVenueManager(req: Request, res: Response): Promise<void> {
-  //   const userId = req.user?.userId;
-  //   const { venueId } = req.params;
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   if (!venueId) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const result = await VenueRepository.removeVenueManager(venueId);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "Venue manager removed successfully.",
-  //         data: result.data,
-  //       });
-  //     } else {
-  //       res.status(400).json({
-  //         success: false,
-  //         message: result.message || "Failed to remove venue manager.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error removing venue manager:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to remove venue manager due to a server error.",
-  //     });
-  //   }
-  // }
-
-  // // Delete venue (soft delete)
-  // static async delete(req: Request, res: Response): Promise<void> {
-  //   const { id } = req.params;
-  //   const userId = req.user?.userId;
-
-  //   if (!id) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const deleteResult = await VenueRepository.delete(id);
-  //     if (deleteResult.success) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: deleteResult.message || "Venue deleted successfully.",
-  //       });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: deleteResult.message || "Venue not found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error deleting venue:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to delete venue." });
-  //   }
-  // }
-
-  // // Restore soft-deleted venue
-  // static async restore(req: Request, res: Response): Promise<void> {
-  //   const { id } = req.params;
-  //   const userId = req.user?.userId;
-
-  //   if (!id) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const restoreResult = await VenueRepository.restore(id);
-  //     if (restoreResult.success && restoreResult.data) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "Venue restored successfully.",
-  //         data: restoreResult.data,
-  //       });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: restoreResult.message || "Venue not found or not deleted.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error restoring venue:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to restore venue." });
-  //   }
-  // }
-
-  // // Get soft-deleted venues
-  // static async getDeleted(req: Request, res: Response): Promise<void> {
-  //   const userId = req.user?.userId;
-
-  //   if (!userId) {
-  //     res
-  //       .status(401)
-  //       .json({ success: false, message: "Authentication required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     const result = await VenueRepository.getDeleted();
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(200).json({
-  //         success: false,
-  //         message: result.message || "No deleted venues found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting deleted venues:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get deleted venues." });
-  //   }
-  // }
-
-  // // Check venue event conflicts
-  // static async checkVenueEventConflicts(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const { venueId, startDate, endDate, startTime, endTime } = req.query;
-
-  //   if (
-  //     !venueId ||
-  //     !startDate ||
-  //     !endDate ||
-  //     typeof venueId !== "string" ||
-  //     typeof startDate !== "string" ||
-  //     typeof endDate !== "string"
-  //   ) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "Venue ID, startDate, and endDate are required.",
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     // Use plain string comparison for dates and times
-  //     const startDateStr = String(startDate);
-  //     const endDateStr = String(endDate);
-  //     const startTimeStr = String(startTime);
-  //     const endTimeStr = String(endTime);
-
-  //     const venueResult = await VenueRepository.getById(venueId);
-  //     if (!venueResult.success || !venueResult.data) {
-  //       res.status(404).json({ success: false, message: "Venue not found." });
-  //       return;
-  //     }
-
-  //     // Helper to parse date and time (YYYY-MM-DD, HH:mm or HH:mm AM/PM) to minutes since epoch
-  //     function parseDateTime(dateStr: string, timeStr: string): number | null {
-  //       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
-  //       let [hour, minute] = [0, 0];
-  //       let t = timeStr.trim();
-  //       let ampm = null;
-  //       if (/am|pm/i.test(t)) {
-  //         ampm = t.slice(-2).toLowerCase();
-  //         t = t.slice(0, -2).trim();
-  //       }
-  //       const parts = t.split(":");
-  //       if (parts.length !== 2) return null;
-  //       hour = parseInt(parts[0], 10);
-  //       minute = parseInt(parts[1], 10);
-  //       if (isNaN(hour) || isNaN(minute)) return null;
-  //       if (ampm) {
-  //         if (ampm === "pm" && hour !== 12) hour += 12;
-  //         if (ampm === "am" && hour === 12) hour = 0;
-  //       }
-  //       const date = new Date(`${dateStr}T00:00:00Z`);
-  //       if (isNaN(date.getTime())) return null;
-  //       return date.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000;
-  //     }
-
-  //     const startDateTime = parseDateTime(startDateStr, startTimeStr);
-  //     const endDateTime = parseDateTime(endDateStr, endTimeStr);
-  //     if (startDateTime === null || endDateTime === null) {
-  //       res
-  //         .status(400)
-  //         .json({ success: false, message: "Invalid date or time format." });
-  //       return;
-  //     }
-
-  //     const eventsResult = await EventRepository.getByVenueId(venueId);
-  //     if (eventsResult.success && eventsResult.data) {
-  //       const conflictingEvents = eventsResult.data.filter((event) => {
-  //         const eventStart = parseDateTime(event.startDate, event.startTime);
-  //         const eventEnd = parseDateTime(event.endDate, event.endTime);
-  //         if (eventStart === null || eventEnd === null) return false;
-  //         return (
-  //           eventStart <= endDateTime &&
-  //           eventEnd >= startDateTime &&
-  //           event.status !== "CANCELLED"
-  //         );
-  //       });
-
-  //       if (conflictingEvents.length > 0) {
-  //         res.status(200).json({
-  //           success: true,
-  //           available: false,
-  //           message: "Venue is booked for the requested period.",
-  //           conflicts: conflictingEvents.map((e) => ({
-  //             eventId: e.eventId,
-  //             eventTitle: e.eventTitle,
-  //           })),
-  //         });
-  //         return;
-  //       }
-  //     }
-
-  //     res.status(200).json({
-  //       success: true,
-  //       available: true,
-  //       message: "Venue is available for the requested period.",
-  //     });
-  //   } catch (err) {
-  //     console.error("Error checking venue event conflicts:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to check venue event conflicts.",
-  //     });
-  //   }
-  // }
-
-  // // Search venues
-  // static async searchVenues(req: Request, res: Response): Promise<void> {
-  //   const {
-  //     name,
-  //     location,
-  //     minCapacity,
-  //     maxCapacity,
-  //     isAvailable,
-  //     hasManager,
-  //   } = req.query;
-
-  //   const criteria: {
-  //     name?: string;
-  //     location?: string;
-  //     minCapacity?: number;
-  //     maxCapacity?: number;
-  //     isAvailable?: boolean;
-  //     hasManager?: boolean;
-  //   } = {};
-
-  //   if (name && typeof name === "string") criteria.name = name;
-  //   if (location && typeof location === "string") criteria.location = location;
-  //   if (minCapacity && !isNaN(Number(minCapacity)))
-  //     criteria.minCapacity = Number(minCapacity);
-  //   if (maxCapacity && !isNaN(Number(maxCapacity)))
-  //     criteria.maxCapacity = Number(maxCapacity);
-  //   if (
-  //     isAvailable !== undefined &&
-  //     (isAvailable === "true" || isAvailable === "false")
-  //   )
-  //     criteria.isAvailable = isAvailable === "true";
-  //   if (
-  //     hasManager !== undefined &&
-  //     (hasManager === "true" || hasManager === "false")
-  //   )
-  //     criteria.hasManager = hasManager === "true";
-
-  //   try {
-  //     const result = await VenueRepository.searchVenues(criteria);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(200).json({
-  //         success: false,
-  //         message: result.message || "No venues found.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error searching venues:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to search venues." });
-  //   }
-  // }
-
-  // // Get venue count
-  // static async getVenueCount(req: Request, res: Response): Promise<void> {
-  //   try {
-  //     const result = await VenueRepository.getVenueCount();
-  //     if (result.success && result.count !== undefined) {
-  //       res.status(200).json({ success: true, count: result.count });
-  //     } else {
-  //       res.status(200).json({
-  //         success: false,
-  //         message: result.message || "Failed to get venue count.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting venue count:", err);
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get venue count." });
-  //   }
-  // }
-
-  // // Get venues by proximity
-  // static async getVenuesByProximity(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const { latitude, longitude, radius } = req.query;
-
-  //   if (
-  //     !latitude ||
-  //     !longitude ||
-  //     !radius ||
-  //     typeof latitude !== "string" ||
-  //     typeof longitude !== "string" ||
-  //     typeof radius !== "string"
-  //   ) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "Latitude, longitude, and radius are required.",
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     const lat = parseFloat(latitude);
-  //     const lon = parseFloat(longitude);
-  //     const rad = parseFloat(radius);
-
-  //     if (isNaN(lat) || isNaN(lon) || isNaN(rad)) {
-  //       res.status(400).json({
-  //         success: false,
-  //         message: "Invalid latitude, longitude, or radius format.",
-  //       });
-  //       return;
-  //     }
-
-  //     const result = await VenueRepository.getVenuesByProximity(lat, lon, rad);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(200).json({
-  //         success: false,
-  //         message: result.message || "No venues found within radius.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting venues by proximity:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to get venues by proximity.",
-  //     });
-  //   }
-  // }
-
-  // // Assign a user as manager to a venue (simple version)
-  // static async assignManagerToVenue(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const { venueId, userId } = req.body;
-
-  //   if (!venueId || !userId) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "venueId and userId are required." });
-  //     return;
-  //   }
-
-  //   try {
-  //     // Find the venue
-  //     const venueResult = await VenueRepository.getById(venueId);
-  //     if (!venueResult.success || !venueResult.data) {
-  //       res.status(404).json({ success: false, message: "Venue not found." });
-  //       return;
-  //     }
-  //     // Find the user
-  //     const userRepo = require("../models/User");
-  //     const { AppDataSource } = require("../config/Database");
-  //     const user = await AppDataSource.getRepository(userRepo.User).findOne({
-  //       where: { userId },
-  //     });
-  //     if (!user) {
-  //       res.status(404).json({ success: false, message: "User not found." });
-  //       return;
-  //     }
-  //     // Assign user as manager
-  //     venueResult.data.managerId = userId;
-  //     venueResult.data.manager = user;
-  //     const saveResult = await VenueRepository.save(venueResult.data);
-  //     if (saveResult.success && saveResult.data) {
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "User assigned as venue manager successfully.",
-  //         data: saveResult.data,
-  //       });
-  //     } else {
-  //       res.status(500).json({
-  //         success: false,
-  //         message: saveResult.message || "Failed to assign manager.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error assigning manager to venue:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to assign manager due to a server error.",
-  //     });
-  //   }
-  // }
-
-  // // Get resources for a venue by ID
-  // static async getResourcesByVenueId(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const { id } = req.params;
-  //   if (!id) {
-  //     res
-  //       .status(400)
-  //       .json({ success: false, message: "Venue ID is required." });
-  //     return;
-  //   }
-  //   try {
-  //     const result = await VenueRepository.getResourcesByVenueId(id);
-  //     if (result.success) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "No resources found for this venue.",
-  //       });
-  //     }
-  //   } catch (err) {
-  //     console.error("Error getting resources for venue:", err);
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to get resources for venue.",
-  //     });
-  //   }
-  // }
-
-  // // Add resources to a venue (bulk)
-  // static async addResourcesToVenue(req: Request, res: Response): Promise<void> {
-  //   const { resources } = req.body;
-  //   const { venueId } = req.params;
-  //   if (!venueId || !Array.isArray(resources) || resources.length === 0) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "venueId and a non-empty resources array are required",
-  //     });
-  //     return;
-  //   }
-  //   try {
-  //     const created = await VenueResourceRepository.addResourcesToVenue(
-  //       venueId,
-  //       resources
-  //     );
-  //     res.status(201).json({ success: true, data: created });
-  //   } catch (error) {
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to add resources to venue" });
-  //   }
-  // }
-
-  // // Remove a resource from a venue
-  // static async removeResourceFromVenue(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const { venueId, resourceId } = req.params;
-  //   if (!venueId || !resourceId) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "venueId and resourceId are required",
-  //     });
-  //     return;
-  //   }
-  //   try {
-  //     const removed = await VenueResourceRepository.removeResourceFromVenue(
-  //       venueId,
-  //       resourceId
-  //     );
-  //     if (removed) {
-  //       res
-  //         .status(200)
-  //         .json({ success: true, message: "Resource removed from venue" });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: "Resource not found for this venue",
-  //       });
-  //     }
-  //   } catch (error) {
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to remove resource from venue",
-  //     });
-  //   }
-  // }
-
-  // // Get all resources assigned to a venue
-  // static async getVenueResources(req: Request, res: Response): Promise<void> {
-  //   const { venueId } = req.params;
-  //   if (!venueId) {
-  //     res.status(400).json({ success: false, message: "venueId is required" });
-  //     return;
-  //   }
-  //   try {
-  //     const resources = await VenueResourceRepository.getResourcesByVenueId(
-  //       venueId
-  //     );
-  //     res.status(200).json({ success: true, data: resources });
-  //   } catch (error) {
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get resources for venue" });
-  //   }
-  // }
-
-  // /**
-  //  * GET /api/v1/venues/check-availability
-  //  * Query params:
-  //  *   - startDate
-  //  *   - endDate
-  //  *   - startTime
-  //  *   - endTime
-  //  *   - bufferMinutes (optional, default = 30)
-  //  */
-
   static async approveVenue(req: Request, res: Response): Promise<void> {
     const authenticatedReq = req as AuthenticatedRequest;
     const userRoles = authenticatedReq.user?.roles || [];
@@ -1222,13 +459,11 @@ export class VenueController {
       await venueRepo.save(venue);
       res.status(200).json({ success: true, data: venue });
     } catch (err) {
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to approve venue",
-          error: err instanceof Error ? err.message : err,
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to approve venue",
+        error: err instanceof Error ? err.message : err,
+      });
     }
   }
 
@@ -1237,12 +472,10 @@ export class VenueController {
     const userRoles = authenticatedReq.user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
     if (!isAdmin) {
-      res
-        .status(403)
-        .json({
-          success: false,
-          message: "Only ADMIN can approve venues for public.",
-        });
+      res.status(403).json({
+        success: false,
+        message: "Only ADMIN can approve venues for public.",
+      });
       return;
     }
     const { id } = req.params;
@@ -1264,13 +497,11 @@ export class VenueController {
       await venueRepo.save(venue);
       res.status(200).json({ success: true, data: venue });
     } catch (err) {
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to approve venue for public",
-          error: err instanceof Error ? err.message : err,
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to approve venue for public",
+        error: err instanceof Error ? err.message : err,
+      });
     }
   }
 
@@ -1293,12 +524,10 @@ export class VenueController {
       return;
     }
     if (!cancellationReason) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "cancellationReason is required to reject a venue.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "cancellationReason is required to reject a venue.",
+      });
       return;
     }
     try {
@@ -1313,192 +542,258 @@ export class VenueController {
       await venueRepo.save(venue);
       res.status(200).json({ success: true, data: venue });
     } catch (err) {
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to reject venue",
-          error: err instanceof Error ? err.message : err,
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to reject venue",
+        error: err instanceof Error ? err.message : err,
+      });
     }
   }
-
-  // /**
-  //  * Retrieves all approved venues.
-  //  * @param req The Express request object.
-  //  * @param res The Express response object.
-  //  */
-  // static async listApprovedVenues(req: Request, res: Response): Promise<void> {
-  //   try {
-  //     const result = await VenueRepository.getApprovedVenues();
-
-  //     if (result.success) {
-  //       res.status(200).json(result);
-  //     } else {
-  //       res.status(500).json({
-  //         success: false,
-  //         message: result.message || "Failed to retrieve approved venues",
-  //       });
-  //     }
-  //   } catch (error: any) {
-  //     res.status(500).json({
-  //       success: false,
-  //       message:
-  //         "An unexpected error occurred while retrieving approved venues.",
-  //       error: error?.message || error,
-  //     });
-  //   }
-  // }
-
-  // static async cancelVenue(req: Request, res: Response): Promise<void> {
-  //   const user = (req as any).user;
-  //   if (
-  //     !user ||
-  //     !user.role ||
-  //     String(user.role.roleName || user.role).toLowerCase() !== "admin"
-  //   ) {
-  //     res
-  //       .status(403)
-  //       .json({ success: false, message: "Only admin can cancel venues." });
-  //     return;
-  //   }
-  //   const { id } = req.params;
-  //   const { feedback } = req.body;
-  //   if (!feedback) {
-  //     res.status(400).json({
-  //       success: false,
-  //       message: "Feedback is required for cancellation.",
-  //     });
-  //     return;
-  //   }
-  //   const result = await VenueRepository.update(id, {
-  //     status: VenueStatus.CANCELLED,
-  //     cancellationReason: feedback,
-  //   });
-  //   if (result.success && result.data) {
-  //     res.json({
-  //       success: true,
-  //       message: "Venue cancelled.",
-  //       data: result.data,
-  //     });
-  //   } else {
-  //     res.status(400).json({ success: false, message: result.message });
-  //   }
-  // }
-
-  // static async getEventsByVenue(req: Request, res: Response): Promise<void> {
-  //   const { venueId } = req.params;
-  //   if (!venueId) {
-  //     res.status(400).json({ success: false, message: "venueId is required" });
-  //     return;
-  //   }
-  //   try {
-  //     const result = await EventRepository.getByVenueId(venueId);
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "No events found for this venue.",
-  //       });
-  //     }
-  //   } catch (error) {
-  //     res
-  //       .status(500)
-  //       .json({ success: false, message: "Failed to get events for venue." });
-  //   }
-  // }
-
-  // static async listPublicApprovedEvents(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   const result = await EventRepository.getPublicApprovedEvents();
-  //   if (result.success && result.data) {
-  //     res.status(200).json({ success: true, data: result.data });
-  //   } else {
-  //     res.status(500).json({ success: false, message: result.message });
-  //   }
-  // }
-
-  // static async listEventTypes(req: Request, res: Response): Promise<void> {
-  //   res.status(200).json({
-  //     success: true,
-  //     data: Object.values(EventType),
-  //   });
-  // }
-
-  // static async getVenuesWithApprovedEvents(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   try {
-  //     const result = await VenueRepository.getVenuesWithApprovedEvents();
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "No venues with approved events found.",
-  //       });
-  //     }
-  //   } catch (error) {
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to fetch venues with approved events.",
-  //     });
-  //   }
-  // }
-  // static async getVenuesWithApprovedEventsViaBookings(
-  //   req: Request,
-  //   res: Response
-  // ): Promise<void> {
-  //   try {
-  //     const result =
-  //       await VenueRepository.getVenuesWithApprovedEventsViaBookings();
-  //     if (result.success && result.data) {
-  //       res.status(200).json({ success: true, data: result.data });
-  //     } else {
-  //       res.status(404).json({
-  //         success: false,
-  //         message: result.message || "No venues with approved events found.",
-  //       });
-  //     }
-  //   } catch (error) {
-  //     res.status(500).json({
-  //       success: false,
-  //       message: "Failed to fetch venues with approved events.",
-  //     });
-  //   }
-  // }
-
   // --- Modular GET/UPDATE endpoints for venue amenities, booking conditions, variables ---
   static async getVenueAmenities(req: Request, res: Response): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({
+        where: { venueId },
+        relations: ["amenities"],
+      });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      res.status(200).json({ success: true, data: venue.amenities });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get amenities",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async getVenueBookingConditions(
     req: Request,
     res: Response
   ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({
+        where: { venueId },
+        relations: ["bookingConditions"],
+      });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      res.status(200).json({ success: true, data: venue.bookingConditions });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get booking conditions",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async getVenueVariables(req: Request, res: Response): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({
+        where: { venueId },
+        relations: ["venueVariables", "venueVariables.manager"],
+      });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      res.status(200).json({ success: true, data: venue.venueVariables });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get venue variables",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async getVenueAmenityById(req: Request, res: Response): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId, amenityId } = req.params;
+    if (!venueId || !amenityId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and amenityId are required",
+      });
+      return;
+    }
+    try {
+      const vaRepo = AppDataSource.getRepository(VenueAmenities);
+      const amenity = await vaRepo.findOne({
+        where: { id: amenityId },
+        relations: ["venue"],
+      });
+      if (!amenity || !amenity.venue || amenity.venue.venueId !== venueId) {
+        res.status(404).json({
+          success: false,
+          message: "Amenity not found for this venue",
+        });
+        return;
+      }
+      res.status(200).json({ success: true, data: amenity });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get amenity",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async getVenueBookingConditionById(
     req: Request,
     res: Response
   ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId, conditionId } = req.params;
+    if (!venueId || !conditionId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and conditionId are required",
+      });
+      return;
+    }
+    try {
+      const bcRepo = AppDataSource.getRepository(BookingCondition);
+      const condition = await bcRepo.findOne({
+        where: { id: conditionId },
+        relations: ["venue"],
+      });
+      if (
+        !condition ||
+        !condition.venue ||
+        condition.venue.venueId !== venueId
+      ) {
+        res.status(404).json({
+          success: false,
+          message: "Booking condition not found for this venue",
+        });
+        return;
+      }
+      // Exclude the venue property from the response
+      const { venue, ...conditionData } = condition;
+      res.status(200).json({ success: true, data: conditionData });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get booking condition",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+  static async updateVenueBookingConditionById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { venueId, conditionId } = req.params;
+    if (!venueId || !conditionId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and conditionId are required",
+      });
+      return;
+    }
+    try {
+      const bcRepo = AppDataSource.getRepository(BookingCondition);
+      const condition = await bcRepo.findOne({
+        where: { id: conditionId },
+        relations: ["venue"],
+      });
+      if (
+        !condition ||
+        !condition.venue ||
+        condition.venue.venueId !== venueId
+      ) {
+        res.status(404).json({
+          success: false,
+          message: "Booking condition not found for this venue",
+        });
+        return;
+      }
+      // Update fields from req.body
+      const {
+        descriptionCondition,
+        notaBene,
+        transitionTime,
+        depositRequiredPercent,
+        depositRequiredTime,
+        paymentComplementTimeBeforeEvent,
+      } = req.body;
+      if (descriptionCondition !== undefined)
+        condition.descriptionCondition = descriptionCondition;
+      if (notaBene !== undefined) condition.notaBene = notaBene;
+      if (transitionTime !== undefined)
+        condition.transitionTime = transitionTime;
+      if (depositRequiredPercent !== undefined)
+        condition.depositRequiredPercent = depositRequiredPercent;
+      if (depositRequiredTime !== undefined)
+        condition.depositRequiredTime = depositRequiredTime;
+      if (paymentComplementTimeBeforeEvent !== undefined)
+        condition.paymentComplementTimeBeforeEvent =
+          paymentComplementTimeBeforeEvent;
+      await bcRepo.save(condition);
+      // Exclude the venue property from the response
+      const { venue, ...conditionData } = condition;
+      res.status(200).json({ success: true, data: conditionData });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update booking condition",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async getVenueVariableById(
     req: Request,
     res: Response
   ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId, variableId } = req.params;
+    if (!venueId || !variableId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and variableId are required",
+      });
+      return;
+    }
+    try {
+      const vvRepo = AppDataSource.getRepository(VenueVariable);
+      const variable = await vvRepo.findOne({
+        where: { id: variableId },
+        relations: ["venue", "manager"],
+      });
+      if (!variable || !variable.venue || variable.venue.venueId !== venueId) {
+        res.status(404).json({
+          success: false,
+          message: "Venue variable not found for this venue",
+        });
+        return;
+      }
+      res.status(200).json({ success: true, data: variable });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to get venue variable",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async updateVenueAmenities(
     req: Request,
@@ -1522,13 +817,48 @@ export class VenueController {
     req: Request,
     res: Response
   ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
-  }
-  static async updateVenueBookingConditionById(
-    req: Request,
-    res: Response
-  ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId, amenityId } = req.params;
+    if (!venueId || !amenityId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and amenityId are required",
+      });
+      return;
+    }
+    try {
+      const vaRepo = AppDataSource.getRepository(VenueAmenities);
+      const amenity = await vaRepo.findOne({
+        where: { id: amenityId },
+        relations: ["venue"],
+      });
+      if (!amenity) {
+        res.status(404).json({ success: false, message: "Amenity not found" });
+        return;
+      }
+      if (!amenity.venue || amenity.venue.venueId !== venueId) {
+        res.status(400).json({
+          success: false,
+          message: "Amenity does not belong to the specified venue",
+        });
+        return;
+      }
+      // Update fields from req.body
+      const { resourceName, quantity, amenitiesDescription, costPerUnit } =
+        req.body;
+      if (resourceName !== undefined) amenity.resourceName = resourceName;
+      if (quantity !== undefined) amenity.quantity = quantity;
+      if (amenitiesDescription !== undefined)
+        amenity.amenitiesDescription = amenitiesDescription;
+      if (costPerUnit !== undefined) amenity.costPerUnit = costPerUnit;
+      await vaRepo.save(amenity);
+      res.status(200).json({ success: true, data: amenity });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update amenity",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async updateVenueVariableById(
     req: Request,
@@ -1542,19 +872,60 @@ export class VenueController {
       res.status(400).json({ success: false, message: "venueId is required" });
       return;
     }
-    const amenityData = req.body;
+    let amenities = req.body;
+    // If sent as string (from form-data), parse
+    if (typeof amenities === "string") {
+      try {
+        amenities = JSON.parse(amenities);
+      } catch (e) {
+        res.status(400).json({
+          success: false,
+          message: "amenities must be a valid JSON object or array.",
+        });
+        return;
+      }
+    }
+    // If not array, wrap as array
+    if (!Array.isArray(amenities)) {
+      amenities = [amenities];
+    }
     try {
       const venueRepo = AppDataSource.getRepository(Venue);
       const vaRepo = AppDataSource.getRepository(VenueAmenities);
-      const venue = await venueRepo.findOne({ where: { venueId } });
+      const venue = await venueRepo.findOne({
+        where: { venueId },
+        relations: ["amenities"],
+      });
       if (!venue) {
         res.status(404).json({ success: false, message: "Venue not found" });
         return;
       }
-      // Create and save the amenity
-      const amenity = vaRepo.create({ ...amenityData, venue });
-      await vaRepo.save(amenity);
-      res.status(201).json({ success: true, data: amenity });
+      // Prevent duplicate resourceName (case-insensitive, trimmed)
+      const existingNames = new Set(
+        (venue.amenities || []).map((a) => a.resourceName.trim().toLowerCase())
+      );
+      const toAdd = amenities.filter(
+        (a: any) =>
+          a &&
+          a.resourceName &&
+          !existingNames.has(a.resourceName.trim().toLowerCase())
+      );
+      const skipped = amenities.filter(
+        (a: any) =>
+          !a ||
+          !a.resourceName ||
+          existingNames.has(a.resourceName?.trim().toLowerCase())
+      );
+      const created = [];
+      for (const amenity of toAdd) {
+        const venueAmenity = vaRepo.create({ ...amenity, venue });
+        created.push(await vaRepo.save(venueAmenity));
+      }
+      if (created.length === 1 && skipped.length === 0) {
+        res.status(201).json({ success: true, data: created[0] });
+      } else {
+        res.status(201).json({ success: true, added: created, skipped });
+      }
     } catch (err) {
       res.status(500).json({
         success: false,
@@ -1598,6 +969,62 @@ export class VenueController {
       res.status(500).json({
         success: false,
         message: "Failed to remove amenity",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  static async addVenueResources(req: Request, res: Response): Promise<void> {
+    const { venueId } = req.params;
+    const resources = req.body.resources;
+    if (!venueId || !Array.isArray(resources) || resources.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and a non-empty resources array are required",
+      });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const resourceRepo = AppDataSource.getRepository("Resources");
+      const venueResourceRepo = AppDataSource.getRepository("VenueResource");
+      const venue = await venueRepo.findOne({ where: { venueId } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      // Get existing resources for this venue
+      const existingVenueResources = await venueResourceRepo.find({
+        where: { venue: { venueId } },
+        relations: ["resource"],
+      });
+      const existingResourceIds = new Set(
+        existingVenueResources.map((vr) => vr.resource.resourceId)
+      );
+      const toAdd = resources.filter(
+        (r) => !existingResourceIds.has(r.resourceId)
+      );
+      const skipped = resources.filter((r) =>
+        existingResourceIds.has(r.resourceId)
+      );
+      const created = [];
+      for (const r of toAdd) {
+        const resource = await resourceRepo.findOne({
+          where: { resourceId: r.resourceId },
+        });
+        if (!resource) continue;
+        const venueResource = venueResourceRepo.create({
+          venue,
+          resource,
+          quantity: r.quantity,
+        });
+        created.push(await venueResourceRepo.save(venueResource));
+      }
+      res.status(201).json({ success: true, added: created, skipped });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to add resources to venue",
         error: err instanceof Error ? err.message : err,
       });
     }

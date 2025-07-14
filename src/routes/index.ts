@@ -51,8 +51,17 @@ router.use("/installments", InstallmentPlanRoutes);
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes);
 
+const swaggerDocument = YAML.load(
+  path.join(__dirname, "../config/Swagger.yaml")
+);
 
-const swaggerDocument = YAML.load(path.join(__dirname, "../config/Swagger.yaml"));
-router.use("/giraffe-space/swagger-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Add Swagger UI
+router.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+router.use(
+  "/giraffe-space/swagger-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerDocument)
+);
 
 export default router;
