@@ -24,6 +24,7 @@ import { VenueBooking } from "./VenueBooking";
 import { Venue } from "./Venue Tables/Venue";
 import { VenueInvoice } from "./VenueInvoice";
 import { TicketType } from "./TicketType";
+import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
 
 @Entity("organizations")
 export class Organization {
@@ -99,6 +100,18 @@ export class Organization {
     message: "stateProvince must be at most $constraint2 characters",
   })
   stateProvince?: string;
+
+  @Column({ nullable: true })
+  @IsOptional()
+  @IsString({ message: "supportingDocument must be a string (URL)" })
+  supportingDocument?: string;
+
+  @Column({
+    type: "enum",
+    enum: OrganizationStatusEnum,
+    default: OrganizationStatusEnum.PENDING,
+  })
+  status!: OrganizationStatusEnum;
 
   // --- Relationships ---
   // Many-to-Many with User

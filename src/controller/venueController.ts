@@ -18,6 +18,7 @@ import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { VenueRequest } from "../interfaces/VenueInterface";
 import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
 import { In } from "typeorm";
+import { Organization } from "../models/Organization";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -103,9 +104,23 @@ export class VenueController {
     // Validate organizationId
     const organizationId = data.organizationId || organizationIdFromUser;
     if (!organizationId) {
-      res
-        .status(400)
-        .json({ success: false, message: "organizationId is required" });
+      res.status(400).json({ success: false, message: "organizationId is required" });
+      return;
+    }
+
+    // Check if organization is APPROVED and not 'Independent'
+    const orgRepo = AppDataSource.getRepository(Organization);
+    const organization = await orgRepo.findOne({ where: { organizationId } });
+    if (!organization) {
+      res.status(404).json({ success: false, message: "Organization not found." });
+      return;
+    }
+    if (organization.status !== "APPROVED") {
+      res.status(403).json({ success: false, message: "Only APPROVED organizations can create venues." });
+      return;
+    }
+    if (organization.organizationName === "Independent") {
+      res.status(403).json({ success: false, message: "The 'Independent' organization cannot create venues." });
       return;
     }
 

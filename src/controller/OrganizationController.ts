@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { OrganizationRepository } from "../repositories/OrganizationRepository";
 import { OrganizationInterface } from "../interfaces/OrganizationInterface";
+import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
+import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
 
 export class OrganizationController {
   /**
@@ -50,7 +52,89 @@ export class OrganizationController {
     }
   }
 
+  /**
+   * Create a single organization (with file upload)
+   * @route POST /organizations
+   * @access Protected
+   */
+  static async create(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.userId;
+    const isAdmin = req.user?.isAdmin;
+    try {
+      // Parse fields from form-data
+      const {
+        organizationName,
+        description,
+        contactEmail,
+        contactPhone,
+        address,
+        organizationType,
+        city,
+        country,
+        postalCode,
+        stateProvince
+      } = req.body;
 
+      // Validate required fields
+      if (!organizationName || !contactEmail) {
+        res.status(400).json({ success: false, message: "organizationName and contactEmail are required." });
+        return;
+      }
+
+      // Handle file upload if present
+      let supportingDocumentUrl: string | undefined = undefined;
+      if (req.file) {
+        // Only allow images and pdf
+        const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"];
+        if (!allowedTypes.includes(req.file.mimetype)) {
+          res.status(400).json({ success: false, message: "Only PDF and image files are allowed as supporting documents." });
+          return;
+        }
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          req.file.buffer,
+          "uploads/organization-supporting-document"
+        );
+        supportingDocumentUrl = uploadResult.url;
+      }
+
+      // Build organization object
+      const orgData = {
+        organizationName,
+        description,
+        contactEmail,
+        contactPhone,
+        address,
+        organizationType,
+        city,
+        country,
+        postalCode,
+        stateProvince,
+        supportingDocument: supportingDocumentUrl,
+        status: isAdmin ? OrganizationStatusEnum.APPROVED : OrganizationStatusEnum.PENDING
+      };
+
+      // Use bulkCreate for consistency (single item array)
+      const result = await OrganizationRepository.bulkCreate([orgData]);
+      if (!result.success || !result.data?.length) {
+        res.status(400).json(result);
+        return;
+      }
+      // Assign the creator as a user to the organization
+      await OrganizationRepository.assignUsersToOrganization([userId], result.data[0].organizationId);
+      res.status(201).json({
+        success: true,
+        data: result.data[0],
+        message: "Organization created and creator assigned."
+      });
+    } catch (error) {
+      console.error("[OrganizationController Create Error]:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
 
   /**
    * Create multiple organizations
@@ -60,6 +144,7 @@ export class OrganizationController {
   static async bulkCreate(req: Request, res: Response): Promise<void> {
     const { organizations }: { organizations: Partial<OrganizationInterface>[] } = req.body;
     const userId = req.user?.userId; // <-- Get userId from token (auth middleware must set req.user)
+    const isAdmin = req.user?.isAdmin;
 
     if (!organizations?.length) {
       res.status(400).json({
@@ -75,8 +160,13 @@ export class OrganizationController {
     }
 
     try {
+      // Set status for each organization based on creator's role
+      const organizationsWithStatus = organizations.map(org => ({
+        ...org,
+        status: isAdmin ? OrganizationStatusEnum.APPROVED : OrganizationStatusEnum.PENDING
+      }));
       // 1. Create organizations
-      const result = await OrganizationRepository.bulkCreate(organizations);
+      const result = await OrganizationRepository.bulkCreate(organizationsWithStatus);
 
       if (!result.success || !result.data?.length) {
         res.status(400).json(result);
@@ -388,4 +478,24 @@ export class OrganizationController {
     }
   }
 
+  static async approve(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const result = await OrganizationRepository.approveOrganization(id);
+    if (result.success) {
+      res.status(200).json({ success: true, message: result.message, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.message });
+    }
+  }
+
+  static async reject(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const result = await OrganizationRepository.rejectOrganization(id, reason);
+    if (result.success) {
+      res.status(200).json({ success: true, message: result.message, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.message });
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import { UserInterface } from './UserInterface';
+import { OrganizationStatusEnum } from './Enums/OrganizationStatusEnum';
 
 export class OrganizationInterface {
   organizationId!: string;
@@ -16,6 +17,8 @@ export class OrganizationInterface {
   organizationType?: string;
   organizationProfile?: string;
   description?: string;
+  supportingDocument?: string;
+  status!: OrganizationStatusEnum;
       
 
 
@@ -37,6 +40,8 @@ export class OrganizationInterface {
       country: data.country,
       postalCode: data.postalCode,
       stateProvince: data.stateProvince,
+      supportingDocument: data.supportingDocument,
+      status: data.status || OrganizationStatusEnum.PENDING,
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,
@@ -48,6 +53,7 @@ export class OrganizationInterface {
     if (!data.organizationName) errors.push('organizationName is required');
     if (!data.contactEmail) errors.push('contactEmail is required');
     if (!data.address) errors.push('address is required');
+    if (!data.status) errors.push('status is required');
     return errors;
   }
 }

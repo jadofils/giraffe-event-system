@@ -5,6 +5,7 @@ import { User } from "../models/User";
 import { In } from "typeorm";
 import { CacheService } from "../services/CacheService";
 import { Venue, VenueStatus } from "../models/Venue Tables/Venue";
+import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
 
 const CACHE_TTL = 3600; // 1 hour
 
@@ -183,6 +184,8 @@ export class OrganizationRepository {
           organizationType: item.organizationType,
           createdAt: new Date(),
           updatedAt: new Date(),
+          supportingDocument: item.supportingDocument,
+          status: item.status || OrganizationStatusEnum.PENDING, // <-- use enum, not string
         });
         organizations.push(org);
       }
@@ -946,6 +949,43 @@ export class OrganizationRepository {
         success: false,
         message: "Failed to remove venues from organization",
       };
+    }
+  }
+
+  static async approveOrganization(id: string): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({ where: { organizationId: id } });
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+      organization.status = OrganizationStatusEnum.APPROVED;
+      const updated = await repo.save(organization);
+      return { success: true, data: updated, message: "Organization approved." };
+    } catch (error) {
+      return { success: false, message: "Failed to approve organization" };
+    }
+  }
+
+  static async rejectOrganization(id: string, reason?: string): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({ where: { organizationId: id } });
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+      organization.status = OrganizationStatusEnum.REJECTED;
+      // Optionally, add a rejection reason field to the model and set it here
+      const updated = await repo.save(organization);
+      return { success: true, data: updated, message: "Organization rejected." };
+    } catch (error) {
+      return { success: false, message: "Failed to reject organization" };
     }
   }
 }
