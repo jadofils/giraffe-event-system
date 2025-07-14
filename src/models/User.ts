@@ -34,7 +34,6 @@ import { Event } from "./Event";
 import { Venue } from "./Venue Tables/Venue";
 import { Invoice } from "./Invoice";
 import { VenueReview } from "./Venue Tables/VenueReview";
-import { VenueApproval } from "./Venue Tables/VenueApproval";
 
 @Entity("users")
 export class User {
@@ -136,9 +135,6 @@ export class User {
 
   @OneToMany(() => VenueReview, (review) => review.user)
   venueReviews!: VenueReview[];
-
-  @OneToMany(() => VenueApproval, (approval) => approval.reviewer)
-  venueApprovals!: VenueApproval[];
 
   // --- NEW OPTIONAL USER PROFILE FIELDS ---
   @Column({ type: "varchar", length: 1000, nullable: true })

@@ -16,6 +16,8 @@ router.post(
   ]),
   VenueController.create
 );
+router.get("/all", authenticate, VenueController.getAllVenuesWithManagers);
+
 router.get("/:id", authenticate, VenueController.getVenueById);
 router.get(
   "/organizations/:organizationId/venues",
@@ -27,5 +29,86 @@ router.get(
   authenticate,
   VenueController.getVenuesByManager
 );
+router.get(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.getVenueAmenities
+);
+router.get(
+  "/:venueId/booking-conditions",
+  authenticate,
+  VenueController.getVenueBookingConditions
+);
+router.get(
+  "/:venueId/variables",
+  authenticate,
+  VenueController.getVenueVariables
+);
+
+router.get(
+  "/:venueId/amenities/:amenityId",
+  authenticate,
+  VenueController.getVenueAmenityById
+);
+router.get(
+  "/:venueId/booking-conditions/:conditionId",
+  authenticate,
+  VenueController.getVenueBookingConditionById
+);
+router.get(
+  "/:venueId/variables/:variableId",
+  authenticate,
+  VenueController.getVenueVariableById
+);
+
+router.put(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.updateVenueAmenities
+);
+router.put(
+  "/:venueId/booking-conditions",
+  authenticate,
+  VenueController.updateVenueBookingConditions
+);
+router.put(
+  "/:venueId/variables",
+  authenticate,
+  VenueController.updateVenueVariables
+);
+
+router.put(
+  "/:venueId/amenities/:amenityId",
+  authenticate,
+  VenueController.updateVenueAmenityById
+);
+router.put(
+  "/:venueId/booking-conditions/:conditionId",
+  authenticate,
+  VenueController.updateVenueBookingConditionById
+);
+router.put(
+  "/:venueId/variables/:variableId",
+  authenticate,
+  VenueController.updateVenueVariableById
+);
+
+router.post(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.addVenueAmenity
+);
+router.delete(
+  "/:venueId/amenities/:amenityId",
+  authenticate,
+  VenueController.removeVenueAmenity
+);
+router.patch("/:id/approve", authenticate, VenueController.approveVenue);
+router.patch(
+  "/:id/approve-public",
+  authenticate,
+  VenueController.approveVenuePublic
+);
+router.patch("/:id/reject", authenticate, VenueController.rejectVenue);
 
 export const venueRoute = router;

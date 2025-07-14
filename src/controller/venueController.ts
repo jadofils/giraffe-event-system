@@ -52,6 +52,16 @@ export class VenueController {
     const data: VenueRequest = req.body;
     const organizationIdFromUser = authenticatedReq.user?.organizationId;
 
+    // Set status based on creator role
+    let status: VenueStatus;
+    if (isAdmin) {
+      status = VenueStatus.APPROVED;
+    } else if (isVenueManager) {
+      status = VenueStatus.PENDING;
+    } else {
+      status = VenueStatus.PENDING;
+    }
+
     // Parse JSON fields if sent as strings (multipart/form-data)
     let venueAmenities = data.venueAmenities;
     if (typeof venueAmenities === "string") {
@@ -97,6 +107,41 @@ export class VenueController {
         .status(400)
         .json({ success: false, message: "organizationId is required" });
       return;
+    }
+
+    // Prevent duplication for managers: check for existing venue with same name/location/org
+    const venueRepo = AppDataSource.getRepository(Venue);
+    const existingVenue = await venueRepo.findOne({
+      where: {
+        venueName: data.venueName,
+        venueLocation: data.venueLocation,
+        organizationId: organizationId,
+      },
+      withDeleted: true,
+    });
+    if (isVenueManager && existingVenue) {
+      // If rejected, allow update and set to pending
+      if (existingVenue.status === VenueStatus.REJECTED) {
+        // Update fields and set to pending
+        existingVenue.capacity = data.capacity;
+        existingVenue.latitude = data.latitude;
+        existingVenue.longitude = data.longitude;
+        existingVenue.googleMapsLink = data.googleMapsLink;
+        existingVenue.venueTypeId = data.venueTypeId;
+        existingVenue.mainPhotoUrl = data.mainPhotoUrl;
+        existingVenue.photoGallery = data.photoGallery;
+        existingVenue.virtualTourUrl = data.virtualTourUrl;
+        existingVenue.venueDocuments = data.venueDocuments;
+        existingVenue.status = VenueStatus.PENDING;
+        existingVenue.cancellationReason = undefined;
+        await venueRepo.save(existingVenue);
+        res.status(200).json({ success: true, venueId: existingVenue.venueId, message: "Venue updated and set to pending for review." });
+        return;
+      } else {
+        // Prevent duplicate
+        res.status(409).json({ success: false, message: "Venue with the same name and location already exists for this organization." });
+        return;
+      }
     }
 
     // Handle file uploads
@@ -162,7 +207,6 @@ export class VenueController {
         virtualTourUrl = result.url;
       }
 
-      const venueRepo = AppDataSource.getRepository(Venue);
       const bcRepo = AppDataSource.getRepository(BookingCondition);
       const vvRepo = AppDataSource.getRepository(VenueVariable);
       const vaRepo = AppDataSource.getRepository(VenueAmenities);
@@ -174,7 +218,7 @@ export class VenueController {
           bookingConditions: _ignoreBC,
           venueVariable: _ignoreVV,
           venueAmenities: _ignoreVA,
-          status,
+          status: _ignoreStatus, // ignore status from request
           bookingType,
           ...venueFields
         } = data;
@@ -186,10 +230,7 @@ export class VenueController {
           mainPhotoUrl,
           photoGallery,
           virtualTourUrl,
-          status:
-            typeof status === "string"
-              ? VenueStatus[status as keyof typeof VenueStatus]
-              : status,
+          status, // use status determined by role
           bookingType:
             typeof bookingType === "string"
               ? BookingType[bookingType as keyof typeof BookingType]
@@ -269,6 +310,7 @@ export class VenueController {
           "availabilitySlots",
           "bookingConditions",
           "venueVariables",
+          "venueVariables.manager",
         ],
       });
       if (!venue) {
@@ -1136,32 +1178,135 @@ export class VenueController {
   //  *   - bufferMinutes (optional, default = 30)
   //  */
 
-  // static async approveVenue(req: Request, res: Response): Promise<void> {
-  //   const user = (req as any).user;
-  //   if (
-  //     !user ||
-  //     !user.role ||
-  //     String(user.role.roleName || user.role).toLowerCase() !== "admin"
-  //   ) {
-  //     res
-  //       .status(403)
-  //       .json({ success: false, message: "Only admin can approve venues." });
-  //     return;
-  //   }
-  //   const { id } = req.params;
-  //   const result = await VenueRepository.update(id, {
-  //     status: VenueStatus.APPROVED,
-  //   });
-  //   if (result.success && result.data) {
-  //     res.json({
-  //       success: true,
-  //       message: "Venue approved.",
-  //       data: result.data,
-  //     });
-  //   } else {
-  //     res.status(400).json({ success: false, message: result.message });
-  //   }
-  // }
+  static async approveVenue(req: Request, res: Response): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    if (!isAdmin) {
+      res
+        .status(403)
+        .json({ success: false, message: "Only ADMIN can approve venues." });
+      return;
+    }
+    const { id } = req.params;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      venue.status = VenueStatus.APPROVED;
+      venue.cancellationReason = undefined;
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Failed to approve venue",
+          error: err instanceof Error ? err.message : err,
+        });
+    }
+  }
+
+  static async approveVenuePublic(req: Request, res: Response): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    if (!isAdmin) {
+      res
+        .status(403)
+        .json({
+          success: false,
+          message: "Only ADMIN can approve venues for public.",
+        });
+      return;
+    }
+    const { id } = req.params;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      venue.status = VenueStatus.APPROVE_PUBLIC;
+      venue.cancellationReason = undefined;
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Failed to approve venue for public",
+          error: err instanceof Error ? err.message : err,
+        });
+    }
+  }
+
+  static async rejectVenue(req: Request, res: Response): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    if (!isAdmin) {
+      res
+        .status(403)
+        .json({ success: false, message: "Only ADMIN can reject venues." });
+      return;
+    }
+    const { id } = req.params;
+    const { cancellationReason } = req.body;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    if (!cancellationReason) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: "cancellationReason is required to reject a venue.",
+        });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      venue.status = VenueStatus.REJECTED;
+      venue.cancellationReason = cancellationReason;
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Failed to reject venue",
+          error: err instanceof Error ? err.message : err,
+        });
+    }
+  }
 
   // /**
   //  * Retrieves all approved venues.
@@ -1311,4 +1456,169 @@ export class VenueController {
   //     });
   //   }
   // }
+
+  // --- Modular GET/UPDATE endpoints for venue amenities, booking conditions, variables ---
+  static async getVenueAmenities(req: Request, res: Response): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async getVenueBookingConditions(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async getVenueVariables(req: Request, res: Response): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async getVenueAmenityById(req: Request, res: Response): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async getVenueBookingConditionById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async getVenueVariableById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueAmenities(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueBookingConditions(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueVariables(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueAmenityById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueBookingConditionById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async updateVenueVariableById(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    res.status(501).json({ success: false, message: "Not implemented" });
+  }
+  static async addVenueAmenity(req: Request, res: Response): Promise<void> {
+    const { venueId } = req.params;
+    if (!venueId) {
+      res.status(400).json({ success: false, message: "venueId is required" });
+      return;
+    }
+    const amenityData = req.body;
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const vaRepo = AppDataSource.getRepository(VenueAmenities);
+      const venue = await venueRepo.findOne({ where: { venueId } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      // Create and save the amenity
+      const amenity = vaRepo.create({ ...amenityData, venue });
+      await vaRepo.save(amenity);
+      res.status(201).json({ success: true, data: amenity });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to add amenity",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  static async removeVenueAmenity(req: Request, res: Response): Promise<void> {
+    const { venueId, amenityId } = req.params;
+    if (!venueId || !amenityId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and amenityId are required",
+      });
+      return;
+    }
+    try {
+      const vaRepo = AppDataSource.getRepository(VenueAmenities);
+      const amenity = await vaRepo.findOne({
+        where: { id: amenityId },
+        relations: ["venue"],
+      });
+      if (!amenity) {
+        res.status(404).json({ success: false, message: "Amenity not found" });
+        return;
+      }
+      if (!amenity.venue || amenity.venue.venueId !== venueId) {
+        res.status(400).json({
+          success: false,
+          message: "Amenity does not belong to the specified venue",
+        });
+        return;
+      }
+      await vaRepo.softRemove(amenity);
+      res
+        .status(200)
+        .json({ success: true, message: "Amenity removed from venue" });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to remove amenity",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  static async getAllVenuesWithManagers(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    if (!isAdmin) {
+      res
+        .status(403)
+        .json({ success: false, message: "Only ADMIN can list all venues." });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venues = await venueRepo.find({
+        relations: [
+          "amenities",
+          "availabilitySlots",
+          "bookingConditions",
+          "venueVariables",
+          "venueVariables.manager",
+        ],
+      });
+      res.status(200).json({ success: true, data: venues });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
 }

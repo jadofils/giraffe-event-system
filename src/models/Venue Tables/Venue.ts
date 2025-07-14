@@ -34,13 +34,13 @@ import { BookingCondition } from "./BookingCondition";
 import { VenueVariable } from "./VenueVariable";
 import { VenueAvailabilitySlot } from "./VenueAvailabilitySlot";
 import { VenueReview } from "./VenueReview";
-import { VenueApproval } from "./VenueApproval";
 
 export enum VenueStatus {
   PENDING = "PENDING",
   APPROVED = "APPROVED",
   CANCELLED = "CANCELLED",
   REJECTED = "REJECTED",
+  APPROVE_PUBLIC = "APPROVE_PUBLIC", // Added for public approval
 }
 
 export enum BookingType {
@@ -173,9 +173,6 @@ export class Venue {
 
   @OneToMany(() => VenueReview, (review) => review.venue)
   reviews!: VenueReview[];
-
-  @OneToMany(() => VenueApproval, (approval) => approval.venue)
-  approvals!: VenueApproval[];
 
   @OneToMany(() => Feedback, (feedback) => feedback.venue)
   feedbacks!: Feedback[];
