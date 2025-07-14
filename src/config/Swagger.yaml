@@ -148,7 +148,8 @@ components:
           type: array
           items:
             type: string
-          example: ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]
+          example:
+            ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]
         status:
           type: string
           example: "APPROVED"
@@ -313,7 +314,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserRegistration'
+              $ref: "#/components/schemas/UserRegistration"
       responses:
         "501": { description: Not implemented }
   /auth/all:
@@ -347,7 +348,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserRegistration'
+              $ref: "#/components/schemas/UserRegistration"
       responses:
         "501": { description: Not implemented }
   /auth/delete/{id}:
@@ -407,6 +408,37 @@ paths:
         "501": { description: Not implemented }
 
   # --- Organization ---
+  /organizations/:
+    post:
+      tags: [Organization]
+      summary: Create a new organization
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Acme Corp"
+                supportingDocument:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  organizationId:
+                    type: string
+                    example: "org-uuid-1"
   /organizations/all:
     get:
       tags: [Organization]
@@ -696,7 +728,47 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Venue'
+                  $ref: "#/components/schemas/Venue"
+  /organizations/{id}/approve:
+    patch:
+      tags: [Organization]
+      summary: Approve an organization
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organization approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+  /organizations/{id}/reject:
+    patch:
+      tags: [Organization]
+      summary: Reject an organization
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organization rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
 
   # --- Permission ---
   /permissions:
@@ -711,7 +783,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Permission'
+                  $ref: "#/components/schemas/Permission"
 
   # --- Role ---
   /roles:
@@ -723,14 +795,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Role'
+              $ref: "#/components/schemas/Role"
       responses:
         "201":
           description: Role created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                $ref: "#/components/schemas/Role"
     get:
       tags: [Role]
       summary: Get all roles
@@ -742,7 +814,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Role'
+                  $ref: "#/components/schemas/Role"
   /roles/{id}:
     get:
       tags: [Role]
@@ -758,7 +830,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                $ref: "#/components/schemas/Role"
     put:
       tags: [Role]
       summary: Update role by ID
@@ -772,14 +844,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Role'
+              $ref: "#/components/schemas/Role"
       responses:
         "200":
           description: Role updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                $ref: "#/components/schemas/Role"
     delete:
       tags: [Role]
       summary: Delete role by ID
@@ -819,7 +891,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                $ref: "#/components/schemas/Role"
 
   # --- Venue ---
   /venue/add:
@@ -879,7 +951,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Venue'
+                  $ref: "#/components/schemas/Venue"
   /venue/{id}:
     get:
       tags: [Venue]
@@ -895,7 +967,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Venue'
+                $ref: "#/components/schemas/Venue"
   /venue/organizations/{organizationId}/venues:
     get:
       tags: [Venue]
@@ -913,7 +985,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Venue'
+                  $ref: "#/components/schemas/Venue"
   /venue/managers/{managerId}/venues:
     get:
       tags: [Venue]
@@ -931,7 +1003,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Venue'
+                  $ref: "#/components/schemas/Venue"
   /venue/{venueId}/amenities:
     get:
       tags: [Venue]
@@ -949,7 +1021,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Amenity'
+                  $ref: "#/components/schemas/Amenity"
     put:
       tags: [Venue]
       summary: Update all amenities for a venue
@@ -965,7 +1037,7 @@ paths:
             schema:
               type: array
               items:
-                $ref: '#/components/schemas/Amenity'
+                $ref: "#/components/schemas/Amenity"
       responses:
         "200":
           description: Amenities updated
@@ -992,7 +1064,7 @@ paths:
             schema:
               type: array
               items:
-                $ref: '#/components/schemas/Amenity'
+                $ref: "#/components/schemas/Amenity"
       responses:
         "201":
           description: Amenity(ies) added
@@ -1007,7 +1079,7 @@ paths:
                   addedAmenities:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Amenity'
+                      $ref: "#/components/schemas/Amenity"
   /venue/{venueId}/amenities/{amenityId}:
     get:
       tags: [Venue]
@@ -1027,7 +1099,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Amenity'
+                $ref: "#/components/schemas/Amenity"
     put:
       tags: [Venue]
       summary: Update a specific amenity by ID for a venue
@@ -1045,14 +1117,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Amenity'
+              $ref: "#/components/schemas/Amenity"
       responses:
         "200":
           description: Amenity updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Amenity'
+                $ref: "#/components/schemas/Amenity"
     delete:
       tags: [Venue]
       summary: Remove a specific amenity from a venue
@@ -1093,7 +1165,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/BookingCondition'
+                  $ref: "#/components/schemas/BookingCondition"
     put:
       tags: [Venue]
       summary: Update all booking conditions for a venue
@@ -1109,7 +1181,7 @@ paths:
             schema:
               type: array
               items:
-                $ref: '#/components/schemas/BookingCondition'
+                $ref: "#/components/schemas/BookingCondition"
       responses:
         "200":
           description: Booking conditions updated
@@ -1140,7 +1212,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BookingCondition'
+                $ref: "#/components/schemas/BookingCondition"
     put:
       tags: [Venue]
       summary: Update a specific booking condition by ID for a venue
@@ -1158,14 +1230,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BookingCondition'
+              $ref: "#/components/schemas/BookingCondition"
       responses:
         "200":
           description: Booking condition updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BookingCondition'
+                $ref: "#/components/schemas/BookingCondition"
   /venue/{venueId}/variables:
     get:
       tags: [Venue]
@@ -1183,7 +1255,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/VenueVariable'
+                  $ref: "#/components/schemas/VenueVariable"
     put:
       tags: [Venue]
       summary: Update all variables for a venue
@@ -1199,7 +1271,7 @@ paths:
             schema:
               type: array
               items:
-                $ref: '#/components/schemas/VenueVariable'
+                $ref: "#/components/schemas/VenueVariable"
       responses:
         "200":
           description: Variables updated
@@ -1230,7 +1302,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VenueVariable'
+                $ref: "#/components/schemas/VenueVariable"
     put:
       tags: [Venue]
       summary: Update a specific variable by ID for a venue
@@ -1248,14 +1320,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VenueVariable'
+              $ref: "#/components/schemas/VenueVariable"
       responses:
         "200":
           description: Variable updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VenueVariable'
+                $ref: "#/components/schemas/VenueVariable"
   /venue/{id}/approve:
     patch:
       tags: [Venue]
