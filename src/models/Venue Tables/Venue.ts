@@ -134,13 +134,6 @@ export class Venue {
   @JoinColumn({ name: "organizationId" })
   organization?: Organization;
 
-  @ManyToMany(() => User, (user) => user.venues)
-  @JoinTable({
-    name: "venue_users",
-    joinColumn: { name: "venueId", referencedColumnName: "venueId" },
-    inverseJoinColumn: { name: "userId", referencedColumnName: "userId" },
-  })
-  users!: User[];
 
   @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
   bookings!: VenueBooking[];

@@ -789,18 +789,12 @@ export class OrganizationRepository {
           venueId: venue.venueId,
           venueName: venue.venueName,
           status: venue.status ? String(venue.status).toUpperCase() : undefined,
-          users:
-            venue.users?.map((user: User) => ({
-              userId: user.userId,
-              username: user.username,
-              email: user.email,
-            })) || [],
+          
         }));
 
         return {
           success: false,
           message: "One or more venues not found",
-          missingVenues: missingVenueDetails,
         };
       }
 

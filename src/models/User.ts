@@ -130,9 +130,6 @@ export class User {
   @OneToMany(() => Event, (event) => event.createdBy)
   createdEvents!: Event[];
 
-  @ManyToMany(() => Venue, (venue) => venue.users)
-  venues!: Venue[];
-
   @OneToMany(() => VenueReview, (review) => review.user)
   venueReviews!: VenueReview[];
 
