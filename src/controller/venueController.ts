@@ -5,7 +5,6 @@ import streamifier from "streamifier";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { EventRepository } from "../repositories/eventRepository";
 import { VenueRepository } from "../repositories/venueRepository";
-import { VenueResourceRepository } from "../repositories/VenueResourceRepository";
 import { Venue, VenueStatus, BookingType } from "../models/Venue Tables/Venue";
 import { AuthenticatedRequest } from "../middlewares/AuthMiddleware";
 import { AppDataSource } from "../config/Database";
