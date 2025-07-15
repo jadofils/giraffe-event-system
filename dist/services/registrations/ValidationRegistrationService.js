@@ -42,7 +42,7 @@ class RegistrationService {
      */
     static createRegistration(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
             this.ensureRepositoriesInitialized();
             try {
                 // Fetch related entities
@@ -165,11 +165,11 @@ class RegistrationService {
                         venueId: fullyPopulatedRegistration.venue.venueId,
                         venueName: fullyPopulatedRegistration.venue.venueName,
                         capacity: fullyPopulatedRegistration.venue.capacity,
-                        location: fullyPopulatedRegistration.venue.location,
-                        managerId: fullyPopulatedRegistration.venue.managerId,
-                        createdAt: (_d = fullyPopulatedRegistration.venue.createdAt) === null || _d === void 0 ? void 0 : _d.toISOString(),
-                        updatedAt: (_e = fullyPopulatedRegistration.venue.updatedAt) === null || _e === void 0 ? void 0 : _e.toISOString(),
-                        deletedAt: ((_f = fullyPopulatedRegistration.venue.deletedAt) === null || _f === void 0 ? void 0 : _f.toISOString()) ||
+                        location: fullyPopulatedRegistration.venue.venueLocation,
+                        managerId: (_f = (_e = (_d = fullyPopulatedRegistration.venue.venueVariables) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.manager) === null || _f === void 0 ? void 0 : _f.userId,
+                        createdAt: (_g = fullyPopulatedRegistration.venue.createdAt) === null || _g === void 0 ? void 0 : _g.toISOString(),
+                        updatedAt: (_h = fullyPopulatedRegistration.venue.updatedAt) === null || _h === void 0 ? void 0 : _h.toISOString(),
+                        deletedAt: ((_j = fullyPopulatedRegistration.venue.deletedAt) === null || _j === void 0 ? void 0 : _j.toISOString()) ||
                             undefined,
                     },
                     noOfTickets: fullyPopulatedRegistration.noOfTickets,
@@ -186,16 +186,16 @@ class RegistrationService {
                         ? {
                             paymentId: fullyPopulatedRegistration.payment.paymentId,
                             invoiceId: fullyPopulatedRegistration.payment.invoiceId,
-                            paymentDate: ((_g = fullyPopulatedRegistration.payment) !== null && _g !== void 0 ? _g : {}) instanceof Date
+                            paymentDate: ((_k = fullyPopulatedRegistration.payment) !== null && _k !== void 0 ? _k : {}) instanceof Date
                                 ? fullyPopulatedRegistration.payment.paymentDate.toString()
                                 : fullyPopulatedRegistration.payment.paymentDate,
                             paidAmount: fullyPopulatedRegistration.payment.paidAmount,
                             paymentMethod: fullyPopulatedRegistration.payment.paymentMethod,
                             paymentStatus: fullyPopulatedRegistration.payment.paymentStatus,
                             description: fullyPopulatedRegistration.payment.description,
-                            createdAt: (_h = fullyPopulatedRegistration.payment.createdAt) === null || _h === void 0 ? void 0 : _h.toISOString(),
-                            updatedAt: (_j = fullyPopulatedRegistration.payment.updatedAt) === null || _j === void 0 ? void 0 : _j.toISOString(),
-                            deletedAt: ((_k = fullyPopulatedRegistration.payment.deletedAt) === null || _k === void 0 ? void 0 : _k.toISOString()) ||
+                            createdAt: (_l = fullyPopulatedRegistration.payment.createdAt) === null || _l === void 0 ? void 0 : _l.toISOString(),
+                            updatedAt: (_m = fullyPopulatedRegistration.payment.updatedAt) === null || _m === void 0 ? void 0 : _m.toISOString(),
+                            deletedAt: ((_o = fullyPopulatedRegistration.payment.deletedAt) === null || _o === void 0 ? void 0 : _o.toISOString()) ||
                                 undefined,
                             invoice: undefined,
                         }
@@ -205,12 +205,12 @@ class RegistrationService {
                             invoiceId: fullyPopulatedRegistration.invoice.invoiceId,
                             eventId: fullyPopulatedRegistration.invoice.eventId,
                             userId: fullyPopulatedRegistration.invoice.userId,
-                            invoiceDate: (_l = fullyPopulatedRegistration.invoice.invoiceDate) === null || _l === void 0 ? void 0 : _l.toISOString(),
-                            dueDate: (_m = fullyPopulatedRegistration.invoice.dueDate) === null || _m === void 0 ? void 0 : _m.toISOString(),
+                            invoiceDate: (_p = fullyPopulatedRegistration.invoice.invoiceDate) === null || _p === void 0 ? void 0 : _p.toISOString(),
+                            dueDate: (_q = fullyPopulatedRegistration.invoice.dueDate) === null || _q === void 0 ? void 0 : _q.toISOString(),
                             totalAmount: fullyPopulatedRegistration.invoice.totalAmount,
                             status: fullyPopulatedRegistration.invoice.status,
-                            createdAt: (_o = fullyPopulatedRegistration.invoice.createdAt) === null || _o === void 0 ? void 0 : _o.toISOString(),
-                            updatedAt: (_p = fullyPopulatedRegistration.invoice.updatedAt) === null || _p === void 0 ? void 0 : _p.toISOString(),
+                            createdAt: (_r = fullyPopulatedRegistration.invoice.createdAt) === null || _r === void 0 ? void 0 : _r.toISOString(),
+                            updatedAt: (_s = fullyPopulatedRegistration.invoice.updatedAt) === null || _s === void 0 ? void 0 : _s.toISOString(),
                             deletedAt: fullyPopulatedRegistration.invoice.deletedAt
                                 ? fullyPopulatedRegistration.invoice.deletedAt.toISOString()
                                 : undefined,
