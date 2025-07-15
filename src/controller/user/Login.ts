@@ -186,8 +186,7 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
   "organizations",
   "organizations.venues",
   "role",
-  "role.permissions",
-  "venues"
+  "role.permissions"
 ]
           });
         },

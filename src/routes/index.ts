@@ -10,7 +10,7 @@ import { organizationRoutes } from "./OrganizationRoutes";
 import tickets from "./TicketTyeRoutes"; // Ensure tickets is exported from TicketType
 import resourceRoutes from "./ResourceRoutes"; // Ensure resourceRoutes is exported from ResourceRoutes
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
-import VenueBookingRoutes from "./VenueBookingRoutes";
+// import VenueBookingRoutes from "./VenueBookingRoutes";
 import InvoiceRoutes from "./InvoiceRoutes";
 import PaymentRoutes from "./PaymentRoutes";
 import InstallmentPlanRoutes from "./InstallmentPlanRoutes";
@@ -18,7 +18,7 @@ import EventRoute from "./EventRoutes";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./Venue";
 import { Registration } from "../models/Registration";
-import RegistrationRoutes from "./RegistrationRoutes";
+// import RegistrationRoutes from "./RegistrationRoutes";
 const router = Router();
 router.use(
   "/static",
@@ -31,13 +31,13 @@ router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/organizations", organizationRoutes); // This makes `/api/v1/organizations/*` available
 router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
-router.use("/registrations",RegistrationRoutes)
+// router.use("/registrations",RegistrationRoutes)
 //resources
 router.use("/resources", resourceRoutes);
 router.use("/venue", venueRoute); // This makes `/api/v1/venue/*` available
 router.use("/event", EventRoute);
 // Event Booking routes
-router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
+// router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
 //routes for registration
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes);
@@ -51,8 +51,17 @@ router.use("/installments", InstallmentPlanRoutes);
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes);
 
+const swaggerDocument = YAML.load(
+  path.join(__dirname, "../config/Swagger.yaml")
+);
 
-const swaggerDocument = YAML.load(path.join(__dirname, "../config/Swagger.yaml"));
-router.use("/giraffe-space/swagger-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Add Swagger UI
+router.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+router.use(
+  "/giraffe-space/swagger-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerDocument)
+);
 
 export default router;

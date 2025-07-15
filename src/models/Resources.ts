@@ -15,12 +15,11 @@ import {
   IsNumber,
   IsPositive,
 } from "class-validator";
-import { EventResource } from "./EventResource";
-import { Venue } from "./Venue";
-import { VenueResource } from './VenueResource';
+import { Venue } from "./Venue Tables/Venue";
+import { VenueAmenities } from "./Venue Tables/VenueAmenities";
 
 @Entity("resources")
-export class Resource {
+export class Resources {
   @PrimaryGeneratedColumn("uuid")
   @IsUUID("4", { message: "resourceId must be a valid UUID" })
   resourceId!: string;
@@ -45,9 +44,6 @@ export class Resource {
   @IsPositive({ message: "costPerUnit must be a positive value" })
   costPerUnit!: number;
 
-  @OneToMany(() => EventResource, (eventResource) => eventResource.resource)
-  eventResources!: EventResource[];
 
-  @OneToMany(() => VenueResource, (venueResource) => venueResource.resource)
-  resources!: VenueResource[];
+ 
 }

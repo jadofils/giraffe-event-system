@@ -6,80 +6,139 @@ import { authenticate } from "../middlewares/AuthMiddleware";
 import upload from "../middlewares/upload";
 
 const router = Router();
-
-router.get("/all", authenticate, VenueController.getAll);
-router.get("/get/:id", authenticate, VenueController.getById);
-router.get("/search", authenticate, VenueController.searchVenues);
-router.get("/count", authenticate, VenueController.getVenueCount);
 router.post(
   "/add",
   authenticate,
   upload.fields([
     { name: "mainPhoto", maxCount: 1 },
-    { name: "subPhotos", maxCount: 2 },
+    { name: "photoGallery", maxCount: 10 },
+    { name: "virtualTour", maxCount: 1 },
   ]),
   VenueController.create
 );
-router.get("/manager-venues", authenticate, VenueController.getByManagerId);
-router.put("/update/:id", authenticate, VenueController.update);
-router.delete("/remove/:id", authenticate, VenueController.delete);
-router.get("/venue-approximately", authenticate, VenueController.getVenuesByProximity);
-router.post(
-  "/assign-manager",
+router.get("/all", authenticate, VenueController.getAllVenuesWithManagers);
+
+router.get("/:id", authenticate, VenueController.getVenueById);
+router.get(
+  "/organizations/:organizationId/venues",
   authenticate,
-  VenueController.assignManagerToVenue
+  VenueController.getVenuesByOrganization
 );
-router.post(
-  "/:venueId/resources",
+router.get(
+  "/managers/:managerId/venues",
   authenticate,
-  VenueController.addResourcesToVenue
+  VenueController.getVenuesByManager
+);
+router.get(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.getVenueAmenities
+);
+router.get(
+  "/:venueId/booking-conditions",
+  authenticate,
+  VenueController.getVenueBookingConditions
+);
+router.get(
+  "/:venueId/variables",
+  authenticate,
+  VenueController.getVenueVariables
+);
+
+router.get(
+  "/:venueId/amenities/:amenityId",
+  authenticate,
+  VenueController.getVenueAmenityById
+);
+router.get(
+  "/:venueId/booking-conditions/:conditionId",
+  authenticate,
+  VenueController.getVenueBookingConditionById
+);
+router.get(
+  "/:venueId/variables/:variableId",
+  authenticate,
+  VenueController.getVenueVariableById
+);
+
+router.put(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.updateVenueAmenities
+);
+router.put(
+  "/:venueId/booking-conditions",
+  authenticate,
+  VenueController.updateVenueBookingConditions
+);
+router.put(
+  "/:venueId/variables",
+  authenticate,
+  VenueController.updateVenueVariables
+);
+
+router.put(
+  "/:venueId/amenities/:amenityId",
+  authenticate,
+  VenueController.updateVenueAmenityById
+);
+router.put(
+  "/:venueId/booking-conditions/:conditionId",
+  authenticate,
+  VenueController.updateVenueBookingConditionById
+);
+router.put(
+  "/:venueId/variables/:variableId",
+  authenticate,
+  VenueController.updateVenueVariableById
+);
+
+router.post(
+  "/:venueId/amenities",
+  authenticate,
+  VenueController.addVenueAmenity
 );
 router.delete(
-  "/:venueId/resources/:resourceId",
+  "/:venueId/amenities/:amenityId",
   authenticate,
-  VenueController.removeResourceFromVenue
+  VenueController.removeVenueAmenity
 );
-router.get(
-  ":venueId/resources",
+router.patch("/:id/approve", authenticate, VenueController.approveVenue);
+router.patch(
+  "/:id/approve-public",
   authenticate,
-  VenueController.getVenueResources
+  VenueController.approveVenuePublic
 );
-router.post("/add-with-resources", authenticate, VenueController.create);
-router.get(
-  "/approved-venues",
+router.patch("/:id/reject", authenticate, VenueController.rejectVenue);
+
+// General venue update
+router.patch("/:id", authenticate, VenueController.updateGeneralFields);
+// Main photo update
+router.patch(
+  "/:id/main-photo",
   authenticate,
-  VenueController.listApprovedVenues
+  upload.single("mainPhoto"),
+  VenueController.updateMainPhoto
 );
-router.put(
-  "/update-manager/:id",
+// Add photo to gallery
+router.post(
+  "/:id/photo-gallery",
   authenticate,
-  VenueController.updateVenueManager
+  upload.single("photo"),
+  VenueController.addPhotoToGallery
 );
-router.put(
-  "/remove-manager/:id",
+// Remove photo from gallery
+router.delete(
+  "/:id/photo-gallery",
   authenticate,
-  isAdmin,
-  VenueController.removeVenueManager
+  VenueController.removePhotoFromGallery
 );
-
-router.get(
-  "/available-venues",
+// Virtual tour update
+router.patch(
+  "/:id/virtual-tour",
   authenticate,
-  VenueController.checkAvailability
+  upload.single("virtualTour"),
+  VenueController.updateVirtualTour
 );
-
-router.post("/approve/:id", authenticate, VenueController.approveVenue);
-router.post("/cancel/:id", authenticate, VenueController.cancelVenue);
-
-router.get("/:venueId/events", authenticate, VenueController.getEventsByVenue);
-
-router.get("/public-approved-events", VenueController.listPublicApprovedEvents);
-
-router.get("/event-types", VenueController.listEventTypes);
-router.get("/venue-conflicts", VenueController.checkVenueEventConflicts);
-router.get("/with-approved-events", VenueController.getVenuesWithApprovedEvents);
-// router.use("/", checkAbsenceRoutes);
-router.get("/with-approved-events-via-bookings", VenueController.getVenuesWithApprovedEventsViaBookings);
-
 
 export const venueRoute = router;
