@@ -16,12 +16,12 @@ const QrCodeService_1 = require("../services/registrations/QrCodeService");
 const Event_1 = require("../models/Event");
 const User_1 = require("../models/User");
 const TicketType_1 = require("../models/TicketType");
-const Venue_1 = require("../models/Venue");
+const Venue_1 = require("../models/Venue Tables/Venue");
 class RegistrationRepository {
     // Get repository using the initialized AppDataSource
     static getRepository() {
         if (!Database_1.AppDataSource.isInitialized) {
-            throw new Error('AppDataSource is not initialized. Call AppDataSource.initialize() first.');
+            throw new Error("AppDataSource is not initialized. Call AppDataSource.initialize() first.");
         }
         return Database_1.AppDataSource.getRepository(Registration_1.Registration);
     }
@@ -31,15 +31,25 @@ class RegistrationRepository {
             try {
                 const repository = this.getRepository();
                 // Fetch related entities
-                const event = yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({ where: { eventId: registrationData.eventId } });
-                const user = yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: registrationData.userId } });
+                const event = yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({
+                    where: { eventId: registrationData.eventId },
+                });
+                const user = yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                    where: { userId: registrationData.userId },
+                });
                 const buyer = registrationData.buyerId
-                    ? yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: registrationData.buyerId } })
+                    ? yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                        where: { userId: registrationData.buyerId },
+                    })
                     : user; // Default to user if buyerId not provided
-                const ticketType = yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({ where: { ticketTypeId: registrationData.ticketTypeId } });
-                const venue = yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({ where: { venueId: registrationData.venueId } });
+                const ticketType = yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({
+                    where: { ticketTypeId: registrationData.ticketTypeId },
+                });
+                const venue = yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({
+                    where: { venueId: registrationData.venueId },
+                });
                 if (!event || !user || !buyer || !ticketType || !venue) {
-                    throw new Error('Missing required entity for registration after validation.');
+                    throw new Error("Missing required entity for registration after validation.");
                 }
                 // Create new registration instance
                 const registration = repository.create({
@@ -51,20 +61,24 @@ class RegistrationRepository {
                     ticketType,
                     venue,
                     noOfTickets: registrationData.noOfTickets,
-                    registrationDate: registrationData.registrationDate ? new Date(registrationData.registrationDate) : new Date(),
+                    registrationDate: registrationData.registrationDate
+                        ? new Date(registrationData.registrationDate)
+                        : new Date(),
                     paymentStatus: registrationData.paymentStatus,
                     qrCode: registrationData.qrCode,
-                    checkDate: registrationData.checkDate ? new Date(registrationData.checkDate) : undefined,
+                    checkDate: registrationData.checkDate
+                        ? new Date(registrationData.checkDate)
+                        : undefined,
                     attended: registrationData.attended || false,
                     totalCost: registrationData.totalCost,
-                    registrationStatus: registrationData.registrationStatus || 'active',
+                    registrationStatus: registrationData.registrationStatus || "active",
                     paymentId: registrationData.paymentId,
                     invoiceId: registrationData.invoiceId,
                 });
                 return yield repository.save(registration);
             }
             catch (error) {
-                console.error('Error creating registration:', error);
+                console.error("Error creating registration:", error);
                 throw error;
             }
         });
@@ -75,11 +89,11 @@ class RegistrationRepository {
             try {
                 const repository = this.getRepository();
                 return yield repository.find({
-                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue'],
+                    relations: ["event", "user", "buyer", "ticketType", "venue"],
                 });
             }
             catch (error) {
-                console.error('Error finding all registrations:', error);
+                console.error("Error finding all registrations:", error);
                 throw error;
             }
         });
@@ -91,7 +105,7 @@ class RegistrationRepository {
                 const repository = this.getRepository();
                 const registration = yield repository.findOne({
                     where: { registrationId },
-                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue'],
+                    relations: ["event", "user", "buyer", "ticketType", "venue"],
                 });
                 return registration || null;
             }
@@ -112,19 +126,34 @@ class RegistrationRepository {
                 }
                 // Fetch related entities if their IDs are provided
                 if (updateData.eventId) {
-                    registration.event = (yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({ where: { eventId: updateData.eventId } })) || registration.event;
+                    registration.event =
+                        (yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({
+                            where: { eventId: updateData.eventId },
+                        })) || registration.event;
                 }
                 if (updateData.userId) {
-                    registration.user = (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: updateData.userId } })) || registration.user;
+                    registration.user =
+                        (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                            where: { userId: updateData.userId },
+                        })) || registration.user;
                 }
                 if (updateData.buyerId) {
-                    registration.buyer = (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({ where: { userId: updateData.buyerId } })) || registration.buyer;
+                    registration.buyer =
+                        (yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                            where: { userId: updateData.buyerId },
+                        })) || registration.buyer;
                 }
                 if (updateData.ticketTypeId) {
-                    registration.ticketType = (yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({ where: { ticketTypeId: updateData.ticketTypeId } })) || registration.ticketType;
+                    registration.ticketType =
+                        (yield Database_1.AppDataSource.getRepository(TicketType_1.TicketType).findOne({
+                            where: { ticketTypeId: updateData.ticketTypeId },
+                        })) || registration.ticketType;
                 }
                 if (updateData.venueId) {
-                    registration.venue = (yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({ where: { venueId: updateData.venueId } })) || registration.venue;
+                    registration.venue =
+                        (yield Database_1.AppDataSource.getRepository(Venue_1.Venue).findOne({
+                            where: { venueId: updateData.venueId },
+                        })) || registration.venue;
                 }
                 // Update primitive fields
                 if (updateData.boughtForIds !== undefined)
@@ -163,7 +192,7 @@ class RegistrationRepository {
             try {
                 const repository = this.getRepository();
                 const result = yield repository.delete(registrationId);
-                return typeof result.affected === 'number' && result.affected > 0;
+                return typeof result.affected === "number" && result.affected > 0;
             }
             catch (error) {
                 console.error(`Error deleting registration ${registrationId}:`, error);
@@ -178,7 +207,7 @@ class RegistrationRepository {
                 const repository = this.getRepository();
                 return yield repository.find({
                     where: { event: { eventId } },
-                    relations: ['event', 'user', 'buyer', 'ticketType', 'venue'],
+                    relations: ["event", "user", "buyer", "ticketType", "venue"],
                 });
             }
             catch (error) {

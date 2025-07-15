@@ -13,12 +13,10 @@ exports.initializeDatabase = exports.AppDataSource = void 0;
 const typeorm_1 = require("typeorm");
 const Role_1 = require("../models/Role");
 const User_1 = require("../models/User");
-const Venue_1 = require("../models/Venue");
+const Venue_1 = require("../models/Venue Tables/Venue");
 const TicketType_1 = require("../models/TicketType");
 const Event_1 = require("../models/Event");
-const Resources_1 = require("../models/Resources");
-const VenueResource_1 = require("../models/VenueResource");
-const EventResource_1 = require("../models/EventResource");
+const VenueAmenities_1 = require("../models/Venue Tables/VenueAmenities");
 const Feedback_1 = require("../models/Feedback");
 const Permission_1 = require("../models/Permission");
 const VenuePayment_1 = require("../models/VenuePayment");
@@ -31,6 +29,10 @@ const InstallmentPlan_1 = require("../models/InstallmentPlan");
 const Budget_1 = require("../models/Budget");
 const VenueBooking_1 = require("../models/VenueBooking");
 const VenueInvoice_1 = require("../models/VenueInvoice");
+const BookingCondition_1 = require("../models/Venue Tables/BookingCondition");
+const VenueVariable_1 = require("../models/Venue Tables/VenueVariable");
+const VenueAvailabilitySlot_1 = require("../models/Venue Tables/VenueAvailabilitySlot");
+const VenueReview_1 = require("../models/Venue Tables/VenueReview");
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -43,9 +45,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
         Venue_1.Venue,
         TicketType_1.TicketType,
         Event_1.Event,
-        Resources_1.Resource,
-        VenueResource_1.VenueResource,
-        EventResource_1.EventResource,
+        VenueAmenities_1.VenueAmenities,
         Feedback_1.Feedback,
         Role_1.Role,
         Permission_1.Permission,
@@ -59,6 +59,10 @@ exports.AppDataSource = new typeorm_1.DataSource({
         Budget_1.Budget,
         VenueBooking_1.VenueBooking,
         VenueInvoice_1.VenueInvoice,
+        BookingCondition_1.BookingCondition,
+        VenueVariable_1.VenueVariable,
+        VenueAvailabilitySlot_1.VenueAvailabilitySlot,
+        VenueReview_1.VenueReview,
     ],
     migrations: [
         isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

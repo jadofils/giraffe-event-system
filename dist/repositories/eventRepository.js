@@ -23,7 +23,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventRepository = void 0;
 const Database_1 = require("../config/Database");
 const Event_1 = require("../models/Event");
-const Venue_1 = require("../models/Venue");
+const Venue_1 = require("../models/Venue Tables/Venue");
 const VenueBooking_1 = require("../models/VenueBooking");
 const CacheService_1 = require("../services/CacheService");
 const Index_1 = require("../interfaces/Index");
@@ -35,7 +35,6 @@ const constants_1 = require("../utils/constants");
 class EventRepository {
     static create(data, organizationId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const eventOrgId = data.organizationId || organizationId;
             if (!constants_1.UUID_REGEX.test(eventOrgId)) {
                 return { success: false, message: "Invalid organization ID format." };
@@ -212,8 +211,12 @@ class EventRepository {
                             .createQueryBuilder("booking")
                             .leftJoin("booking.event", "event")
                             .where("booking.venueId = :venueId", { venueId })
-                            .andWhere("booking.approvalStatus = :bookingStatus", { bookingStatus: VenueBooking_2.ApprovalStatus.APPROVED })
-                            .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
+                            .andWhere("booking.approvalStatus = :bookingStatus", {
+                            bookingStatus: VenueBooking_2.ApprovalStatus.APPROVED,
+                        })
+                            .andWhere("event.status = :eventStatus", {
+                            eventStatus: "APPROVED",
+                        })
                             .andWhere("(event.startDate <= :endDate AND event.endDate >= :startDate)", { startDate: data.startDate, endDate: data.endDate })
                             .getCount();
                         if (conflictCount > 0) {
@@ -250,7 +253,6 @@ class EventRepository {
                     booking.userId = data.organizerId;
                     booking.user = organizer;
                     booking.organizationId = eventOrgId;
-                    booking.totalAmountDue = (_a = venue.amount) !== null && _a !== void 0 ? _a : 0;
                     booking.approvalStatus = VenueBooking_2.ApprovalStatus.PENDING;
                     booking.notes = `Event booking for ${savedEvent.eventTitle}`;
                     booking.venue = venue;
@@ -318,7 +320,7 @@ class EventRepository {
                 const event = yield CacheService_1.CacheService.getOrSetSingle(cacheKey, Database_1.AppDataSource.getRepository(Event_1.Event), () => __awaiter(this, void 0, void 0, function* () {
                     return yield Database_1.AppDataSource.getRepository(Event_1.Event).findOne({
                         where: { eventId: id },
-                        relations: ["venues", "venueBookings", "organizer", "organization"]
+                        relations: ["venues", "venueBookings", "organizer", "organization"],
                     });
                 }), this.CACHE_TTL);
                 if (!event) {
@@ -898,7 +900,6 @@ class EventRepository {
     }
     static bulkCreateVenueBookings(bookings, userId, eventId, organizationId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
             if (!constants_1.UUID_REGEX.test(userId) ||
                 !constants_1.UUID_REGEX.test(eventId) ||
                 !constants_1.UUID_REGEX.test(organizationId)) {
@@ -1008,8 +1009,6 @@ class EventRepository {
                     booking.userId = userId;
                     booking.user = organizer;
                     booking.organizationId = organizationId;
-                    booking.totalAmountDue =
-                        (_b = (_a = data.totalAmountDue) !== null && _a !== void 0 ? _a : venue.amount) !== null && _b !== void 0 ? _b : 0;
                     booking.venueInvoiceId = data.venueInvoiceId;
                     booking.approvalStatus = VenueBooking_2.ApprovalStatus.PENDING;
                     booking.notes = `Event booking for ${event.eventTitle}`;

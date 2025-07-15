@@ -11,6 +11,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrganizationController = void 0;
 const OrganizationRepository_1 = require("../repositories/OrganizationRepository");
+const CloudinaryUploadService_1 = require("../services/CloudinaryUploadService");
+const OrganizationStatusEnum_1 = require("../interfaces/Enums/OrganizationStatusEnum");
 class OrganizationController {
     /**
      * Get all organizations
@@ -62,15 +64,85 @@ class OrganizationController {
         });
     }
     /**
+     * Create a single organization (with file upload)
+     * @route POST /organizations
+     * @access Protected
+     */
+    static create(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
+            const isAdmin = (_b = req.user) === null || _b === void 0 ? void 0 : _b.isAdmin;
+            try {
+                // Parse fields from form-data
+                const { organizationName, description, contactEmail, contactPhone, address, organizationType, city, country, postalCode, stateProvince } = req.body;
+                // Validate required fields
+                if (!organizationName || !contactEmail) {
+                    res.status(400).json({ success: false, message: "organizationName and contactEmail are required." });
+                    return;
+                }
+                // Handle file upload if present
+                let supportingDocumentUrl = undefined;
+                if (req.file) {
+                    // Only allow images and pdf
+                    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"];
+                    if (!allowedTypes.includes(req.file.mimetype)) {
+                        res.status(400).json({ success: false, message: "Only PDF and image files are allowed as supporting documents." });
+                        return;
+                    }
+                    const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(req.file.buffer, "uploads/organization-supporting-document");
+                    supportingDocumentUrl = uploadResult.url;
+                }
+                // Build organization object
+                const orgData = {
+                    organizationName,
+                    description,
+                    contactEmail,
+                    contactPhone,
+                    address,
+                    organizationType,
+                    city,
+                    country,
+                    postalCode,
+                    stateProvince,
+                    supportingDocument: supportingDocumentUrl,
+                    status: isAdmin ? OrganizationStatusEnum_1.OrganizationStatusEnum.APPROVED : OrganizationStatusEnum_1.OrganizationStatusEnum.PENDING
+                };
+                // Use bulkCreate for consistency (single item array)
+                const result = yield OrganizationRepository_1.OrganizationRepository.bulkCreate([orgData]);
+                if (!result.success || !((_c = result.data) === null || _c === void 0 ? void 0 : _c.length)) {
+                    res.status(400).json(result);
+                    return;
+                }
+                // Assign the creator as a user to the organization
+                yield OrganizationRepository_1.OrganizationRepository.assignUsersToOrganization([userId], result.data[0].organizationId);
+                res.status(201).json({
+                    success: true,
+                    data: result.data[0],
+                    message: "Organization created and creator assigned."
+                });
+            }
+            catch (error) {
+                console.error("[OrganizationController Create Error]:", error);
+                res.status(500).json({
+                    success: false,
+                    message: "Internal server error",
+                    error: error instanceof Error ? error.message : "Unknown error",
+                });
+            }
+        });
+    }
+    /**
      * Create multiple organizations
      * @route POST /organizations/bulk
      * @access Protected
      */
     static bulkCreate(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
+            var _a, _b, _c;
             const { organizations } = req.body;
             const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId; // <-- Get userId from token (auth middleware must set req.user)
+            const isAdmin = (_b = req.user) === null || _b === void 0 ? void 0 : _b.isAdmin;
             if (!(organizations === null || organizations === void 0 ? void 0 : organizations.length)) {
                 res.status(400).json({
                     success: false,
@@ -83,9 +155,11 @@ class OrganizationController {
                 return;
             }
             try {
+                // Set status for each organization based on creator's role
+                const organizationsWithStatus = organizations.map(org => (Object.assign(Object.assign({}, org), { status: isAdmin ? OrganizationStatusEnum_1.OrganizationStatusEnum.APPROVED : OrganizationStatusEnum_1.OrganizationStatusEnum.PENDING })));
                 // 1. Create organizations
-                const result = yield OrganizationRepository_1.OrganizationRepository.bulkCreate(organizations);
-                if (!result.success || !((_b = result.data) === null || _b === void 0 ? void 0 : _b.length)) {
+                const result = yield OrganizationRepository_1.OrganizationRepository.bulkCreate(organizationsWithStatus);
+                if (!result.success || !((_c = result.data) === null || _c === void 0 ? void 0 : _c.length)) {
                     res.status(400).json(result);
                     return;
                 }
@@ -385,6 +459,31 @@ class OrganizationController {
                     message: "Internal server error occurred while fetching venues for organization.",
                     error: error instanceof Error ? error.message : "Unknown error",
                 });
+            }
+        });
+    }
+    static approve(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const result = yield OrganizationRepository_1.OrganizationRepository.approveOrganization(id);
+            if (result.success) {
+                res.status(200).json({ success: true, message: result.message, data: result.data });
+            }
+            else {
+                res.status(400).json({ success: false, message: result.message });
+            }
+        });
+    }
+    static reject(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const { reason } = req.body;
+            const result = yield OrganizationRepository_1.OrganizationRepository.rejectOrganization(id, reason);
+            if (result.success) {
+                res.status(200).json({ success: true, message: result.message, data: result.data });
+            }
+            else {
+                res.status(400).json({ success: false, message: result.message });
             }
         });
     }

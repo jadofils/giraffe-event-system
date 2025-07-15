@@ -192,8 +192,10 @@ export class RegistrationService {
           venueId: fullyPopulatedRegistration.venue.venueId,
           venueName: fullyPopulatedRegistration.venue.venueName,
           capacity: fullyPopulatedRegistration.venue.capacity,
-          location: fullyPopulatedRegistration.venue.location,
-          managerId: fullyPopulatedRegistration.venue.managerId,
+          location: fullyPopulatedRegistration.venue.venueLocation,
+          managerId:
+            fullyPopulatedRegistration.venue.venueVariables?.[0]?.manager
+              ?.userId,
           createdAt: fullyPopulatedRegistration.venue.createdAt?.toISOString(),
           updatedAt: fullyPopulatedRegistration.venue.updatedAt?.toISOString(),
           deletedAt:

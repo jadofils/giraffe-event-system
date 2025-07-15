@@ -50,8 +50,7 @@ exports.AppConfig = AppConfig;
 AppConfig.NODE_ENV = process.env.NODE_ENV || 'development';
 AppConfig.PORT = parseInt(process.env.PORT || '3000', 10);
 AppConfig.API_PREFIX = process.env.API_PREFIX || '/api/v1';
-AppConfig.CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-// JWT Authentication
+AppConfig.CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5000'; // JWT Authentication
 AppConfig.JWT_SECRET = process.env.JWT_SECRET || 'dsghjkaskakgskjhajlslakklsjfdhjhkajlsjlajskal';
 AppConfig.JWT_EXPIRATION = process.env.JWT_EXPIRATION || '1d';
 AppConfig.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fgdhjahshlajsaghkslkajsjkajsjgagksjhahsk';

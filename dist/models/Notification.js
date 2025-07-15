@@ -12,61 +12,61 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Notification = void 0;
 // src/entity/Notification.ts
 const typeorm_1 = require("typeorm");
-const Venue_1 = require("./Venue");
+const Venue_1 = require("./Venue Tables/Venue");
 const class_validator_1 = require("class-validator");
 let Notification = class Notification {
 };
 exports.Notification = Notification;
 __decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
-    (0, class_validator_1.IsUUID)('4', { message: 'notificationId must be a valid UUID' }),
+    (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
+    (0, class_validator_1.IsUUID)("4", { message: "notificationId must be a valid UUID" }),
     __metadata("design:type", String)
 ], Notification.prototype, "notificationId", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'userId is required' }),
-    (0, class_validator_1.IsUUID)('4', { message: 'userId must be a valid UUID' }),
+    (0, class_validator_1.IsNotEmpty)({ message: "userId is required" }),
+    (0, class_validator_1.IsUUID)("4", { message: "userId must be a valid UUID" }),
     __metadata("design:type", String)
 ], Notification.prototype, "userId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsUUID)('4', { message: 'eventId must be a valid UUID' }),
+    (0, class_validator_1.IsUUID)("4", { message: "eventId must be a valid UUID" }),
     __metadata("design:type", Object)
 ], Notification.prototype, "eventId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsUUID)('4', { message: 'venueId must be a valid UUID' }),
+    (0, class_validator_1.IsUUID)("4", { message: "venueId must be a valid UUID" }),
     __metadata("design:type", Object)
 ], Notification.prototype, "venueId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.notifications, { nullable: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    (0, typeorm_1.JoinColumn)({ name: "venueId" }),
     __metadata("design:type", Venue_1.Venue)
 ], Notification.prototype, "venue", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'message is required' }),
+    (0, class_validator_1.IsNotEmpty)({ message: "message is required" }),
     (0, class_validator_1.Length)(1, 1000, {
-        message: 'message must be between $constraint1 and $constraint2 characters',
+        message: "message must be between $constraint1 and $constraint2 characters",
     }),
     __metadata("design:type", String)
 ], Notification.prototype, "message", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' }),
+    (0, typeorm_1.Column)({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
 ], Notification.prototype, "sentAt", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false }),
-    (0, class_validator_1.IsBoolean)({ message: 'isDesabled must be a boolean value' }),
+    (0, class_validator_1.IsBoolean)({ message: "isDesabled must be a boolean value" }),
     __metadata("design:type", Boolean)
 ], Notification.prototype, "isDesabled", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false }),
-    (0, class_validator_1.IsBoolean)({ message: 'isRead must be a boolean value' }),
+    (0, class_validator_1.IsBoolean)({ message: "isRead must be a boolean value" }),
     __metadata("design:type", Boolean)
 ], Notification.prototype, "isRead", void 0);
 exports.Notification = Notification = __decorate([
-    (0, typeorm_1.Entity)('notifications')
+    (0, typeorm_1.Entity)("notifications")
 ], Notification);

@@ -56,7 +56,20 @@ const app = (0, express_1.default)();
 // Apply standard Express middlewares
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: AppConfig_1.AppConfig.CORS_ORIGIN === '*' ? true : AppConfig_1.AppConfig.CORS_ORIGIN,
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            "http://localhost:3001",
+            "http://localhost:3000",
+            "https://giraffe-space.vercel.app",
+            AppConfig_1.AppConfig.CORS_ORIGIN, // fallback to env/config
+        ];
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error("Not allowed by CORS"));
+        }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -69,8 +82,9 @@ app.use((0, cookie_parser_1.default)());
 // Instantiate it, passing your redisClient directly to its constructor.
 // express-session will automatically handle passing its 'session' object internally.
 app.use((0, express_session_1.default)({
-    secret: AppConfig_1.AppConfig.SESSION_SECRET || "a-super-secret-key-that-should-be-in-env-variables",
-    name: 'my.sid',
+    secret: AppConfig_1.AppConfig.SESSION_SECRET ||
+        "a-super-secret-key-that-should-be-in-env-variables",
+    name: "my.sid",
     store: new ConnectRedis.RedisStore({ client: redis_1.default }), // <--- CORRECTED USAGE HERE
     resave: false,
     saveUninitialized: false,
@@ -78,8 +92,8 @@ app.use((0, express_session_1.default)({
         secure: AppConfig_1.AppConfig.isProduction(),
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
-    }
+        sameSite: "lax",
+    },
 }));
 // ------------------------------------------
 // Logging middleware
@@ -89,13 +103,13 @@ if (!AppConfig_1.AppConfig.isTest()) {
 // API routes
 app.use(AppConfig_1.AppConfig.API_PREFIX, routes_1.default);
 // Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'UP' });
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "UP" });
 });
 // Error handling middleware
 app.use((err, req, res, next) => {
     const status = err.status || 500;
-    const message = err.message || 'Something went wrong';
+    const message = err.message || "Something went wrong";
     console.error(`[Error] ${status} - ${message}`);
     res.status(status).json(Object.assign({ status,
         message }, (AppConfig_1.AppConfig.isDevelopment() && { stack: err.stack })));

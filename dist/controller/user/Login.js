@@ -147,7 +147,7 @@ class LoginController {
                 }, SECRET_KEY, { expiresIn: "1h" });
                 // Create reset link
                 const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
-                const resetLink = `${baseUrl}/pages/reset-password?token=${resetToken}`;
+                const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
                 // Log the reset link for debugging
                 console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
                 // Send reset link to user's email
@@ -212,8 +212,7 @@ class LoginController {
                             "organizations",
                             "organizations.venues",
                             "role",
-                            "role.permissions",
-                            "venues"
+                            "role.permissions"
                         ]
                     });
                 }), CACHE_TTL);

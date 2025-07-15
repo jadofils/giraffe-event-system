@@ -16,12 +16,12 @@ const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");
 const Event_1 = require("./Event");
 const PaymentStatusEnum_1 = require("../interfaces/Enums/PaymentStatusEnum");
-const Venue_1 = require("./Venue");
+const Venue_1 = require("./Venue Tables/Venue");
 let Payment = class Payment {
 };
 exports.Payment = Payment;
 __decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
+    (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
 ], Payment.prototype, "paymentId", void 0);
 __decorate([
@@ -30,7 +30,7 @@ __decorate([
 ], Payment.prototype, "invoiceId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Invoice_1.Invoice, { eager: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'invoiceId' }),
+    (0, typeorm_1.JoinColumn)({ name: "invoiceId" }),
     __metadata("design:type", Invoice_1.Invoice)
 ], Payment.prototype, "invoice", void 0);
 __decorate([
@@ -39,7 +39,7 @@ __decorate([
 ], Payment.prototype, "registrationId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Registration_1.Registration, { eager: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'registrationId' }),
+    (0, typeorm_1.JoinColumn)({ name: "registrationId" }),
     __metadata("design:type", Registration_1.Registration)
 ], Payment.prototype, "registration", void 0);
 __decorate([
@@ -48,16 +48,16 @@ __decorate([
 ], Payment.prototype, "eventId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Event_1.Event, (event) => event.payments, { eager: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'eventId' }),
+    (0, typeorm_1.JoinColumn)({ name: "eventId" }),
     __metadata("design:type", Event_1.Event)
 ], Payment.prototype, "event", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
     __metadata("design:type", Object)
 ], Payment.prototype, "venueId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.payments, { nullable: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'venueId' }),
+    (0, typeorm_1.JoinColumn)({ name: "venueId" }),
     __metadata("design:type", Venue_1.Venue)
 ], Payment.prototype, "venue", void 0);
 __decorate([
@@ -65,7 +65,7 @@ __decorate([
     __metadata("design:type", Date)
 ], Payment.prototype, "paymentDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)('decimal'),
+    (0, typeorm_1.Column)("decimal"),
     __metadata("design:type", Number)
 ], Payment.prototype, "paidAmount", void 0);
 __decorate([
@@ -73,7 +73,7 @@ __decorate([
     __metadata("design:type", String)
 ], Payment.prototype, "paymentMethod", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'enum', enum: PaymentStatusEnum_1.PaymentStatus }),
+    (0, typeorm_1.Column)({ type: "enum", enum: PaymentStatusEnum_1.PaymentStatus }),
     __metadata("design:type", String)
 ], Payment.prototype, "paymentStatus", void 0);
 __decorate([
@@ -93,7 +93,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Payment.prototype, "isSuccessful", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
+    (0, typeorm_1.Column)({ type: "jsonb", nullable: true }),
     __metadata("design:type", Object)
 ], Payment.prototype, "paymentResponse", void 0);
 __decorate([
@@ -117,15 +117,15 @@ __decorate([
     __metadata("design:type", String)
 ], Payment.prototype, "paidBy", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp with time zone' }),
+    (0, typeorm_1.CreateDateColumn)({ type: "timestamp with time zone" }),
     __metadata("design:type", Date)
 ], Payment.prototype, "createdAt", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp with time zone' }),
+    (0, typeorm_1.UpdateDateColumn)({ type: "timestamp with time zone" }),
     __metadata("design:type", Date)
 ], Payment.prototype, "updatedAt", void 0);
 __decorate([
-    (0, typeorm_1.DeleteDateColumn)({ type: 'timestamp with time zone', nullable: true }),
+    (0, typeorm_1.DeleteDateColumn)({ type: "timestamp with time zone", nullable: true }),
     __metadata("design:type", Date)
 ], Payment.prototype, "deletedAt", void 0);
 exports.Payment = Payment = __decorate([

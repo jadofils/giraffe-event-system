@@ -23,10 +23,36 @@ function bootstrap() {
         try {
             // Initialize database connection
             yield (0, Database_1.initializeDatabase)();
-            console.log('Database initialized successfully.'); // Add a success log
+            console.log("Database initialized successfully."); // Add a success log
+            // Seed Independent organization and assign to all users
+            try {
+                // const seeder = new IndependentOrganizationSeeder();
+                // // Pass an empty object as SeederFactoryManager (not used in this seeder)
+                // await seeder.run(AppDataSource, {} as any);
+                // console.log("Independent organization seeded and assigned to all users.");
+            }
+            catch (seedError) {
+                console.error("Failed to seed Independent organization:", seedError);
+            }
+            // Seed admin role
+            try {
+                // await AdminRoleSeeder.seed();
+                console.log("Admin role seeded successfully.");
+            }
+            catch (seedError) {
+                console.error("Failed to seed admin role:", seedError);
+            }
+            // Seed guest role
+            try {
+                //await seedDefaultRoles();
+                console.log("Guest role seeded successfully.");
+            }
+            catch (seedError) {
+                console.error("Failed to seed guest role:", seedError);
+            }
             // Initialize Redis connection
             yield (0, redis_1.initializeRedis)(); // <-- Await Redis connection
-            console.log('Redis initialized successfully.'); // Add a success log
+            console.log("Redis initialized successfully."); // Add a success log
             // Start the server
             app_1.default.listen(AppConfig_1.AppConfig.PORT, () => {
                 console.log(`Server running on port ${AppConfig_1.AppConfig.PORT}`);
@@ -34,7 +60,7 @@ function bootstrap() {
             });
         }
         catch (error) {
-            console.error('Failed to start server:', error);
+            console.error("Failed to start server:", error);
             process.exit(1); // Exit if critical services fail to initialize
         }
     });

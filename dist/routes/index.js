@@ -48,14 +48,14 @@ const OrganizationRoutes_1 = require("./OrganizationRoutes");
 const TicketTyeRoutes_1 = __importDefault(require("./TicketTyeRoutes")); // Ensure tickets is exported from TicketType
 const ResourceRoutes_1 = __importDefault(require("./ResourceRoutes")); // Ensure resourceRoutes is exported from ResourceRoutes
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
-const VenueBookingRoutes_1 = __importDefault(require("./VenueBookingRoutes"));
+// import VenueBookingRoutes from "./VenueBookingRoutes";
 const InvoiceRoutes_1 = __importDefault(require("./InvoiceRoutes"));
 const PaymentRoutes_1 = __importDefault(require("./PaymentRoutes"));
 const InstallmentPlanRoutes_1 = __importDefault(require("./InstallmentPlanRoutes"));
 const EventRoutes_1 = __importDefault(require("./EventRoutes"));
 const PermissionRoutes_1 = __importDefault(require("./PermissionRoutes"));
 const Venue_1 = require("./Venue");
-const RegistrationRoutes_1 = __importDefault(require("./RegistrationRoutes"));
+// import RegistrationRoutes from "./RegistrationRoutes";
 const router = (0, express_1.Router)();
 router.use("/static", express_1.default.static(path_1.default.join(__dirname, "..", "..", "uploads"))); // Adjust path as needed
 // Use versioned routes
@@ -63,13 +63,13 @@ router.use("/users", UserRoutes_1.userRoutes);
 router.use("/roles", RoleRoutes_1.default);
 router.use("/organizations", OrganizationRoutes_1.organizationRoutes); // This makes `/api/v1/organizations/*` available
 router.use("/tickets", TicketTyeRoutes_1.default); // This makes `/api/v1/tickets-type/*` available
-router.use("/registrations", RegistrationRoutes_1.default);
+// router.use("/registrations",RegistrationRoutes)
 //resources
 router.use("/resources", ResourceRoutes_1.default);
 router.use("/venue", Venue_1.venueRoute); // This makes `/api/v1/venue/*` available
 router.use("/event", EventRoutes_1.default);
 // Event Booking routes
-router.use("/venue-bookings", VenueBookingRoutes_1.default); // This makes `/api/v1/event-bookings/*` available
+// router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
 //routes for registration
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes_1.default);
@@ -80,5 +80,7 @@ router.use("/installments", InstallmentPlanRoutes_1.default);
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes_1.default);
 const swaggerDocument = yamljs_1.default.load(path_1.default.join(__dirname, "../config/Swagger.yaml"));
+// Add Swagger UI
+router.use("/api-docs", swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swaggerDocument));
 router.use("/giraffe-space/swagger-docs", swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swaggerDocument));
 exports.default = router;

@@ -96,7 +96,7 @@ class UserRepository {
                 }
                 else if (user.roleId && !user.role) {
                     const existingRole = yield roleRepository.findOne({
-                        where: { roleId: user.roleId }
+                        where: { roleId: user.roleId },
                     });
                     if (existingRole) {
                         user.role = existingRole;
@@ -215,16 +215,7 @@ class UserRepository {
                         "updatedAt",
                         "deletedAt",
                     ],
-                    relations: [
-                        "role",
-                        "role.permissions",
-                        "organizations",
-                        "venues",
-                        "venues.bookings",
-                        "venues.resources",
-                        "venues.feedbacks",
-                        "registrations",
-                    ],
+                    relations: ["role", "role.permissions", "organizations"],
                 });
                 if (!user) {
                     return null;

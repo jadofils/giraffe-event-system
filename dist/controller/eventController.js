@@ -58,12 +58,12 @@ const EventStatusEnum_1 = require("../interfaces/Enums/EventStatusEnum");
 const VenueBooking_1 = require("../models/VenueBooking");
 const eventRepository_1 = require("../repositories/eventRepository");
 const Database_1 = require("../config/Database");
-const Venue_1 = require("../models/Venue");
+const Venue_1 = require("../models/Venue Tables/Venue");
 const typeorm_1 = require("typeorm");
 const constants_1 = require("../utils/constants");
 const InvoiceService_1 = require("../services/invoice/InvoiceService");
 const InvoiceStatus_1 = require("../interfaces/Enums/InvoiceStatus");
-const Venue_2 = require("../models/Venue");
+const Venue_2 = require("../models/Venue Tables/Venue");
 class EventController {
     static createEvent(req, res, next) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -98,7 +98,7 @@ class EventController {
                 if (!venues || !Array.isArray(venues) || !startDate || !endDate) {
                     res.status(400).json({
                         success: false,
-                        message: "venues, startDate, and endDate are required for conflict check."
+                        message: "venues, startDate, and endDate are required for conflict check.",
                     });
                     return;
                 }
@@ -107,7 +107,9 @@ class EventController {
                         .createQueryBuilder("booking")
                         .leftJoin("booking.event", "event")
                         .where("booking.venueId = :venueId", { venueId })
-                        .andWhere("booking.approvalStatus = :bookingStatus", { bookingStatus: VenueBooking_1.ApprovalStatus.APPROVED })
+                        .andWhere("booking.approvalStatus = :bookingStatus", {
+                        bookingStatus: VenueBooking_1.ApprovalStatus.APPROVED,
+                    })
                         .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
                         .andWhere("(event.startDate <= :endDate AND event.endDate >= :startDate)", { startDate, endDate })
                         .getCount();
@@ -115,7 +117,7 @@ class EventController {
                         res.status(409).json({
                             success: false,
                             message: `Venue ${venueId} is already booked for an approved event on the same date(s).`,
-                            venueId
+                            venueId,
                         });
                         return;
                     }
@@ -213,8 +215,8 @@ class EventController {
                         invoices.push(Object.assign(Object.assign({}, invoice), { venue: {
                                 venueId: booking.venue.venueId,
                                 venueName: booking.venue.venueName,
-                                amount: booking.venue.amount,
-                                location: booking.venue.location,
+                                amount: booking.venue.venueVariables,
+                                location: booking.venue.venueLocation,
                                 organization: booking.venue.organization
                                     ? {
                                         organizationId: booking.venue.organization.organizationId,
@@ -377,20 +379,16 @@ class EventController {
                     venue: {
                         venueId: booking.venue.venueId,
                         venueName: booking.venue.venueName,
-                        location: booking.venue.location,
+                        location: booking.venue.venueLocation,
                         capacity: booking.venue.capacity,
-                        amount: booking.venue.amount,
+                        amount: booking.venue.venueVariables,
                         latitude: booking.venue.latitude,
                         longitude: booking.venue.longitude,
                         googleMapsLink: booking.venue.googleMapsLink,
-                        managerId: booking.venue.managerId,
+                        managerId: booking.venue.venueVariables,
                         organizationId: booking.venue.organizationId,
                         amenities: booking.venue.amenities,
-                        venueType: booking.venue.venueType,
-                        contactPerson: booking.venue.contactPerson,
-                        contactEmail: booking.venue.contactEmail,
-                        contactPhone: booking.venue.contactPhone,
-                        websiteURL: booking.venue.websiteURL,
+                        venueType: booking.venue.venueTypeId,
                         createdAt: booking.venue.createdAt,
                         updatedAt: booking.venue.updatedAt,
                         deletedAt: booking.venue.deletedAt,

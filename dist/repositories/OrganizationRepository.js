@@ -15,7 +15,8 @@ const Organization_1 = require("../models/Organization");
 const User_1 = require("../models/User");
 const typeorm_1 = require("typeorm");
 const CacheService_1 = require("../services/CacheService");
-const Venue_1 = require("../models/Venue");
+const Venue_1 = require("../models/Venue Tables/Venue");
+const OrganizationStatusEnum_1 = require("../interfaces/Enums/OrganizationStatusEnum");
 const CACHE_TTL = 3600; // 1 hour
 class OrganizationRepository {
     /**
@@ -70,7 +71,10 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Fetch Error] ID: ${id}:`, error.message);
-                return { success: false, message: `Failed to fetch organization: ${error.message || "Unknown error"}` };
+                return {
+                    success: false,
+                    message: `Failed to fetch organization: ${error.message || "Unknown error"}`,
+                };
             }
         });
     }
@@ -81,8 +85,14 @@ class OrganizationRepository {
      */
     static create(data) {
         var _a, _b;
-        if (!data.organizationName || !data.contactEmail || !data.address || !data.organizationType) {
-            return { success: false, message: "Required fields (name, email, address, type) are missing" };
+        if (!data.organizationName ||
+            !data.contactEmail ||
+            !data.address ||
+            !data.organizationType) {
+            return {
+                success: false,
+                message: "Required fields (name, email, address, type) are missing",
+            };
         }
         const organization = new Organization_1.Organization();
         organization.organizationName = data.organizationName;
@@ -104,7 +114,10 @@ class OrganizationRepository {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
             if (!data.length) {
-                return { success: false, message: "At least one organization is required" };
+                return {
+                    success: false,
+                    message: "At least one organization is required",
+                };
             }
             try {
                 const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
@@ -117,10 +130,17 @@ class OrganizationRepository {
                         !item.contactEmail ||
                         !item.address ||
                         !item.organizationType) {
-                        return { success: false, message: "Required fields missing in one or more organizations" };
+                        return {
+                            success: false,
+                            message: "Required fields missing in one or more organizations",
+                        };
                     }
-                    if (existingNames.has(item.organizationName) || existingEmails.has(item.contactEmail)) {
-                        return { success: false, message: "Duplicate organization name or email in bulk data" };
+                    if (existingNames.has(item.organizationName) ||
+                        existingEmails.has(item.contactEmail)) {
+                        return {
+                            success: false,
+                            message: "Duplicate organization name or email in bulk data",
+                        };
                     }
                     existingNames.add(item.organizationName);
                     existingEmails.add(item.contactEmail);
@@ -133,6 +153,8 @@ class OrganizationRepository {
                         organizationType: item.organizationType,
                         createdAt: new Date(),
                         updatedAt: new Date(),
+                        supportingDocument: item.supportingDocument,
+                        status: item.status || OrganizationStatusEnum_1.OrganizationStatusEnum.PENDING, // <-- use enum, not string
                     });
                     organizations.push(org);
                 }
@@ -152,8 +174,15 @@ class OrganizationRepository {
                 // Save all organizations
                 const savedOrganizations = yield repo.save(organizations);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple(["org:all", ...savedOrganizations.map((org) => `org:id:${org.organizationId}`)]);
-                return { success: true, data: savedOrganizations, message: "Organizations created successfully" };
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    ...savedOrganizations.map((org) => `org:id:${org.organizationId}`),
+                ]);
+                return {
+                    success: true,
+                    data: savedOrganizations,
+                    message: "Organizations created successfully",
+                };
             }
             catch (error) {
                 console.error("[Organization Bulk Create Error]:", error);
@@ -168,8 +197,14 @@ class OrganizationRepository {
      */
     static save(org) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!org.organizationName || !org.contactEmail || !org.address || !org.organizationType) {
-                return { success: false, message: "Required fields (name, email, address, type) are missing" };
+            if (!org.organizationName ||
+                !org.contactEmail ||
+                !org.address ||
+                !org.organizationType) {
+                return {
+                    success: false,
+                    message: "Required fields (name, email, address, type) are missing",
+                };
             }
             try {
                 const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
@@ -194,7 +229,11 @@ class OrganizationRepository {
                     "org:all",
                     `org:id:${savedOrganization.organizationId}`,
                 ]);
-                return { success: true, data: savedOrganization, message: "Organization saved successfully" };
+                return {
+                    success: true,
+                    data: savedOrganization,
+                    message: "Organization saved successfully",
+                };
             }
             catch (error) {
                 console.error("[Organization Save Error]:", error);
@@ -232,7 +271,10 @@ class OrganizationRepository {
                         ],
                     });
                     if (existing && existing.organizationId !== id) {
-                        return { success: false, message: "Organization name or email already exists" };
+                        return {
+                            success: false,
+                            message: "Organization name or email already exists",
+                        };
                     }
                 }
                 repo.merge(organization, {
@@ -251,7 +293,11 @@ class OrganizationRepository {
                     `org:id:${id}`,
                     ...organization.users.map((user) => `org:user:${user.userId}`),
                 ]);
-                return { success: true, data: updatedOrganization, message: "Organization updated successfully" };
+                return {
+                    success: true,
+                    data: updatedOrganization,
+                    message: "Organization updated successfully",
+                };
             }
             catch (error) {
                 console.error(`[Organization Update Error] ID: ${id}:`, error);
@@ -268,7 +314,10 @@ class OrganizationRepository {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e, _f;
             if (!updates.length) {
-                return { success: false, message: "At least one organization update is required" };
+                return {
+                    success: false,
+                    message: "At least one organization update is required",
+                };
             }
             try {
                 const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
@@ -294,7 +343,10 @@ class OrganizationRepository {
                             ],
                         });
                         if (existing && existing.organizationId !== id) {
-                            return { success: false, message: "Organization name or email already exists" };
+                            return {
+                                success: false,
+                                message: "Organization name or email already exists",
+                            };
                         }
                     }
                     repo.merge(organization, {
@@ -312,7 +364,11 @@ class OrganizationRepository {
                 }
                 // Invalidate cache
                 yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
-                return { success: true, data: updatedOrganizations, message: "Organizations updated successfully" };
+                return {
+                    success: true,
+                    data: updatedOrganizations,
+                    message: "Organizations updated successfully",
+                };
             }
             catch (error) {
                 console.error("[Organization Bulk Update Error]:", error);
@@ -341,7 +397,10 @@ class OrganizationRepository {
                 }
                 const result = yield repo.delete(id);
                 if (result.affected === 0) {
-                    return { success: false, message: "Organization not found or already deleted" };
+                    return {
+                        success: false,
+                        message: "Organization not found or already deleted",
+                    };
                 }
                 // Invalidate cache
                 yield CacheService_1.CacheService.invalidateMultiple([
@@ -393,7 +452,11 @@ class OrganizationRepository {
                 // Filter out already assigned users
                 const newUsers = users.filter((user) => !user.organizations.some((org) => org.organizationId === organizationId));
                 if (!newUsers.length) {
-                    return { success: true, message: "All users are already assigned to this organization", data: organization };
+                    return {
+                        success: true,
+                        message: "All users are already assigned to this organization",
+                        data: organization,
+                    };
                 }
                 // Assign users
                 organization.users = [...(organization.users || []), ...newUsers];
@@ -413,7 +476,10 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Assign Users Error] Org ID: ${organizationId}:`, error);
-                return { success: false, message: "Failed to assign users to organization" };
+                return {
+                    success: false,
+                    message: "Failed to assign users to organization",
+                };
             }
         });
     }
@@ -458,7 +524,10 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Remove Users Error] Org ID: ${organizationId}:`, error);
-                return { success: false, message: "Failed to remove users from organization" };
+                return {
+                    success: false,
+                    message: "Failed to remove users from organization",
+                };
             }
         });
     }
@@ -485,7 +554,10 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Fetch Users Error] Org ID: ${organizationId}:`, error);
-                return { success: false, message: "Failed to fetch users for organization" };
+                return {
+                    success: false,
+                    message: "Failed to fetch users for organization",
+                };
             }
         });
     }
@@ -507,27 +579,34 @@ class OrganizationRepository {
                     ],
                     where: {
                         users: {
-                            userId: userId
-                        }
+                            userId: userId,
+                        },
                     },
-                    order: { organizationName: "ASC" }
+                    order: { organizationName: "ASC" },
                 });
                 if (!organizations.length) {
-                    return { success: false, message: "No organizations found for this user" };
+                    return {
+                        success: false,
+                        message: "No organizations found for this user",
+                    };
                 }
                 return { success: true, data: organizations };
             }
             catch (error) {
-                return { success: false, message: "Failed to fetch organizations", error };
+                return {
+                    success: false,
+                    message: "Failed to fetch organizations",
+                    error,
+                };
             }
         });
     }
     /**
-    * Add one or more venues to an organization.
-    * @param organizationId Organization UUID
-    * @param venueIds Array of Venue UUIDs to add
-    * @returns Assignment result
-    */
+     * Add one or more venues to an organization.
+     * @param organizationId Organization UUID
+     * @param venueIds Array of Venue UUIDs to add
+     * @returns Assignment result
+     */
     static addVenuesToOrganization(organizationId, venueIds) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
@@ -552,43 +631,36 @@ class OrganizationRepository {
                     where: { venueId: (0, typeorm_1.In)(venueIds) },
                     relations: ["organization", "users"], // Load existing organization relation and users
                 });
-                const foundVenueIds = venuesToAdd.map(v => v.venueId);
-                const missingVenueIds = venueIds.filter(id => !foundVenueIds.includes(id));
+                const foundVenueIds = venuesToAdd.map((v) => v.venueId);
+                const missingVenueIds = venueIds.filter((id) => !foundVenueIds.includes(id));
                 if (missingVenueIds.length > 0) {
                     // Try to fetch details for missing venues (if soft-deleted or in another org)
                     const missingVenues = yield venueRepo.find({
                         where: { venueId: (0, typeorm_1.In)(missingVenueIds) },
                         relations: ["users"],
-                        withDeleted: true // if using soft deletes
+                        withDeleted: true, // if using soft deletes
                     });
                     // Format missing venues with users and status in uppercase
-                    const missingVenueDetails = missingVenues.map(venue => {
-                        var _a;
-                        return ({
-                            venueId: venue.venueId,
-                            venueName: venue.venueName,
-                            status: venue.status ? String(venue.status).toUpperCase() : undefined,
-                            users: ((_a = venue.users) === null || _a === void 0 ? void 0 : _a.map((user) => ({
-                                userId: user.userId,
-                                username: user.username,
-                                email: user.email,
-                            }))) || []
-                        });
-                    });
+                    const missingVenueDetails = missingVenues.map((venue) => ({
+                        venueId: venue.venueId,
+                        venueName: venue.venueName,
+                        status: venue.status ? String(venue.status).toUpperCase() : undefined,
+                    }));
                     return {
                         success: false,
                         message: "One or more venues not found",
-                        missingVenues: missingVenueDetails
                     };
                 }
                 const assignedVenuesCount = { added: 0, alreadyAssigned: 0 };
                 const invalidateKeys = ["org:all", `org:id:${organizationId}`];
                 for (const venue of venuesToAdd) {
                     // Check if the venue is already assigned to this organization
-                    if (venue.organization && venue.organization.organizationId === organizationId) {
+                    if (venue.organization &&
+                        venue.organization.organizationId === organizationId) {
                         assignedVenuesCount.alreadyAssigned++;
                     }
-                    else if (venue.organization && venue.organization.organizationId !== organizationId) {
+                    else if (venue.organization &&
+                        venue.organization.organizationId !== organizationId) {
                         // Venue is already assigned to a different organization
                         return {
                             success: false,
@@ -604,7 +676,8 @@ class OrganizationRepository {
                         invalidateKeys.push(`venue:id:${venue.venueId}`); // Invalidate venue cache too
                     }
                 }
-                if (assignedVenuesCount.added === 0 && assignedVenuesCount.alreadyAssigned > 0) {
+                if (assignedVenuesCount.added === 0 &&
+                    assignedVenuesCount.alreadyAssigned > 0) {
                     return {
                         success: true,
                         message: "All specified venues are already assigned to this organization",
@@ -630,7 +703,10 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Add Venues Error] Org ID: ${organizationId}:`, error);
-                return { success: false, message: "Failed to add venues to organization" };
+                return {
+                    success: false,
+                    message: "Failed to add venues to organization",
+                };
             }
         });
     }
@@ -693,7 +769,51 @@ class OrganizationRepository {
             }
             catch (error) {
                 console.error(`[Organization Remove Venues Error] Org ID: ${organizationId}:`, error);
-                return { success: false, message: "Failed to remove venues from organization" };
+                return {
+                    success: false,
+                    message: "Failed to remove venues from organization",
+                };
+            }
+        });
+    }
+    static approveOrganization(id) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield repo.findOne({ where: { organizationId: id } });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.APPROVED;
+                const updated = yield repo.save(organization);
+                return { success: true, data: updated, message: "Organization approved." };
+            }
+            catch (error) {
+                return { success: false, message: "Failed to approve organization" };
+            }
+        });
+    }
+    static rejectOrganization(id, reason) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield repo.findOne({ where: { organizationId: id } });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.REJECTED;
+                // Optionally, add a rejection reason field to the model and set it here
+                const updated = yield repo.save(organization);
+                return { success: true, data: updated, message: "Organization rejected." };
+            }
+            catch (error) {
+                return { success: false, message: "Failed to reject organization" };
             }
         });
     }
