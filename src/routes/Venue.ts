@@ -111,4 +111,34 @@ router.patch(
 );
 router.patch("/:id/reject", authenticate, VenueController.rejectVenue);
 
+// General venue update
+router.patch("/:id", authenticate, VenueController.updateGeneralFields);
+// Main photo update
+router.patch(
+  "/:id/main-photo",
+  authenticate,
+  upload.single("mainPhoto"),
+  VenueController.updateMainPhoto
+);
+// Add photo to gallery
+router.post(
+  "/:id/photo-gallery",
+  authenticate,
+  upload.single("photo"),
+  VenueController.addPhotoToGallery
+);
+// Remove photo from gallery
+router.delete(
+  "/:id/photo-gallery",
+  authenticate,
+  VenueController.removePhotoFromGallery
+);
+// Virtual tour update
+router.patch(
+  "/:id/virtual-tour",
+  authenticate,
+  upload.single("virtualTour"),
+  VenueController.updateVirtualTour
+);
+
 export const venueRoute = router;

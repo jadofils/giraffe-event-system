@@ -19,6 +19,7 @@ import { VenueRequest } from "../interfaces/VenueInterface";
 import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
 import { In } from "typeorm";
 import { Organization } from "../models/Organization";
+import { User } from "../models/User";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -104,7 +105,9 @@ export class VenueController {
     // Validate organizationId
     const organizationId = data.organizationId || organizationIdFromUser;
     if (!organizationId) {
-      res.status(400).json({ success: false, message: "organizationId is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "organizationId is required" });
       return;
     }
 
@@ -112,15 +115,23 @@ export class VenueController {
     const orgRepo = AppDataSource.getRepository(Organization);
     const organization = await orgRepo.findOne({ where: { organizationId } });
     if (!organization) {
-      res.status(404).json({ success: false, message: "Organization not found." });
+      res
+        .status(404)
+        .json({ success: false, message: "Organization not found." });
       return;
     }
     if (organization.status !== "APPROVED") {
-      res.status(403).json({ success: false, message: "Only APPROVED organizations can create venues." });
+      res.status(403).json({
+        success: false,
+        message: "Only APPROVED organizations can create venues.",
+      });
       return;
     }
     if (organization.organizationName === "Independent") {
-      res.status(403).json({ success: false, message: "The 'Independent' organization cannot create venues." });
+      res.status(403).json({
+        success: false,
+        message: "The 'Independent' organization cannot create venues.",
+      });
       return;
     }
 
@@ -469,15 +480,12 @@ export class VenueController {
 
   static async approveVenuePublic(req: Request, res: Response): Promise<void> {
     const authenticatedReq = req as AuthenticatedRequest;
-    const userRoles = authenticatedReq.user?.roles || [];
+    const user = authenticatedReq.user;
+    const userRoles = user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
-    if (!isAdmin) {
-      res.status(403).json({
-        success: false,
-        message: "Only ADMIN can approve venues for public.",
-      });
-      return;
-    }
+    const isManager = userRoles.some(
+      (r: any) => (r.roleName || r) === "VENUE_MANAGER"
+    );
     const { id } = req.params;
     if (!id) {
       res
@@ -492,14 +500,56 @@ export class VenueController {
         res.status(404).json({ success: false, message: "Venue not found." });
         return;
       }
-      venue.status = VenueStatus.APPROVE_PUBLIC;
+      // Only allow if status is APPROVED or APPROVE_PUBLIC
+      if (
+        venue.status !== VenueStatus.APPROVED &&
+        venue.status !== VenueStatus.APPROVE_PUBLIC
+      ) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Venue must be in APPROVED or APPROVE_PUBLIC status to change public approval.",
+        });
+        return;
+      }
+      // Only admin or the manager of the venue can do this
+      let isVenueManager = false;
+      if (isManager) {
+        // Find the VenueVariable for this venue and check manager
+        const vvRepo = AppDataSource.getRepository(VenueVariable);
+        const venueVariable = await vvRepo.findOne({
+          where: { venue: { venueId: id } },
+          relations: ["manager"],
+        });
+        if (
+          venueVariable &&
+          venueVariable.manager &&
+          venueVariable.manager.userId === user?.userId
+        ) {
+          isVenueManager = true;
+        }
+      }
+      if (!isAdmin && !isVenueManager) {
+        res.status(403).json({
+          success: false,
+          message:
+            "Only ADMIN or the venue's manager can approve/unapprove for public.",
+        });
+        return;
+      }
+      // Toggle status
+      if (venue.status === VenueStatus.APPROVED) {
+        venue.status = VenueStatus.APPROVE_PUBLIC;
+      } else if (venue.status === VenueStatus.APPROVE_PUBLIC) {
+        venue.status = VenueStatus.APPROVED;
+      }
       venue.cancellationReason = undefined;
       await venueRepo.save(venue);
       res.status(200).json({ success: true, data: venue });
     } catch (err) {
       res.status(500).json({
         success: false,
-        message: "Failed to approve venue for public",
+        message: "Failed to change public approval status for venue",
         error: err instanceof Error ? err.message : err,
       });
     }
@@ -864,7 +914,73 @@ export class VenueController {
     req: Request,
     res: Response
   ): Promise<void> {
-    res.status(501).json({ success: false, message: "Not implemented" });
+    const { venueId, variableId } = req.params;
+    const { venueAmount, amount, venueManagerId, managerId } = req.body;
+
+    if (!venueId || !variableId) {
+      res.status(400).json({
+        success: false,
+        message: "venueId and variableId are required",
+      });
+      return;
+    }
+
+    try {
+      const vvRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await vvRepo.findOne({
+        where: { id: variableId, venue: { venueId } },
+        relations: ["venue", "manager"],
+      });
+      if (!venueVariable) {
+        res
+          .status(404)
+          .json({ success: false, message: "Venue variable not found" });
+        return;
+      }
+
+      // Update amount/venueAmount
+      if (venueAmount !== undefined)
+        venueVariable.venueAmount = Number(venueAmount);
+      if (amount !== undefined) venueVariable.venueAmount = Number(amount);
+
+      // Update manager if provided
+      const newManagerId = venueManagerId || managerId;
+      if (newManagerId) {
+        const userRepo = AppDataSource.getRepository(User);
+        const manager: User | null = await userRepo.findOne({
+          where: { userId: newManagerId },
+          relations: ["role"],
+        });
+        if (!manager) {
+          res
+            .status(404)
+            .json({ success: false, message: "Manager not found" });
+          return;
+        }
+        // Check if user has VENUE_MANAGER role
+        const hasVenueManagerRole =
+          manager.role &&
+          (manager.role.roleName || manager.role) === "VENUE_MANAGER";
+        if (!hasVenueManagerRole) {
+          res.status(400).json({
+            success: false,
+            message:
+              "User is not a VENUE_MANAGER and cannot be assigned as manager.",
+          });
+          return;
+        }
+        venueVariable.manager = manager;
+      }
+
+      await vvRepo.save(venueVariable);
+      res.status(200).json({ success: true, data: venueVariable });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update venue variable",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
   }
   static async addVenueAmenity(req: Request, res: Response): Promise<void> {
     const { venueId } = req.params;
@@ -1059,6 +1175,210 @@ export class VenueController {
       res.status(500).json({
         success: false,
         message: "Server error",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // Helper to robustly delete a file from Cloudinary by URL
+  static async deleteFromCloudinary(
+    url: string,
+    resourceType: "image" | "video" = "image"
+  ) {
+    if (!url) return;
+    try {
+      // Remove query params/fragments
+      const cleanUrl = url.split("?")[0].split("#")[0];
+      // Find the part after '/upload/'
+      const match = cleanUrl.match(
+        /\/upload\/(?:v\d+\/)?(.+?)(\.[a-zA-Z0-9]+)?$/
+      );
+      if (!match || !match[1]) {
+        console.error(
+          "Cloudinary delete error: Could not extract public_id from URL",
+          url
+        );
+        return;
+      }
+      const publicId = match[1];
+      await cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+      });
+    } catch (err) {
+      console.error("Cloudinary delete error:", err, url);
+    }
+  }
+
+  // PATCH /venues/:id - update general fields
+  static async updateGeneralFields(req: Request, res: Response) {
+    const { id } = req.params;
+    const allowedFields = [
+      "venueName",
+      "venueLocation",
+      "capacity",
+      "description",
+      "latitude",
+      "longitude",
+      "googleMapsLink",
+      "venueTypeId",
+      "venueDocuments",
+    ];
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined)
+          (venue as any)[field] = req.body[field];
+      }
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update venue",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // PATCH /venues/:id/main-photo - replace main photo
+  static async updateMainPhoto(req: Request, res: Response) {
+    const { id } = req.params;
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      // Delete old photo from Cloudinary
+      if (venue.mainPhotoUrl)
+        await VenueController.deleteFromCloudinary(venue.mainPhotoUrl, "image");
+      // Upload new photo
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ success: false, message: "No file uploaded" });
+        return;
+      }
+      const result = await CloudinaryUploadService.uploadBuffer(
+        file.buffer,
+        "venues/main_photos"
+      );
+      venue.mainPhotoUrl = result.url;
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update main photo",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // POST /venues/:id/photo-gallery - add photo to gallery
+  static async addPhotoToGallery(req: Request, res: Response) {
+    const { id } = req.params;
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ success: false, message: "No file uploaded" });
+        return;
+      }
+      const result = await CloudinaryUploadService.uploadBuffer(
+        file.buffer,
+        "venues/gallery"
+      );
+      venue.photoGallery = Array.isArray(venue.photoGallery)
+        ? venue.photoGallery
+        : [];
+      venue.photoGallery.push(result.url);
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to add photo to gallery",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // DELETE /venues/:id/photo-gallery - remove photo from gallery
+  static async removePhotoFromGallery(req: Request, res: Response) {
+    const { id } = req.params;
+    const { photoUrl } = req.body;
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      if (!photoUrl) {
+        res
+          .status(400)
+          .json({ success: false, message: "photoUrl is required" });
+        return;
+      }
+      venue.photoGallery = (venue.photoGallery || []).filter(
+        (url) => url !== photoUrl
+      );
+      await VenueController.deleteFromCloudinary(photoUrl, "image");
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to remove photo from gallery",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // PATCH /venues/:id/virtual-tour - replace virtual tour video
+  static async updateVirtualTour(req: Request, res: Response) {
+    const { id } = req.params;
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found" });
+        return;
+      }
+      // Delete old video from Cloudinary
+      if (venue.virtualTourUrl)
+        await VenueController.deleteFromCloudinary(
+          venue.virtualTourUrl,
+          "video"
+        );
+      // Upload new video
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ success: false, message: "No file uploaded" });
+        return;
+      }
+      const result = await CloudinaryUploadService.uploadBuffer(
+        file.buffer,
+        "venues/virtual_tours"
+      );
+      venue.virtualTourUrl = result.url;
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update virtual tour",
         error: err instanceof Error ? err.message : err,
       });
     }
