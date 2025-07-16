@@ -21,6 +21,7 @@ import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { VenueAvailabilitySlot } from "../models/Venue Tables/VenueAvailabilitySlot";
 import { VenueReview } from "../models/Venue Tables/VenueReview";
+import { Resources } from "../models/Resources";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -53,6 +54,7 @@ export const AppDataSource = new DataSource({
     VenueVariable,
     VenueAvailabilitySlot,
     VenueReview,
+    Resources,
   ],
   migrations: [
     isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

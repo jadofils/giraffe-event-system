@@ -60,7 +60,7 @@ app.use((0, cors_1.default)({
         const allowedOrigins = [
             "http://localhost:3001",
             "http://localhost:3000",
-            "https://giraffe-space.vercel.app",
+            "https://giraffespace.vercel.app",
             AppConfig_1.AppConfig.CORS_ORIGIN, // fallback to env/config
         ];
         if (!origin || allowedOrigins.includes(origin)) {
