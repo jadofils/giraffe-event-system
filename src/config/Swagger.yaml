@@ -4,7 +4,7 @@ info:
   description: API for managing authentication, users, organizations, roles, permissions, and venues in the event management system.
   version: 1.0.0
 servers:
-  - url: http://localhost:3000/api/v1
+  - url: https://giraffespacev2.onrender.com/api/v1
     description: Local development server
 
 tags:
