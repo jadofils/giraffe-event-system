@@ -1,6 +1,6 @@
 // src/services/registrations/RegistrationService.ts
 
-import { Event } from "../../models/Event";
+import { Event } from "../../models/Event Tables/Event";
 import { User } from "../../models/User";
 import { TicketType } from "../../models/TicketType";
 import { Venue } from "../../models/Venue Tables/Venue";

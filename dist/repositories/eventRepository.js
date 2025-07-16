@@ -22,7 +22,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventRepository = void 0;
 const Database_1 = require("../config/Database");
-const Event_1 = require("../models/Event");
+const Event_1 = require("../models/Event Tables/Event");
 const Venue_1 = require("../models/Venue Tables/Venue");
 const VenueBooking_1 = require("../models/VenueBooking");
 const CacheService_1 = require("../services/CacheService");

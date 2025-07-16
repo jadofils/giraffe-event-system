@@ -23,7 +23,7 @@ import {
 import { User } from "../User";
 import { Organization } from "../Organization";
 import { VenueBooking } from "../VenueBooking";
-import { Event } from "../Event";
+import { Event } from "../Event Tables/Event";
 import { Registration } from "../Registration";
 import { Feedback } from "../Feedback";
 import { Invoice } from "../Invoice";
@@ -34,6 +34,7 @@ import { BookingCondition } from "./BookingCondition";
 import { VenueVariable } from "./VenueVariable";
 import { VenueAvailabilitySlot } from "./VenueAvailabilitySlot";
 import { VenueReview } from "./VenueReview";
+import { EventVenue } from "../Event Tables/EventVenue";
 
 export enum VenueStatus {
   PENDING = "PENDING",
@@ -134,17 +135,8 @@ export class Venue {
   @JoinColumn({ name: "organizationId" })
   organization?: Organization;
 
-
   @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
   bookings!: VenueBooking[];
-
-  @ManyToMany(() => Event, (event) => event.venues)
-  @JoinTable({
-    name: "event_venues",
-    joinColumn: { name: "venueId", referencedColumnName: "venueId" },
-    inverseJoinColumn: { name: "eventId", referencedColumnName: "eventId" },
-  })
-  events!: Event[];
 
   @OneToMany(() => Registration, (registration) => registration.venue)
   registrations!: Registration[];
@@ -181,4 +173,7 @@ export class Venue {
 
   @OneToMany(() => Invoice, (invoice) => invoice.venue)
   invoices!: Invoice[];
+
+  @OneToMany(() => EventVenue, (ev) => ev.venue)
+  eventVenues!: EventVenue[];
 }

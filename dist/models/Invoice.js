@@ -17,7 +17,7 @@ const class_validator_1 = require("class-validator");
 const InvoiceStatus_1 = require("../interfaces/Enums/InvoiceStatus");
 // Assuming these exist and are properly defined
 const User_1 = require("./User");
-const Event_1 = require("./Event");
+const Event_1 = require("./Event Tables/Event");
 const Payment_1 = require("./Payment");
 const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");

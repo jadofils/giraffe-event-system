@@ -26,7 +26,7 @@ import {
 } from "class-validator";
 import { Registration } from "./Registration";
 import { TicketCategory } from "../interfaces/Enums/TicketCategoryEnum";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { Organization } from "./Organization";
 
 @Entity("ticket_types")
@@ -66,7 +66,9 @@ export class TicketType {
 
   @Column({ nullable: true, type: "text" })
   @IsOptional()
-  @Length(0, 500, { message: "promoDescription must be at most 500 characters" })
+  @Length(0, 500, {
+    message: "promoDescription must be at most 500 characters",
+  })
   promoDescription?: string;
 
   @Column({ type: "int", nullable: true })
@@ -110,7 +112,10 @@ export class TicketType {
   @Column({ type: "jsonb", nullable: true })
   @IsOptional()
   @IsArray({ message: "Perks must be an array" })
-  @Length(1, 100, { each: true, message: "Each perk must be between 1 and 100 characters" })
+  @Length(1, 100, {
+    each: true,
+    message: "Each perk must be between 1 and 100 characters",
+  })
   @ArrayMinSize(0)
   @ArrayMaxSize(20, { message: "Cannot have more than 20 perks" })
   perks?: string[];
@@ -148,7 +153,9 @@ export class TicketType {
   @Column({ type: "uuid", nullable: true })
   organizationId?: string;
 
-  @ManyToOne(() => Organization, (organization) => organization.ticketTypes, { nullable: true })
+  @ManyToOne(() => Organization, (organization) => organization.ticketTypes, {
+    nullable: true,
+  })
   @JoinColumn({ name: "organizationId" })
   organization?: Organization;
 }

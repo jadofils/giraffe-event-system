@@ -3,7 +3,7 @@ import { Role } from "../models/Role";
 import { User } from "../models/User";
 import { Venue } from "../models/Venue Tables/Venue";
 import { TicketType } from "../models/TicketType";
-import { Event } from "../models/Event";
+import { Event } from "../models/Event Tables/Event";
 import { VenueAmenities } from "../models/Venue Tables/VenueAmenities";
 import { Feedback } from "../models/Feedback";
 import { Permission } from "../models/Permission";

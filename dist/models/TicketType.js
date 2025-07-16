@@ -14,7 +14,7 @@ const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
 const Registration_1 = require("./Registration");
 const TicketCategoryEnum_1 = require("../interfaces/Enums/TicketCategoryEnum");
-const Event_1 = require("./Event");
+const Event_1 = require("./Event Tables/Event");
 const Organization_1 = require("./Organization");
 let TicketType = class TicketType {
 };
@@ -61,7 +61,9 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({ nullable: true, type: "text" }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Length)(0, 500, { message: "promoDescription must be at most 500 characters" }),
+    (0, class_validator_1.Length)(0, 500, {
+        message: "promoDescription must be at most 500 characters",
+    }),
     __metadata("design:type", String)
 ], TicketType.prototype, "promoDescription", void 0);
 __decorate([
@@ -113,7 +115,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: "jsonb", nullable: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)({ message: "Perks must be an array" }),
-    (0, class_validator_1.Length)(1, 100, { each: true, message: "Each perk must be between 1 and 100 characters" }),
+    (0, class_validator_1.Length)(1, 100, {
+        each: true,
+        message: "Each perk must be between 1 and 100 characters",
+    }),
     (0, class_validator_1.ArrayMinSize)(0),
     (0, class_validator_1.ArrayMaxSize)(20, { message: "Cannot have more than 20 perks" }),
     __metadata("design:type", Array)
@@ -156,7 +161,9 @@ __decorate([
     __metadata("design:type", String)
 ], TicketType.prototype, "organizationId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Organization_1.Organization, (organization) => organization.ticketTypes, { nullable: true }),
+    (0, typeorm_1.ManyToOne)(() => Organization_1.Organization, (organization) => organization.ticketTypes, {
+        nullable: true,
+    }),
     (0, typeorm_1.JoinColumn)({ name: "organizationId" }),
     __metadata("design:type", Organization_1.Organization)
 ], TicketType.prototype, "organization", void 0);

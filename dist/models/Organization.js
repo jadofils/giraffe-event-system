@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Organization = void 0;
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
-const Event_1 = require("./Event");
+const Event_1 = require("./Event Tables/Event");
 const User_1 = require("./User");
 const VenueBooking_1 = require("./VenueBooking");
 const Venue_1 = require("./Venue Tables/Venue");

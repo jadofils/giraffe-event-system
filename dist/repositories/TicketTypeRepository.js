@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TicketTypeRepository = void 0;
 const Database_1 = require("../config/Database");
 const TicketType_1 = require("../models/TicketType");
-const Event_1 = require("../models/Event");
+const Event_1 = require("../models/Event Tables/Event");
 const User_1 = require("../models/User");
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
@@ -20,15 +20,15 @@ const CacheService_1 = require("../services/CacheService"); // Import CacheServi
 const EventStatusEnum_1 = require("../interfaces/Enums/EventStatusEnum"); // Ensure correct path
 const TicketCategoryEnum_1 = require("../interfaces/Enums/TicketCategoryEnum"); // Ensure correct path
 const ticketRelations = [
-    'registrations',
-    'event',
-    'event.organization',
-    'event.venues',
-    'event.venueBookings',
-    'event.registrations',
-    'event.payments',
-    'event.invoices',
-    'organization'
+    "registrations",
+    "event",
+    "event.organization",
+    "event.venues",
+    "event.venueBookings",
+    "event.registrations",
+    "event.payments",
+    "event.invoices",
+    "organization",
 ];
 class TicketTypeRepository {
     constructor() {
@@ -51,13 +51,17 @@ class TicketTypeRepository {
                 const tickets = yield this.repository.find({
                     where: { deletedAt: (0, typeorm_1.IsNull)() },
                     relations: ticketRelations,
-                    order: { ticketName: 'ASC' },
+                    order: { ticketName: "ASC" },
                 });
-                return { success: true, message: 'Tickets fetched successfully.', data: tickets };
+                return {
+                    success: true,
+                    message: "Tickets fetched successfully.",
+                    data: tickets,
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.findAllTickects:', error);
-                return { success: false, message: 'Failed to fetch tickets.', data: [] };
+                console.error("Error in TicketTypeRepository.findAllTickects:", error);
+                return { success: false, message: "Failed to fetch tickets.", data: [] };
             }
         });
     }
@@ -65,39 +69,54 @@ class TicketTypeRepository {
         return __awaiter(this, void 0, void 0, function* () {
             // --- Basic Validation ---
             if (!ticketType.ticketName) {
-                return { success: false, message: 'Ticket name is required.' };
+                return { success: false, message: "Ticket name is required." };
             }
-            if (ticketType.price === undefined || typeof ticketType.price !== 'number' || ticketType.price <= 0) {
-                return { success: false, message: 'Ticket price must be a positive number.' };
+            if (ticketType.price === undefined ||
+                typeof ticketType.price !== "number" ||
+                ticketType.price <= 0) {
+                return {
+                    success: false,
+                    message: "Ticket price must be a positive number.",
+                };
             }
             if (!ticketType.ticketCategory) {
-                return { success: false, message: 'Ticket category is required.' };
+                return { success: false, message: "Ticket category is required." };
             }
             if (!ticketType.eventId) {
-                return { success: false, message: 'Event ID is required.' };
+                return { success: false, message: "Event ID is required." };
             }
             try {
                 // --- Check if user exists and is logged in ---
                 const user = yield this.userRepository.findOne({
                     where: { userId, deletedAt: (0, typeorm_1.IsNull)() },
-                    relations: ['organizations'],
+                    relations: ["organizations"],
                 });
                 if (!user) {
-                    return { success: false, message: 'User not found or not logged in.' };
+                    return { success: false, message: "User not found or not logged in." };
                 }
                 // --- Check if event exists, is approved, and user is authorized ---
                 const event = yield this.eventRepository.findOne({
-                    where: { eventId: ticketType.eventId, deletedAt: (0, typeorm_1.IsNull)(), status: EventStatusEnum_1.EventStatus.APPROVED },
-                    relations: ['organization'],
+                    where: {
+                        eventId: ticketType.eventId,
+                        deletedAt: (0, typeorm_1.IsNull)(),
+                        status: EventStatusEnum_1.EventStatus.APPROVED,
+                    },
+                    relations: ["organization"],
                 });
                 if (!event) {
-                    return { success: false, message: 'Event not found, not approved, or deleted.' };
+                    return {
+                        success: false,
+                        message: "Event not found, not approved, or deleted.",
+                    };
                 }
                 // Check if user is the event creator or part of the event's organization
                 const isCreator = event.createdByUserId === userId || event.organizerId === userId;
-                const isInOrganization = user.organizations.some(org => org.organizationId === event.organizationId);
+                const isInOrganization = user.organizations.some((org) => org.organizationId === event.organizationId);
                 if (!isCreator && !isInOrganization) {
-                    return { success: false, message: 'Unauthorized: You cannot create tickets for this event.' };
+                    return {
+                        success: false,
+                        message: "Unauthorized: You cannot create tickets for this event.",
+                    };
                 }
                 // --- Check for duplicate ticket name within the event ---
                 const existingTicketType = yield this.repository.findOne({
@@ -108,14 +127,22 @@ class TicketTypeRepository {
                     },
                 });
                 if (existingTicketType) {
-                    return { success: false, message: `Ticket type with name '${ticketType.ticketName}' already exists for this event.` };
+                    return {
+                        success: false,
+                        message: `Ticket type with name '${ticketType.ticketName}' already exists for this event.`,
+                    };
                 }
                 // --- Validate TicketType entity ---
                 const newTicketType = this.repository.create(ticketType);
                 const validationErrors = yield (0, class_validator_1.validate)(newTicketType);
                 if (validationErrors.length > 0) {
-                    const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
-                    return { success: false, message: `Validation failed: ${errorMessages.join(', ')}` };
+                    const errorMessages = validationErrors
+                        .map((err) => Object.values(err.constraints || {}))
+                        .flat();
+                    return {
+                        success: false,
+                        message: `Validation failed: ${errorMessages.join(", ")}`,
+                    };
                 }
                 // --- Save TicketType ---
                 const saved = yield this.repository.save(newTicketType);
@@ -127,11 +154,15 @@ class TicketTypeRepository {
                 // --- Cache the ticket type ---
                 yield CacheService_1.CacheService.set(`ticketType:${saved.ticketTypeId}`, fullTicket, 3600);
                 yield CacheService_1.CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`);
-                return { success: true, message: 'Ticket type created successfully.', data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined };
+                return {
+                    success: true,
+                    message: "Ticket type created successfully.",
+                    data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined,
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.create:', error);
-                return { success: false, message: 'Failed to create ticket type.' };
+                console.error("Error in TicketTypeRepository.create:", error);
+                return { success: false, message: "Failed to create ticket type." };
             }
         });
     }
@@ -147,7 +178,11 @@ class TicketTypeRepository {
                 const cacheKey = `ticketTypes:event:${eventId}`;
                 const cachedTickets = yield CacheService_1.CacheService.get(cacheKey);
                 if (cachedTickets) {
-                    return { success: true, message: 'Ticket types fetched from cache.', data: cachedTickets };
+                    return {
+                        success: true,
+                        message: "Ticket types fetched from cache.",
+                        data: cachedTickets,
+                    };
                 }
                 // --- Fetch from database ---
                 const tickets = yield this.repository.find({
@@ -156,15 +191,23 @@ class TicketTypeRepository {
                         deletedAt: (0, typeorm_1.IsNull)(),
                     },
                     relations: ticketRelations,
-                    order: { ticketName: 'ASC' },
+                    order: { ticketName: "ASC" },
                 });
                 // --- Cache the result ---
                 yield CacheService_1.CacheService.set(cacheKey, tickets, 3600); // Cache for 1 hour
-                return { success: true, message: 'Ticket types fetched successfully.', data: tickets };
+                return {
+                    success: true,
+                    message: "Ticket types fetched successfully.",
+                    data: tickets,
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.findAllByEvent:', error);
-                return { success: false, message: 'Failed to fetch ticket types.', data: [] };
+                console.error("Error in TicketTypeRepository.findAllByEvent:", error);
+                return {
+                    success: false,
+                    message: "Failed to fetch ticket types.",
+                    data: [],
+                };
             }
         });
     }
@@ -180,7 +223,11 @@ class TicketTypeRepository {
                 const cacheKey = `ticketType:${ticketTypeId}`;
                 const cachedTicket = yield CacheService_1.CacheService.get(cacheKey);
                 if (cachedTicket) {
-                    return { success: true, message: 'Ticket type fetched from cache.', data: cachedTicket };
+                    return {
+                        success: true,
+                        message: "Ticket type fetched from cache.",
+                        data: cachedTicket,
+                    };
                 }
                 // --- Fetch from database ---
                 const ticket = yield this.repository.findOne({
@@ -191,15 +238,15 @@ class TicketTypeRepository {
                     relations: ticketRelations,
                 });
                 if (!ticket) {
-                    return { success: false, message: 'Ticket type found or is deleted.' };
+                    return { success: false, message: "Ticket type found or is deleted." };
                 }
                 // --- Cache the ticket ---
                 yield CacheService_1.CacheService.set(cacheKey, ticket, 3600); // Cache for 1 hour
-                return { success: true, message: 'Ticket type found.', data: ticket };
+                return { success: true, message: "Ticket type found.", data: ticket };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.findById:', error);
-                return { success: false, message: 'Failed to find ticket type.' };
+                console.error("Error in TicketTypeRepository.findById:", error);
+                return { success: false, message: "Failed to find ticket type." };
             }
         });
     }
@@ -216,40 +263,60 @@ class TicketTypeRepository {
                 // --- Find the ticket type ---
                 const { success, data: ticketType } = yield this.findById(ticketTypeId);
                 if (!success || !ticketType) {
-                    return { success: false, message: 'Ticket type not found or deleted.' };
+                    return { success: false, message: "Ticket type not found or deleted." };
                 }
                 // --- Check user authorization ---
                 const event = yield this.eventRepository.findOne({
-                    where: { eventId: ticketType.eventId, deletedAt: (0, typeorm_1.IsNull)(), status: EventStatusEnum_1.EventStatus.APPROVED },
-                    relations: ['organization'],
+                    where: {
+                        eventId: ticketType.eventId,
+                        deletedAt: (0, typeorm_1.IsNull)(),
+                        status: EventStatusEnum_1.EventStatus.APPROVED,
+                    },
+                    relations: ["organization"],
                 });
                 if (!event) {
-                    return { success: false, message: 'Event not found, not approved, or deleted.' };
+                    return {
+                        success: false,
+                        message: "Event not found, not approved, or deleted.",
+                    };
                 }
                 const user = yield this.userRepository.findOne({
                     where: { userId, deletedAt: (0, typeorm_1.IsNull)() },
-                    relations: ['organizations'],
+                    relations: ["organizations"],
                 });
                 if (!user) {
-                    return { success: false, message: 'User not found.' };
+                    return { success: false, message: "User not found." };
                 }
                 const isCreator = event.createdByUserId === userId || event.organizerId === userId;
-                const isInOrganization = user.organizations.some(org => org.organizationId === event.organizationId);
+                const isInOrganization = user.organizations.some((org) => org.organizationId === event.organizationId);
                 if (!isCreator && !isInOrganization) {
-                    return { success: false, message: 'Unauthorized: You cannot update tickets for this event.' };
+                    return {
+                        success: false,
+                        message: "Unauthorized: You cannot update tickets for this event.",
+                    };
                 }
                 // --- Validate updates ---
-                if (updateData.price !== undefined && (typeof updateData.price !== 'number' || updateData.price <= 0)) {
-                    return { success: false, message: 'Ticket price must be a positive number if provided.' };
+                if (updateData.price !== undefined &&
+                    (typeof updateData.price !== "number" || updateData.price <= 0)) {
+                    return {
+                        success: false,
+                        message: "Ticket price must be a positive number if provided.",
+                    };
                 }
-                if (updateData.ticketCategory && !Object.values(TicketCategoryEnum_1.TicketCategory).includes(updateData.ticketCategory)) {
-                    return { success: false, message: 'Invalid ticket category provided.' };
+                if (updateData.ticketCategory &&
+                    !Object.values(TicketCategoryEnum_1.TicketCategory).includes(updateData.ticketCategory)) {
+                    return { success: false, message: "Invalid ticket category provided." };
                 }
                 const updatedTicketType = this.repository.create(Object.assign(Object.assign({}, ticketType), updateData));
                 const validationErrors = yield (0, class_validator_1.validate)(updatedTicketType);
                 if (validationErrors.length > 0) {
-                    const errorMessages = validationErrors.map(err => Object.values(err.constraints || {})).flat();
-                    return { success: false, message: `Validation failed: ${errorMessages.join(', ')}` };
+                    const errorMessages = validationErrors
+                        .map((err) => Object.values(err.constraints || {}))
+                        .flat();
+                    return {
+                        success: false,
+                        message: `Validation failed: ${errorMessages.join(", ")}`,
+                    };
                 }
                 // --- Save updates ---
                 Object.assign(ticketType, updateData);
@@ -261,11 +328,15 @@ class TicketTypeRepository {
                 });
                 yield CacheService_1.CacheService.set(`ticketType:${ticketTypeId}`, fullTicket, 3600);
                 yield CacheService_1.CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`); // Invalidate event tickets cache
-                return { success: true, message: 'Ticket type updated successfully.', data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined };
+                return {
+                    success: true,
+                    message: "Ticket type updated successfully.",
+                    data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined,
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.update:', error);
-                return { success: false, message: 'Failed to update ticket type.' };
+                console.error("Error in TicketTypeRepository.update:", error);
+                return { success: false, message: "Failed to update ticket type." };
             }
         });
     }
@@ -282,32 +353,48 @@ class TicketTypeRepository {
                 // --- Find the ticket type ---
                 const { success, data: ticketType } = yield this.findById(ticketTypeId);
                 if (!success || !ticketType) {
-                    return { success: false, message: 'Ticket type not found or already deleted.' };
+                    return {
+                        success: false,
+                        message: "Ticket type not found or already deleted.",
+                    };
                 }
                 // --- Check user authorization ---
                 const event = yield this.eventRepository.findOne({
-                    where: { eventId: ticketType.eventId, deletedAt: (0, typeorm_1.IsNull)(), status: EventStatusEnum_1.EventStatus.APPROVED },
-                    relations: ['organization'],
+                    where: {
+                        eventId: ticketType.eventId,
+                        deletedAt: (0, typeorm_1.IsNull)(),
+                        status: EventStatusEnum_1.EventStatus.APPROVED,
+                    },
+                    relations: ["organization"],
                 });
                 if (!event) {
-                    return { success: false, message: 'Event not found, not approved, or deleted.' };
+                    return {
+                        success: false,
+                        message: "Event not found, not approved, or deleted.",
+                    };
                 }
                 const user = yield this.userRepository.findOne({
                     where: { userId, deletedAt: (0, typeorm_1.IsNull)() },
-                    relations: ['organizations'],
+                    relations: ["organizations"],
                 });
                 if (!user) {
-                    return { success: false, message: 'User not found.' };
+                    return { success: false, message: "User not found." };
                 }
                 const isCreator = event.createdByUserId === userId || event.organizerId === userId;
-                const isInOrganization = user.organizations.some(org => org.organizationId === event.organizationId);
+                const isInOrganization = user.organizations.some((org) => org.organizationId === event.organizationId);
                 if (!isCreator && !isInOrganization) {
-                    return { success: false, message: 'Unauthorized: You cannot delete tickets for this event.' };
+                    return {
+                        success: false,
+                        message: "Unauthorized: You cannot delete tickets for this event.",
+                    };
                 }
                 // --- Check for active registrations ---
-                const activeRegistrations = (_a = ticketType.registrations) === null || _a === void 0 ? void 0 : _a.filter(reg => !reg.deletedAt);
+                const activeRegistrations = (_a = ticketType.registrations) === null || _a === void 0 ? void 0 : _a.filter((reg) => !reg.deletedAt);
                 if (activeRegistrations && activeRegistrations.length > 0) {
-                    return { success: false, message: `Cannot delete ticket type used in ${activeRegistrations.length} active registrations.` };
+                    return {
+                        success: false,
+                        message: `Cannot delete ticket type used in ${activeRegistrations.length} active registrations.`,
+                    };
                 }
                 // --- Perform soft deletion ---
                 ticketType.deletedAt = new Date();
@@ -315,11 +402,14 @@ class TicketTypeRepository {
                 // --- Invalidate cache ---
                 yield CacheService_1.CacheService.invalidate(`ticketType:${ticketTypeId}`);
                 yield CacheService_1.CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`);
-                return { success: true, message: 'Ticket type soft-deleted successfully.' };
+                return {
+                    success: true,
+                    message: "Ticket type soft-deleted successfully.",
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.delete:', error);
-                return { success: false, message: 'Failed to soft delete ticket type.' };
+                console.error("Error in TicketTypeRepository.delete:", error);
+                return { success: false, message: "Failed to soft delete ticket type." };
             }
         });
     }
@@ -329,27 +419,40 @@ class TicketTypeRepository {
                 // Find the ticket type with all relations
                 const { success, data: ticketType } = yield this.findById(ticketTypeId);
                 if (!success || !ticketType) {
-                    return { success: false, message: `Ticket type with ID '${ticketTypeId}' not found or deleted.` };
+                    return {
+                        success: false,
+                        message: `Ticket type with ID '${ticketTypeId}' not found or deleted.`,
+                    };
                 }
                 // Authorization: Only event creator or org member can update
                 const event = yield this.eventRepository.findOne({
-                    where: { eventId: ticketType.eventId, deletedAt: (0, typeorm_1.IsNull)(), status: EventStatusEnum_1.EventStatus.APPROVED },
-                    relations: ['organization'],
+                    where: {
+                        eventId: ticketType.eventId,
+                        deletedAt: (0, typeorm_1.IsNull)(),
+                        status: EventStatusEnum_1.EventStatus.APPROVED,
+                    },
+                    relations: ["organization"],
                 });
                 if (!event) {
-                    return { success: false, message: 'Event not found, not approved, or deleted.' };
+                    return {
+                        success: false,
+                        message: "Event not found, not approved, or deleted.",
+                    };
                 }
                 const user = yield this.userRepository.findOne({
                     where: { userId, deletedAt: (0, typeorm_1.IsNull)() },
-                    relations: ['organizations'],
+                    relations: ["organizations"],
                 });
                 if (!user) {
-                    return { success: false, message: 'User not found.' };
+                    return { success: false, message: "User not found." };
                 }
                 const isCreator = event.createdByUserId === userId || event.organizerId === userId;
-                const isInOrganization = user.organizations.some(org => org.organizationId === event.organizationId);
+                const isInOrganization = user.organizations.some((org) => org.organizationId === event.organizationId);
                 if (!isCreator && !isInOrganization) {
-                    return { success: false, message: 'Unauthorized: You cannot update tickets for this event.' };
+                    return {
+                        success: false,
+                        message: "Unauthorized: You cannot update tickets for this event.",
+                    };
                 }
                 // --- Time window check for activation ---
                 const now = new Date();
@@ -359,7 +462,10 @@ class TicketTypeRepository {
                         (!availableUntil || now <= new Date(availableUntil))
                     : true;
                 if (!canActivate) {
-                    return { success: false, message: 'Cannot activate: Ticket is not within available time window.' };
+                    return {
+                        success: false,
+                        message: "Cannot activate: Ticket is not within available time window.",
+                    };
                 }
                 // Update isActive
                 ticketType.isActive = isActive;
@@ -371,11 +477,15 @@ class TicketTypeRepository {
                 });
                 yield CacheService_1.CacheService.set(`ticketType:${ticketTypeId}`, fullTicket, 3600);
                 yield CacheService_1.CacheService.invalidate(`ticketTypes:event:${ticketType.eventId}`);
-                return { success: true, message: 'Ticket type isActive updated successfully.', data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined };
+                return {
+                    success: true,
+                    message: "Ticket type isActive updated successfully.",
+                    data: fullTicket !== null && fullTicket !== void 0 ? fullTicket : undefined,
+                };
             }
             catch (error) {
-                console.error('Error in TicketTypeRepository.updateIsActive:', error);
-                return { success: false, message: 'Failed to update isActive.' };
+                console.error("Error in TicketTypeRepository.updateIsActive:", error);
+                return { success: false, message: "Failed to update isActive." };
             }
         });
     }

@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistrationService = void 0;
-const Event_1 = require("../../models/Event");
+const Event_1 = require("../../models/Event Tables/Event");
 const User_1 = require("../../models/User");
 const TicketType_1 = require("../../models/TicketType");
 const Venue_1 = require("../../models/Venue Tables/Venue");

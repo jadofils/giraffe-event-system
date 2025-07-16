@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CheckAbsenceService = void 0;
 const Database_1 = require("../../config/Database");
 const VenueBooking_1 = require("../../models/VenueBooking");
-const Event_1 = require("../../models/Event");
+const Event_1 = require("../../models/Event Tables/Event");
 const BookingService_1 = require("./BookingService");
 /**
  * Service to check availability of time slots for venue bookings.
@@ -32,22 +32,25 @@ class CheckAbsenceService {
                 // Validate user authentication
                 const user = req.user;
                 if (!user) {
-                    return { success: false, message: 'Unauthorized access. User token is required.' };
+                    return {
+                        success: false,
+                        message: "Unauthorized access. User token is required.",
+                    };
                 }
                 console.log(`Checking availability for User: ${user.userId}, Organization: ${user.organizationId}`);
                 // Fetch approved bookings with their associated events
                 const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
                 const bookedSlots = yield bookingRepo
-                    .createQueryBuilder('booking')
-                    .leftJoinAndSelect('booking.event', 'event')
-                    .where('booking.venueId = :venueId', { venueId })
-                    .andWhere('booking.approvalStatus = :status', { status: 'approved' })
-                    .andWhere('event.startDate BETWEEN :queryStartDate AND :queryEndDate', {
+                    .createQueryBuilder("booking")
+                    .leftJoinAndSelect("booking.event", "event")
+                    .where("booking.venueId = :venueId", { venueId })
+                    .andWhere("booking.approvalStatus = :status", { status: "approved" })
+                    .andWhere("event.startDate BETWEEN :queryStartDate AND :queryEndDate", {
                     queryStartDate,
                     queryEndDate,
                 })
-                    .orderBy('event.startDate', 'ASC')
-                    .addOrderBy('event.startTime', 'ASC')
+                    .orderBy("event.startDate", "ASC")
+                    .addOrderBy("event.startTime", "ASC")
                     .getMany();
                 const availableDays = [];
                 const availableHours = [];
@@ -63,12 +66,12 @@ class CheckAbsenceService {
                         availableDays.push(currentDateStr); // Mark day as fully available
                     }
                     else {
-                        let previousEndTime = '00:00'; // Start of the day
+                        let previousEndTime = "00:00"; // Start of the day
                         // Sort bookings by event start time
                         dailyBookings.sort((a, b) => {
                             var _a, _b, _c, _d;
-                            const startA = (_b = (_a = a.event) === null || _a === void 0 ? void 0 : _a.startTime) !== null && _b !== void 0 ? _b : '';
-                            const startB = (_d = (_c = b.event) === null || _c === void 0 ? void 0 : _c.startTime) !== null && _d !== void 0 ? _d : '';
+                            const startA = (_b = (_a = a.event) === null || _a === void 0 ? void 0 : _a.startTime) !== null && _b !== void 0 ? _b : "";
+                            const startB = (_d = (_c = b.event) === null || _c === void 0 ? void 0 : _c.startTime) !== null && _d !== void 0 ? _d : "";
                             return startA.localeCompare(startB);
                         });
                         for (const booking of dailyBookings) {
@@ -84,7 +87,7 @@ class CheckAbsenceService {
                             previousEndTime = endTime;
                         }
                         // Check for availability after the last booking
-                        if (previousEndTime < '23:59') {
+                        if (previousEndTime < "23:59") {
                             availableHours.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
                             availableMinutes.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
                         }
@@ -94,8 +97,11 @@ class CheckAbsenceService {
                 return { availableDays, availableHours, availableMinutes };
             }
             catch (error) {
-                console.error('Error checking available slots:', error);
-                return { success: false, message: 'Failed to check booking availability.' };
+                console.error("Error checking available slots:", error);
+                return {
+                    success: false,
+                    message: "Failed to check booking availability.",
+                };
             }
         });
     }
@@ -118,33 +124,40 @@ class CheckAbsenceService {
                     const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
                     const foundEvent = yield eventRepo.findOne({
                         where: { eventId: bookingData.eventId },
-                        select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime'],
+                        select: ["eventId", "startDate", "endDate", "startTime", "endTime"],
                     });
                     if (!foundEvent) {
                         return {
                             success: false,
-                            message: 'Associated event not found. Cannot check availability.',
+                            message: "Associated event not found. Cannot check availability.",
                         };
                     }
                     event = foundEvent;
                 }
                 if (!event.startDate || !event.endDate) {
-                    return { success: false, message: 'Event startDate or endDate is undefined.' };
+                    return {
+                        success: false,
+                        message: "Event startDate or endDate is undefined.",
+                    };
                 }
                 const requestedStartDate = new Date(event.startDate);
                 const requestedEndDate = new Date(event.endDate);
                 const requestedDate = requestedStartDate.toISOString().slice(0, 10);
                 const requestedStartTime = event.startTime;
                 const requestedEndTime = event.endTime;
-                if (isNaN(requestedStartDate.getTime()) || isNaN(requestedEndDate.getTime())) {
-                    return { success: false, message: 'Invalid date format.' };
+                if (isNaN(requestedStartDate.getTime()) ||
+                    isNaN(requestedEndDate.getTime())) {
+                    return { success: false, message: "Invalid date format." };
                 }
                 if (requestedStartDate > requestedEndDate) {
-                    return { success: false, message: 'Start date cannot be after end date.' };
+                    return {
+                        success: false,
+                        message: "Start date cannot be after end date.",
+                    };
                 }
                 // Fetch available slots
                 const availableSlotsResult = yield this.getAvailableSlots(req, bookingData.venueId, requestedStartDate, requestedEndDate);
-                if ('success' in availableSlotsResult && !availableSlotsResult.success) {
+                if ("success" in availableSlotsResult && !availableSlotsResult.success) {
                     return availableSlotsResult;
                 }
                 const { availableDays, availableHours } = availableSlotsResult;
@@ -156,8 +169,8 @@ class CheckAbsenceService {
                 let isAvailable = false;
                 for (const timeSlot of availableHours) {
                     if (timeSlot.includes(`on ${requestedDate}`)) {
-                        const timeRange = timeSlot.split(' on ')[0];
-                        const [availableStart, availableEnd] = timeRange.split(' - ');
+                        const timeRange = timeSlot.split(" on ")[0];
+                        const [availableStart, availableEnd] = timeRange.split(" - ");
                         if (requestedStartTime !== undefined &&
                             requestedEndTime !== undefined &&
                             requestedStartTime >= availableStart &&
@@ -168,10 +181,10 @@ class CheckAbsenceService {
                     }
                 }
                 if (!isAvailable) {
-                    let nearestSlot = '';
+                    let nearestSlot = "";
                     for (const timeSlot of availableHours) {
                         if (timeSlot.includes(`on ${requestedDate}`)) {
-                            nearestSlot = timeSlot.split(' on ')[0];
+                            nearestSlot = timeSlot.split(" on ")[0];
                             break;
                         }
                     }
@@ -183,8 +196,8 @@ class CheckAbsenceService {
                 return { success: true };
             }
             catch (error) {
-                console.error('Error checking availability:', error);
-                return { success: false, message: 'Failed to check availability.' };
+                console.error("Error checking availability:", error);
+                return { success: false, message: "Failed to check availability." };
             }
         });
     }
@@ -208,12 +221,19 @@ class CheckAbsenceService {
                     const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
                     const foundEvent = yield eventRepo.findOne({
                         where: { eventId: bookingData.eventId },
-                        select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime', 'eventTitle'],
+                        select: [
+                            "eventId",
+                            "startDate",
+                            "endDate",
+                            "startTime",
+                            "endTime",
+                            "eventTitle",
+                        ],
                     });
                     if (!foundEvent) {
                         return {
                             success: false,
-                            message: 'Associated event not found for booking validation. Cannot proceed.',
+                            message: "Associated event not found for booking validation. Cannot proceed.",
                         };
                     }
                     event = foundEvent;
@@ -229,11 +249,11 @@ class CheckAbsenceService {
                 if (!conflictCheck.success) {
                     return conflictCheck;
                 }
-                return { success: true, message: 'Booking is valid and available.' };
+                return { success: true, message: "Booking is valid and available." };
             }
             catch (error) {
-                console.error('Error validating booking:', error);
-                return { success: false, message: 'Failed to validate booking.' };
+                console.error("Error validating booking:", error);
+                return { success: false, message: "Failed to validate booking." };
             }
         });
     }

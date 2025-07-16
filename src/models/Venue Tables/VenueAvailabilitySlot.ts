@@ -16,25 +16,16 @@ export class VenueAvailabilitySlot {
   venueId!: string;
 
   @Column({ type: "date" })
-  startDate!: Date;
-
-  @Column({ type: "date" })
-  endDate!: Date;
-
+  Date!: Date;
+  
   @Column({ type: "time" })
   startTime!: Date;
 
   @Column({ type: "time" })
   endTime!: Date;
 
-  @Column({ type: "varchar", length: 100, default: "UTC" })
-  timezone!: string;
-
   @Column({ type: "boolean", default: true })
   isAvailable!: boolean;
-
-  @Column({ type: "uuid", nullable: true })
-  sourceId?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

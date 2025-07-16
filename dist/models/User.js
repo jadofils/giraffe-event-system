@@ -18,7 +18,7 @@ const Registration_1 = require("./Registration");
 const VenueBooking_1 = require("./VenueBooking");
 const VenueInvoice_1 = require("./VenueInvoice");
 const VenuePayment_1 = require("./VenuePayment");
-const Event_1 = require("./Event");
+const Event_1 = require("./Event Tables/Event");
 const Invoice_1 = require("./Invoice");
 const VenueReview_1 = require("./Venue Tables/VenueReview");
 let User = class User {
@@ -96,10 +96,6 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: "roleId" }),
     __metadata("design:type", Role_1.Role)
 ], User.prototype, "role", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (booking) => booking.user),
-    __metadata("design:type", Array)
-], User.prototype, "bookings", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => Registration_1.Registration, (registration) => registration.user),
     __metadata("design:type", Array)
@@ -256,6 +252,10 @@ __decorate([
     (0, typeorm_1.DeleteDateColumn)({ type: "timestamp with time zone", nullable: true }),
     __metadata("design:type", Date)
 ], User.prototype, "deletedAt", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (booking) => booking.user),
+    __metadata("design:type", Array)
+], User.prototype, "bookings", void 0);
 exports.User = User = __decorate([
     (0, typeorm_1.Entity)("users")
 ], User);

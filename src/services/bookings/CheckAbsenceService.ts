@@ -1,9 +1,9 @@
-import { AppDataSource } from '../../config/Database';
-import { VenueBooking } from '../../models/VenueBooking';
-import { Event } from '../../models/Event';
-import { Request } from 'express';
-import { VenueBookingInterface } from '../../interfaces/VenueBookingInterface';
-import { checkConflict } from './BookingService';
+import { AppDataSource } from "../../config/Database";
+import { VenueBooking } from "../../models/VenueBooking";
+import { Event } from "../../models/Event Tables/Event";
+import { Request } from "express";
+import { VenueBookingInterface } from "../../interfaces/VenueBookingInterface";
+import { checkConflict } from "./BookingService";
 
 /**
  * Service to check availability of time slots for venue bookings.
@@ -22,33 +22,41 @@ export class CheckAbsenceService {
     venueId: string,
     queryStartDate: Date,
     queryEndDate: Date
-  ): Promise<{
-    availableDays: string[];
-    availableHours: string[];
-    availableMinutes: string[];
-  } | { success: false; message: string }> {
+  ): Promise<
+    | {
+        availableDays: string[];
+        availableHours: string[];
+        availableMinutes: string[];
+      }
+    | { success: false; message: string }
+  > {
     try {
       // Validate user authentication
       const user = req.user;
       if (!user) {
-        return { success: false, message: 'Unauthorized access. User token is required.' };
+        return {
+          success: false,
+          message: "Unauthorized access. User token is required.",
+        };
       }
 
-      console.log(`Checking availability for User: ${user.userId}, Organization: ${user.organizationId}`);
+      console.log(
+        `Checking availability for User: ${user.userId}, Organization: ${user.organizationId}`
+      );
 
       // Fetch approved bookings with their associated events
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
       const bookedSlots = await bookingRepo
-        .createQueryBuilder('booking')
-        .leftJoinAndSelect('booking.event', 'event')
-        .where('booking.venueId = :venueId', { venueId })
-        .andWhere('booking.approvalStatus = :status', { status: 'approved' })
-        .andWhere('event.startDate BETWEEN :queryStartDate AND :queryEndDate', {
+        .createQueryBuilder("booking")
+        .leftJoinAndSelect("booking.event", "event")
+        .where("booking.venueId = :venueId", { venueId })
+        .andWhere("booking.approvalStatus = :status", { status: "approved" })
+        .andWhere("event.startDate BETWEEN :queryStartDate AND :queryEndDate", {
           queryStartDate,
           queryEndDate,
         })
-        .orderBy('event.startDate', 'ASC')
-        .addOrderBy('event.startTime', 'ASC')
+        .orderBy("event.startDate", "ASC")
+        .addOrderBy("event.startTime", "ASC")
         .getMany();
 
       const availableDays: string[] = [];
@@ -71,12 +79,12 @@ export class CheckAbsenceService {
         if (dailyBookings.length === 0) {
           availableDays.push(currentDateStr); // Mark day as fully available
         } else {
-          let previousEndTime = '00:00'; // Start of the day
+          let previousEndTime = "00:00"; // Start of the day
 
           // Sort bookings by event start time
           dailyBookings.sort((a, b) => {
-            const startA = a.event?.startTime ?? '';
-            const startB = b.event?.startTime ?? '';
+            const startA = a.event?.startTime ?? "";
+            const startB = b.event?.startTime ?? "";
             return startA.localeCompare(startB);
           });
 
@@ -89,17 +97,25 @@ export class CheckAbsenceService {
 
             // Identify gaps before the current booking
             if (previousEndTime < startTime) {
-              availableHours.push(`${previousEndTime} - ${startTime} on ${currentDateStr}`);
-              availableMinutes.push(`${previousEndTime} - ${startTime} on ${currentDateStr}`);
+              availableHours.push(
+                `${previousEndTime} - ${startTime} on ${currentDateStr}`
+              );
+              availableMinutes.push(
+                `${previousEndTime} - ${startTime} on ${currentDateStr}`
+              );
             }
 
             previousEndTime = endTime;
           }
 
           // Check for availability after the last booking
-          if (previousEndTime < '23:59') {
-            availableHours.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
-            availableMinutes.push(`${previousEndTime} - 23:59 on ${currentDateStr}`);
+          if (previousEndTime < "23:59") {
+            availableHours.push(
+              `${previousEndTime} - 23:59 on ${currentDateStr}`
+            );
+            availableMinutes.push(
+              `${previousEndTime} - 23:59 on ${currentDateStr}`
+            );
           }
         }
 
@@ -108,8 +124,11 @@ export class CheckAbsenceService {
 
       return { availableDays, availableHours, availableMinutes };
     } catch (error) {
-      console.error('Error checking available slots:', error);
-      return { success: false, message: 'Failed to check booking availability.' };
+      console.error("Error checking available slots:", error);
+      return {
+        success: false,
+        message: "Failed to check booking availability.",
+      };
     }
   }
 
@@ -136,20 +155,23 @@ export class CheckAbsenceService {
         const eventRepo = AppDataSource.getRepository(Event);
         const foundEvent = await eventRepo.findOne({
           where: { eventId: bookingData.eventId },
-          select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime'],
+          select: ["eventId", "startDate", "endDate", "startTime", "endTime"],
         });
 
         if (!foundEvent) {
           return {
             success: false,
-            message: 'Associated event not found. Cannot check availability.',
+            message: "Associated event not found. Cannot check availability.",
           };
         }
         event = foundEvent;
       }
 
       if (!event.startDate || !event.endDate) {
-        return { success: false, message: 'Event startDate or endDate is undefined.' };
+        return {
+          success: false,
+          message: "Event startDate or endDate is undefined.",
+        };
       }
       const requestedStartDate = new Date(event.startDate);
       const requestedEndDate = new Date(event.endDate);
@@ -157,12 +179,18 @@ export class CheckAbsenceService {
       const requestedStartTime = event.startTime;
       const requestedEndTime = event.endTime;
 
-      if (isNaN(requestedStartDate.getTime()) || isNaN(requestedEndDate.getTime())) {
-        return { success: false, message: 'Invalid date format.' };
+      if (
+        isNaN(requestedStartDate.getTime()) ||
+        isNaN(requestedEndDate.getTime())
+      ) {
+        return { success: false, message: "Invalid date format." };
       }
 
       if (requestedStartDate > requestedEndDate) {
-        return { success: false, message: 'Start date cannot be after end date.' };
+        return {
+          success: false,
+          message: "Start date cannot be after end date.",
+        };
       }
 
       // Fetch available slots
@@ -173,7 +201,7 @@ export class CheckAbsenceService {
         requestedEndDate
       );
 
-      if ('success' in availableSlotsResult && !availableSlotsResult.success) {
+      if ("success" in availableSlotsResult && !availableSlotsResult.success) {
         return availableSlotsResult;
       }
 
@@ -193,8 +221,8 @@ export class CheckAbsenceService {
 
       for (const timeSlot of availableHours) {
         if (timeSlot.includes(`on ${requestedDate}`)) {
-          const timeRange = timeSlot.split(' on ')[0];
-          const [availableStart, availableEnd] = timeRange.split(' - ');
+          const timeRange = timeSlot.split(" on ")[0];
+          const [availableStart, availableEnd] = timeRange.split(" - ");
 
           if (
             requestedStartTime !== undefined &&
@@ -209,10 +237,10 @@ export class CheckAbsenceService {
       }
 
       if (!isAvailable) {
-        let nearestSlot = '';
+        let nearestSlot = "";
         for (const timeSlot of availableHours) {
           if (timeSlot.includes(`on ${requestedDate}`)) {
-            nearestSlot = timeSlot.split(' on ')[0];
+            nearestSlot = timeSlot.split(" on ")[0];
             break;
           }
         }
@@ -226,8 +254,8 @@ export class CheckAbsenceService {
 
       return { success: true };
     } catch (error) {
-      console.error('Error checking availability:', error);
-      return { success: false, message: 'Failed to check availability.' };
+      console.error("Error checking availability:", error);
+      return { success: false, message: "Failed to check availability." };
     }
   }
 
@@ -255,13 +283,21 @@ export class CheckAbsenceService {
         const eventRepo = AppDataSource.getRepository(Event);
         const foundEvent = await eventRepo.findOne({
           where: { eventId: bookingData.eventId },
-          select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime', 'eventTitle'],
+          select: [
+            "eventId",
+            "startDate",
+            "endDate",
+            "startTime",
+            "endTime",
+            "eventTitle",
+          ],
         });
 
         if (!foundEvent) {
           return {
             success: false,
-            message: 'Associated event not found for booking validation. Cannot proceed.',
+            message:
+              "Associated event not found for booking validation. Cannot proceed.",
           };
         }
         event = foundEvent;
@@ -280,10 +316,10 @@ export class CheckAbsenceService {
         return conflictCheck;
       }
 
-      return { success: true, message: 'Booking is valid and available.' };
+      return { success: true, message: "Booking is valid and available." };
     } catch (error) {
-      console.error('Error validating booking:', error);
-      return { success: false, message: 'Failed to validate booking.' };
+      console.error("Error validating booking:", error);
+      return { success: false, message: "Failed to validate booking." };
     }
   }
 }

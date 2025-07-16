@@ -1,7 +1,7 @@
-import { AppDataSource } from '../../config/Database';
-import { VenueBookingInterface } from '../../interfaces/VenueBookingInterface';
-import { Event } from '../../models/Event';
-import { ApprovalStatus, VenueBooking } from '../../models/VenueBooking';
+import { AppDataSource } from "../../config/Database";
+import { VenueBookingInterface } from "../../interfaces/VenueBookingInterface";
+import { Event } from "../../models/Event Tables/Event";
+import { ApprovalStatus, VenueBooking } from "../../models/VenueBooking";
 
 /**
  * Checks for conflicts with existing bookings based on the event's date and time.
@@ -16,7 +16,7 @@ export async function checkConflict(
     if (!bookingData.eventId || !bookingData.venueId) {
       return {
         success: false,
-        message: 'Missing required fields: eventId and venueId.',
+        message: "Missing required fields: eventId and venueId.",
       };
     }
 
@@ -32,12 +32,12 @@ export async function checkConflict(
       const eventRepo = AppDataSource.getRepository(Event);
       const foundEvent = await eventRepo.findOne({
         where: { eventId: bookingData.eventId },
-        select: ['eventId', 'startDate', 'endDate', 'startTime', 'endTime'],
+        select: ["eventId", "startDate", "endDate", "startTime", "endTime"],
       });
       if (!foundEvent) {
         return {
           success: false,
-          message: 'Event not found or incomplete data.',
+          message: "Event not found or incomplete data.",
         };
       }
       event = foundEvent;
@@ -52,13 +52,13 @@ export async function checkConflict(
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       return {
         success: false,
-        message: 'Invalid date format for startDate or endDate.',
+        message: "Invalid date format for startDate or endDate.",
       };
     }
     if (startDate > endDate) {
       return {
         success: false,
-        message: 'Start date cannot be after end date.',
+        message: "Start date cannot be after end date.",
       };
     }
 
@@ -66,11 +66,11 @@ export async function checkConflict(
     if (!startTime || !endTime) {
       return {
         success: false,
-        message: 'Start time and end time must be provided.',
+        message: "Start time and end time must be provided.",
       };
     }
-    const startTimeParts = startTime.split(':');
-    const endTimeParts = endTime.split(':');
+    const startTimeParts = startTime.split(":");
+    const endTimeParts = endTime.split(":");
     const startHour = parseInt(startTimeParts[0], 10);
     const startMinute = parseInt(startTimeParts[1], 10);
     const endHour = parseInt(endTimeParts[0], 10);
@@ -86,7 +86,8 @@ export async function checkConflict(
     ) {
       return {
         success: false,
-        message: 'Invalid time format: Start time and end time must be in HH:mm format.',
+        message:
+          "Invalid time format: Start time and end time must be in HH:mm format.",
       };
     }
 
@@ -99,7 +100,7 @@ export async function checkConflict(
     ) {
       return {
         success: false,
-        message: 'Start time must be before end time on the same day.',
+        message: "Start time must be before end time on the same day.",
       };
     }
 
@@ -107,35 +108,41 @@ export async function checkConflict(
 
     // Check for exact duplicate booking
     const existingBooking = await bookingRepo
-      .createQueryBuilder('booking')
-      .leftJoinAndSelect('booking.event', 'event')
-      .where('booking.venueId = :venueId', { venueId: bookingData.venueId })
-      .andWhere('booking.eventId = :eventId', { eventId: bookingData.eventId })
-      .andWhere('event.startDate = :startDate', { startDate })
-      .andWhere('event.startTime = :startTime', { startTime })
-      .andWhere('event.endTime = :endTime', { endTime })
+      .createQueryBuilder("booking")
+      .leftJoinAndSelect("booking.event", "event")
+      .where("booking.venueId = :venueId", { venueId: bookingData.venueId })
+      .andWhere("booking.eventId = :eventId", { eventId: bookingData.eventId })
+      .andWhere("event.startDate = :startDate", { startDate })
+      .andWhere("event.startTime = :startTime", { startTime })
+      .andWhere("event.endTime = :endTime", { endTime })
       .getOne();
 
     if (existingBooking) {
       return {
         success: false,
-        message: 'Booking already exists with the same venue, event, date, and time.',
+        message:
+          "Booking already exists with the same venue, event, date, and time.",
       };
     }
 
     // Check for time conflicts
     const conflictingBookings = await bookingRepo
-      .createQueryBuilder('booking')
-      .leftJoinAndSelect('booking.event', 'event')
-      .where('booking.venueId = :venueId', { venueId: bookingData.venueId })
-      .andWhere('booking.approvalStatus = :status', { status: ApprovalStatus.APPROVED })
-      .andWhere('(event.startDate <= :endDate AND event.endDate >= :startDate)', {
-        startDate,
-        endDate,
+      .createQueryBuilder("booking")
+      .leftJoinAndSelect("booking.event", "event")
+      .where("booking.venueId = :venueId", { venueId: bookingData.venueId })
+      .andWhere("booking.approvalStatus = :status", {
+        status: ApprovalStatus.APPROVED,
       })
       .andWhere(
-        '((event.startTime <= :endTime AND event.endTime >= :startTime) OR ' +
-        '(:startTime IS NULL AND :endTime IS NULL))',
+        "(event.startDate <= :endDate AND event.endDate >= :startDate)",
+        {
+          startDate,
+          endDate,
+        }
+      )
+      .andWhere(
+        "((event.startTime <= :endTime AND event.endTime >= :startTime) OR " +
+          "(:startTime IS NULL AND :endTime IS NULL))",
         { startTime, endTime }
       )
       .getMany();
@@ -143,12 +150,16 @@ export async function checkConflict(
     const bufferTimeMinutes = 30;
 
     for (const booking of conflictingBookings) {
-      if (!booking.event || !booking.event.startTime || !booking.event.endTime) {
+      if (
+        !booking.event ||
+        !booking.event.startTime ||
+        !booking.event.endTime
+      ) {
         continue;
       }
 
-      const existingStartTimeParts = booking.event.startTime.split(':');
-      const existingEndTimeParts = booking.event.endTime.split(':');
+      const existingStartTimeParts = booking.event.startTime.split(":");
+      const existingEndTimeParts = booking.event.endTime.split(":");
       const existingStartHour = parseInt(existingStartTimeParts[0], 10);
       const existingStartMinute = parseInt(existingStartTimeParts[1], 10);
       const existingEndHour = parseInt(existingEndTimeParts[0], 10);
@@ -163,7 +174,8 @@ export async function checkConflict(
         continue;
       }
 
-      const existingStartTotalMinutes = existingStartHour * 60 + existingStartMinute;
+      const existingStartTotalMinutes =
+        existingStartHour * 60 + existingStartMinute;
       const existingEndTotalMinutes = existingEndHour * 60 + existingEndMinute;
 
       // Check for time overlap
@@ -202,10 +214,12 @@ export async function checkConflict(
 
     return { success: true };
   } catch (error) {
-    console.error('Error checking conflicts:', error);
+    console.error("Error checking conflicts:", error);
     return {
       success: false,
-      message: `Failed to check conflicts: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Failed to check conflicts: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
     };
   }
 }

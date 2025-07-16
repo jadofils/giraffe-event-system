@@ -18,7 +18,7 @@ import {
   IsPhoneNumber,
   IsString,
 } from "class-validator";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { User } from "./User";
 import { VenueBooking } from "./VenueBooking";
 import { Venue } from "./Venue Tables/Venue";
