@@ -48,4 +48,18 @@ export class VenueBookingController {
       res.status(500).json({ success: false, message: "Server error." });
     }
   }
+
+  static async approveBooking(req: Request, res: Response): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const result = await VenueBookingRepository.approveBooking(bookingId);
+      if (!result.success) {
+        res.status(400).json({ success: false, message: result.message });
+        return;
+      }
+      res.status(200).json({ success: true, message: result.message });
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Server error." });
+    }
+  }
 }

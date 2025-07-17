@@ -20,6 +20,7 @@ export enum BookingStatus {
   APPROVED_PAID = "APPROVED_PAID",
   APPROVED_NOT_PAID = "APPROVED_NOT_PAID",
   PENDING = "PENDING",
+  CANCELLED = "CANCELLED",
 }
 
 @Entity("venue_bookings")
@@ -79,6 +80,9 @@ export class VenueBooking {
 
   @Column({ type: "boolean", default: false })
   isPaid!: boolean;
+
+  @Column({ type: "text", nullable: true })
+  cancellationReason?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

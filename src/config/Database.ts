@@ -24,6 +24,7 @@ import { VenueReview } from "../models/Venue Tables/VenueReview";
 import { Resources } from "../models/Resources";
 import { EventVenue } from "../models/Event Tables/EventVenue";
 import { EventGuest } from "../models/Event Tables/EventGuest";
+import { VenueBookingPayment } from "../models/VenueBookingPayment";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -51,6 +52,7 @@ export const AppDataSource = new DataSource({
     InstallmentPlan,
     Budget,
     VenueBooking,
+    VenueBookingPayment,
     VenueInvoice,
     BookingCondition,
     VenueVariable,

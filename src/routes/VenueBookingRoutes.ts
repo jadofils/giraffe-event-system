@@ -12,6 +12,7 @@ router.get(
   VenueBookingController.getBookingsByManagerId
 );
 router.get("/:bookingId", VenueBookingController.getBookingById);
+router.patch("/:bookingId/approve", VenueBookingController.approveBooking);
 // ...other routes can remain commented or be enabled as needed
 
 export default router;

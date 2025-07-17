@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  JoinColumn,
 } from "typeorm";
 import { Venue } from "./Venue";
 
@@ -17,12 +18,12 @@ export class VenueAvailabilitySlot {
 
   @Column({ type: "date" })
   Date!: Date;
-  
-  @Column({ type: "time" })
-  startTime!: Date;
 
-  @Column({ type: "time" })
-  endTime!: Date;
+  @Column({ type: "time", nullable: true })
+  startTime?: Date;
+
+  @Column({ type: "time", nullable: true })
+  endTime?: Date;
 
   @Column({ type: "boolean", default: true })
   isAvailable!: boolean;
@@ -31,5 +32,6 @@ export class VenueAvailabilitySlot {
   createdAt!: Date;
 
   @ManyToOne(() => Venue, (venue) => venue.availabilitySlots)
+  @JoinColumn({ name: "venueId" })
   venue!: Venue;
 }
