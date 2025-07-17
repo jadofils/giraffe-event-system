@@ -11,6 +11,7 @@ router.get(
   "/manager/:managerId",
   VenueBookingController.getBookingsByManagerId
 );
+router.get("/:bookingId", VenueBookingController.getBookingById);
 // ...other routes can remain commented or be enabled as needed
 
 export default router;

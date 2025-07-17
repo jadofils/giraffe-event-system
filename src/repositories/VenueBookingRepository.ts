@@ -43,4 +43,28 @@ export class VenueBookingRepository {
       }
     );
   }
+
+  static async getBookingById(bookingId: string) {
+    try {
+      const repo = AppDataSource.getRepository(VenueBooking);
+      const booking = await repo.findOne({
+        where: { bookingId },
+        relations: ["user", "venue"], // include user (organizer) and venue
+      });
+      if (!booking) {
+        return { success: false, message: "Booking not found.", data: null };
+      }
+      return {
+        success: true,
+        message: "Booking fetched successfully.",
+        data: booking,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to fetch booking.",
+        data: null,
+      };
+    }
+  }
 }
