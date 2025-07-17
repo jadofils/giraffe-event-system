@@ -45,7 +45,7 @@ const yamljs_1 = __importDefault(require("yamljs"));
 const UserRoutes_1 = require("./UserRoutes");
 const RoleRoutes_1 = __importDefault(require("./RoleRoutes"));
 const OrganizationRoutes_1 = require("./OrganizationRoutes");
-const TicketTyeRoutes_1 = __importDefault(require("./TicketTyeRoutes")); // Ensure tickets is exported from TicketType
+// import tickets from "./TicketTyeRoutes"; // Ensure tickets is exported from TicketType
 const ResourceRoutes_1 = __importDefault(require("./ResourceRoutes")); // Ensure resourceRoutes is exported from ResourceRoutes
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 // import VenueBookingRoutes from "./VenueBookingRoutes";
@@ -62,7 +62,7 @@ router.use("/static", express_1.default.static(path_1.default.join(__dirname, ".
 router.use("/users", UserRoutes_1.userRoutes);
 router.use("/roles", RoleRoutes_1.default);
 router.use("/organizations", OrganizationRoutes_1.organizationRoutes); // This makes `/api/v1/organizations/*` available
-router.use("/tickets", TicketTyeRoutes_1.default); // This makes `/api/v1/tickets-type/*` available
+// router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
 // router.use("/registrations",RegistrationRoutes)
 //resources
 router.use("/resources", ResourceRoutes_1.default);

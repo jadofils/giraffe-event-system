@@ -118,17 +118,17 @@ export class Organization {
   @ManyToMany(() => User, (user) => user.organizations)
   users!: User[];
 
-  // Relationship to Events (Organizer)
-  @OneToMany(() => Event, (event) => event.organization)
-  events!: Event[];
+  // // Relationship to Events (Organizer)
+  // @OneToMany(() => Event, (event) => event.organization)
+  // events!: Event[];
 
   // Relationship to Venues (Owned by Organization)
   @OneToMany(() => Venue, (venue) => venue.organization)
   venues!: Venue[];
 
   // Relationship to VenueBookings
-  @OneToMany(() => VenueBooking, (booking) => booking.organization)
-  bookings!: VenueBooking[];
+  // @OneToMany(() => VenueBooking, (booking) => booking.organization)
+  // bookings!: VenueBooking[];
 
   // Relationship to VenueInvoices
   @OneToMany(() => VenueInvoice, (venueInvoice) => venueInvoice.organization)

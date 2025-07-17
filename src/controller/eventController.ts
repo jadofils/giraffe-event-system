@@ -4,7 +4,13 @@ import { EventInterface } from "../interfaces/EventInterface";
 import { EventRepository } from "../repositories/eventRepository";
 import { AppDataSource } from "../config/Database";
 import { UUID_REGEX } from "../utils/constants";
-
+import { Venue } from "../models/Venue Tables/Venue";
+import { EventVenue } from "../models/Event Tables/EventVenue";
+import { EventGuest } from "../models/Event Tables/EventGuest";
+import { User } from "../models/User";
+import { Organization } from "../models/Organization";
+import { VenueVariable } from "../models/Venue Tables/VenueVariable";
+import { CacheService } from "../services/CacheService";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -15,521 +21,660 @@ export class EventController {
     next: NextFunction
   ): Promise<void> {
     try {
-      // Validate authentication
-      if (!req.user || !req.user.userId || !req.user.organizationId) {
-        res.status(401).json({
+      const {
+        eventTitle,
+        eventType,
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        description,
+        guests,
+        venueId,
+        visibilityScope,
+        eventOrganizerId,
+      } = req.body;
+
+      // Fetch venue WITH venueVariables
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({
+        where: { venueId },
+        relations: ["venueVariables"],
+      });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      if (!venue.venueId) {
+        res.status(400).json({
           success: false,
-          message: "Unauthorized: User is not properly authenticated.",
+          message: "Venue found but venueId is missing or invalid.",
         });
         return;
       }
 
-      // Validate UUID format for organizationId and organizerId
-      if (!UUID_REGEX.test(req.user.organizationId)) {
+      // Fetch venueAmount from VenueVariable
+      if (!venue.venueVariables || venue.venueVariables.length === 0) {
         res.status(400).json({
           success: false,
-          message: "Invalid organization ID format in token.",
+          message: "No venue variable (amount) found for this venue.",
         });
         return;
       }
-      if (!UUID_REGEX.test(req.user.userId)) {
-        res.status(400).json({
-          success: false,
-          message: "Invalid user ID format in token.",
-        });
-        return;
-      }
+      // Use the first VenueVariable (or apply your own selection logic)
+      const venueAmount = venue.venueVariables[0].venueAmount;
 
-      // --- Conflict check before creating event ---
-      const bookingRepo = AppDataSource.getRepository(VenueBooking);
-      const { venues, startDate, endDate } = req.body;
-      if (!venues || !Array.isArray(venues) || !startDate || !endDate) {
-        res.status(400).json({
-          success: false,
-          message:
-            "venues, startDate, and endDate are required for conflict check.",
-        });
-        return;
-      }
-      for (const venueId of venues) {
-        const conflicts = await bookingRepo
-          .createQueryBuilder("booking")
-          .leftJoin("booking.event", "event")
-          .where("booking.venueId = :venueId", { venueId })
-          .andWhere("booking.bookingStatus = :bookingStatus", {
-            bookingStatus: BookingStatus.APPROVED,
-          })
-          .andWhere("event.status = :eventStatus", { eventStatus: "APPROVED" })
-          .andWhere(
-            "(event.startDate <= :endDate AND event.endDate >= :startDate)",
-            { startDate, endDate }
-          )
-          .getCount();
-        if (conflicts > 0) {
-          res.status(409).json({
+      // Validate based on booking type
+      if (venue.bookingType === "DAILY") {
+        if (!startDate || !endDate) {
+          res.status(400).json({
             success: false,
-            message: `Venue ${venueId} is already booked for an approved event on the same date(s).`,
-            venueId,
+            message: "Start and end date are required for daily booking.",
+          });
+          return;
+        }
+      } else if (venue.bookingType === "HOURLY") {
+        if (!startDate || !endDate || !startTime || !endTime) {
+          res.status(400).json({
+            success: false,
+            message: "Start/end date and time are required for hourly booking.",
           });
           return;
         }
       }
-      // --- End conflict check ---
 
-      const eventData: Partial<EventInterface> = {
-        ...req.body,
-        organizerId: req.user.userId,
-        status: EventStatus.REQUESTED,
-      };
-
-      // Create event with organizationId from token
-      const createResult = await EventRepository.create(
-        eventData,
-        req.user.organizationId
-      );
-      if (!createResult.success || !createResult.data) {
-        res.status(400).json({ success: false, message: createResult.message });
+      // Determine if event is public
+      const isPublic = visibilityScope === "PUBLIC";
+      if (isPublic && !description) {
+        res.status(400).json({
+          success: false,
+          message: "Description is required for public events.",
+        });
         return;
       }
 
-      // Return the full event and venues
+      // Determine eventOrganizerType
+      let eventOrganizerType: "USER" | "ORGANIZATION" = "USER";
+      const userRepo = AppDataSource.getRepository(User);
+      const orgRepo = AppDataSource.getRepository(Organization);
+      const user = await userRepo.findOne({
+        where: { userId: eventOrganizerId },
+      });
+      if (!user) {
+        const org = await orgRepo.findOne({
+          where: { organizationId: eventOrganizerId },
+        });
+        if (org) {
+          eventOrganizerType = "ORGANIZATION";
+        } else {
+          res.status(400).json({
+            success: false,
+            message:
+              "Invalid eventOrganizerId: not found as user or organization.",
+          });
+          return;
+        }
+      }
+
+      // Set event statuses and fields
+      let eventStatus = EventStatus.DRAFTED;
+      if (isPublic && req.body.eventStatus === EventStatus.REQUESTED) {
+        eventStatus = EventStatus.REQUESTED;
+      }
+      const eventData: any = {
+        eventName: eventTitle,
+        eventType,
+        startDate,
+        endDate,
+        visibilityScope,
+        eventStatus,
+        publishStatus: "DRAFT",
+        eventOrganizerId,
+        eventOrganizerType,
+      };
+
+      if (isPublic) {
+        // Set all fields for public events
+        eventData.startTime = startTime;
+        eventData.endTime = endTime;
+        eventData.eventDescription = description;
+        eventData.maxAttendees = req.body.maxAttendees;
+        eventData.imageURL = req.body.imageURL;
+        eventData.socialMediaLinks = req.body.socialMediaLinks;
+        eventData.isEntryPaid = req.body.isEntryPaid;
+        eventData.expectedGuests = req.body.expectedGuests;
+        eventData.specialNotes = req.body.specialNotes;
+        eventData.eventPhoto = req.body.eventPhoto;
+        eventData.eventOtherType = req.body.eventOtherType;
+        // Add any other fields you want to support
+      }
+
+      const guestList = isPublic && Array.isArray(guests) ? guests : [];
+
+      // Pass venueAmount to repository
+      const result = await EventRepository.createEventWithRelations(
+        eventData,
+        venue,
+        guestList,
+        venueAmount
+      );
+
+      if (!result.success) {
+        res.status(400).json({ success: false, message: result.message });
+        return;
+      }
+
+      // Invalidate cache for all managers of this venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariables = await venueVariableRepo.find({
+        where: { venue: { venueId: venue.venueId } },
+        relations: ["manager"],
+      });
+      for (const vv of venueVariables) {
+        if (vv.manager && vv.manager.userId) {
+          await CacheService.invalidate(
+            `venue-bookings:manager:${vv.manager.userId}`
+          );
+        }
+      }
+
       res.status(201).json({
         success: true,
-        data: {
-          event: createResult.data.event, // full event object
-          venues: createResult.data.venues?.map(sanitizeVenue),
-        },
-        message: "Event and venues associated successfully.",
+        data: result.data,
+        message: "Event created successfully.",
       });
+      return;
     } catch (error) {
-      console.error("Error in createEvent:", error);
       next(error);
     }
   }
 
-//   static async approveEvent(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       // Fetch event with all relations needed
-//       const eventResult = await EventRepository.getById(id);
-//       if (!eventResult.success || !eventResult.data) {
-//         res.status(404).json({ message: eventResult.message });
-//         return;
-//       }
-//       // Approve the event
-//       const updateResult = await EventRepository.update(id, {
-//         status: EventStatus.APPROVED,
-//       });
-//       if (!updateResult.success || !updateResult.data) {
-//         res.status(500).json({ message: updateResult.message });
-//         return;
-//       }
-//       // Refetch event with all relations (including venueBookings, venues, organizer, organization)
-//       const event = (await EventRepository.getById(id)).data!;
+  static async getAllEvents(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const result = await EventRepository.getAllEventsWithRelations();
+      if (!result.success) {
+        res.status(500).json({ success: false, message: result.message });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  }
 
-//       // === REJECT/CANCEL CONFLICTING PENDING EVENTS ===
-//       const { rejectConflictingPendingEvents } = await import(
-//         "../middlewares/rejectConflictingPendingEvents"
-//       );
-//       await rejectConflictingPendingEvents(event);
-//       // Eager-load venueBookings with venue, user, organization, and venue.organization
-//       const bookings = await AppDataSource.getRepository(VenueBooking).find({
-//         where: { eventId: id },
-//         relations: ["venue", "venue.organization", "user", "organization"],
-//       });
-//       // Approve all venue bookings for this event
-//       for (const booking of bookings) {
-//         if (booking.approvalStatus !== ApprovalStatus.APPROVED) {
-//           booking.approvalStatus = ApprovalStatus.APPROVED;
-//           await AppDataSource.getRepository(VenueBooking).save(booking);
-//         }
-//       }
-//       // Approve all venues for this event
-//       if (event.venues && event.venues.length > 0) {
-//         const venueRepo = AppDataSource.getRepository("Venue");
-//         for (const venue of event.venues) {
-//           const dbVenue = await venueRepo.findOne({
-//             where: { venueId: venue.venueId },
-//           });
-//           if (dbVenue && dbVenue.status !== VenueStatus.APPROVED) {
-//             dbVenue.status = VenueStatus.APPROVED;
-//             await venueRepo.save(dbVenue);
-//           }
-//         }
-//       }
-//       // Create invoices for each booking (if not already invoiced)
-//       const invoices = [];
-//       for (const booking of bookings) {
-//         // Only create invoice if not already linked
-//         if (!booking.invoice) {
-//           const invoice = await InvoiceService.createInvoice({
-//             userId: booking.userId,
-//             eventId: booking.eventId,
-//             venueId: booking.venueId,
-//             totalAmount: booking.totalAmountDue,
-//             invoiceDate: new Date(),
-//             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-//             status: InvoiceStatus.PENDING,
-//           });
-//           // Optionally, update booking to reference the invoice
-//           booking.venueInvoiceId = invoice.invoiceId;
-//           await AppDataSource.getRepository(VenueBooking).save(booking);
-//           // Attach details for response
-//           invoices.push({
-//             ...invoice,
-//             venue: {
-//               venueId: booking.venue.venueId,
-//               venueName: booking.venue.venueName,
-//               amount: booking.venue.venueVariables,
-//               location: booking.venue.venueLocation,
-//               organization: booking.venue.organization
-//                 ? {
-//                     organizationId: booking.venue.organization.organizationId,
-//                     organizationName:
-//                       booking.venue.organization.organizationName,
-//                     contactEmail: booking.venue.organization.contactEmail,
-//                     contactPhone: booking.venue.organization.contactPhone,
-//                   }
-//                 : null,
-//             },
-//             requester: booking.user
-//               ? {
-//                   userId: booking.user.userId,
-//                   username: booking.user.username,
-//                   firstName: booking.user.firstName,
-//                   lastName: booking.user.lastName,
-//                   email: booking.user.email,
-//                   phoneNumber: booking.user.phoneNumber,
-//                 }
-//               : null,
-//             bookingOrganization: booking.organization
-//               ? {
-//                   organizationId: booking.organization.organizationId,
-//                   organizationName: booking.organization.organizationName,
-//                   contactEmail: booking.organization.contactEmail,
-//                   contactPhone: booking.organization.contactPhone,
-//                 }
-//               : null,
-//           });
-//         }
-//       }
-//       res.status(200).json({
-//         success: true,
-//         message: "Event approved and invoices generated.",
-//         data: {
-//           event: {
-//             eventId: event.eventId,
-//             eventTitle: event.eventTitle,
-//             startDate: event.startDate,
-//             endDate: event.endDate,
-//             organizer: event.organizer,
-//             organization: event.organization,
-//           },
-//           invoices,
-//         },
-//       });
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  static async getEventById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { id } = req.params;
+      const result = await EventRepository.getEventByIdWithRelations(id);
+      if (!result.success) {
+        res.status(404).json({ success: false, message: result.message });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  }
 
-//   static async getEventById(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const result = await EventRepository.getById(id);
-//       if (!result.success || !result.data) {
-//         res.status(404).json({ message: result.message });
-//         return;
-//       }
-//       res.json(result.data);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  static async requestPublish(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { id } = req.params;
+      // Optionally: validate all required fields for public events here
+      const updateResult = await EventRepository.updateEventStatus(id, {
+        eventStatus: EventStatus.REQUESTED,
+        // publishStatus remains DRAFT
+      });
+      if (!updateResult.success) {
+        res.status(400).json({ success: false, message: updateResult.message });
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        data: updateResult.data,
+        message: "Event submitted for publishing/approval.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 
-//   static async getAllEvents(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const result = await EventRepository.getAll();
-//       if (!result.success || !result.data) {
-//         res.status(500).json({ message: result.message });
-//         return;
-//       }
-//       res.json(result.data);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //   static async approveEvent(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { id } = req.params;
+  //       // Fetch event with all relations needed
+  //       const eventResult = await EventRepository.getById(id);
+  //       if (!eventResult.success || !eventResult.data) {
+  //         res.status(404).json({ message: eventResult.message });
+  //         return;
+  //       }
+  //       // Approve the event
+  //       const updateResult = await EventRepository.update(id, {
+  //         status: EventStatus.APPROVED,
+  //       });
+  //       if (!updateResult.success || !updateResult.data) {
+  //         res.status(500).json({ message: updateResult.message });
+  //         return;
+  //       }
+  //       // Refetch event with all relations (including venueBookings, venues, organizer, organization)
+  //       const event = (await EventRepository.getById(id)).data!;
 
-//   static async updateEvent(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const eventData: Partial<EventInterface> = {
-//         ...req.body,
-//         status: EventStatus.PENDING,
-//       };
+  //       // === REJECT/CANCEL CONFLICTING PENDING EVENTS ===
+  //       const { rejectConflictingPendingEvents } = await import(
+  //         "../middlewares/rejectConflictingPendingEvents"
+  //       );
+  //       await rejectConflictingPendingEvents(event);
+  //       // Eager-load venueBookings with venue, user, organization, and venue.organization
+  //       const bookings = await AppDataSource.getRepository(VenueBooking).find({
+  //         where: { eventId: id },
+  //         relations: ["venue", "venue.organization", "user", "organization"],
+  //       });
+  //       // Approve all venue bookings for this event
+  //       for (const booking of bookings) {
+  //         if (booking.approvalStatus !== ApprovalStatus.APPROVED) {
+  //           booking.approvalStatus = ApprovalStatus.APPROVED;
+  //           await AppDataSource.getRepository(VenueBooking).save(booking);
+  //         }
+  //       }
+  //       // Approve all venues for this event
+  //       if (event.venues && event.venues.length > 0) {
+  //         const venueRepo = AppDataSource.getRepository("Venue");
+  //         for (const venue of event.venues) {
+  //           const dbVenue = await venueRepo.findOne({
+  //             where: { venueId: venue.venueId },
+  //           });
+  //           if (dbVenue && dbVenue.status !== VenueStatus.APPROVED) {
+  //             dbVenue.status = VenueStatus.APPROVED;
+  //             await venueRepo.save(dbVenue);
+  //           }
+  //         }
+  //       }
+  //       // Create invoices for each booking (if not already invoiced)
+  //       const invoices = [];
+  //       for (const booking of bookings) {
+  //         // Only create invoice if not already linked
+  //         if (!booking.invoice) {
+  //           const invoice = await InvoiceService.createInvoice({
+  //             userId: booking.userId,
+  //             eventId: booking.eventId,
+  //             venueId: booking.venueId,
+  //             totalAmount: booking.totalAmountDue,
+  //             invoiceDate: new Date(),
+  //             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  //             status: InvoiceStatus.PENDING,
+  //           });
+  //           // Optionally, update booking to reference the invoice
+  //           booking.venueInvoiceId = invoice.invoiceId;
+  //           await AppDataSource.getRepository(VenueBooking).save(booking);
+  //           // Attach details for response
+  //           invoices.push({
+  //             ...invoice,
+  //             venue: {
+  //               venueId: booking.venue.venueId,
+  //               venueName: booking.venue.venueName,
+  //               amount: booking.venue.venueVariables,
+  //               location: booking.venue.venueLocation,
+  //               organization: booking.venue.organization
+  //                 ? {
+  //                     organizationId: booking.venue.organization.organizationId,
+  //                     organizationName:
+  //                       booking.venue.organization.organizationName,
+  //                     contactEmail: booking.venue.organization.contactEmail,
+  //                     contactPhone: booking.venue.organization.contactPhone,
+  //                   }
+  //                 : null,
+  //             },
+  //             requester: booking.user
+  //               ? {
+  //                   userId: booking.user.userId,
+  //                   username: booking.user.username,
+  //                   firstName: booking.user.firstName,
+  //                   lastName: booking.user.lastName,
+  //                   email: booking.user.email,
+  //                   phoneNumber: booking.user.phoneNumber,
+  //                 }
+  //               : null,
+  //             bookingOrganization: booking.organization
+  //               ? {
+  //                   organizationId: booking.organization.organizationId,
+  //                   organizationName: booking.organization.organizationName,
+  //                   contactEmail: booking.organization.contactEmail,
+  //                   contactPhone: booking.organization.contactPhone,
+  //                 }
+  //               : null,
+  //           });
+  //         }
+  //       }
+  //       res.status(200).json({
+  //         success: true,
+  //         message: "Event approved and invoices generated.",
+  //         data: {
+  //           event: {
+  //             eventId: event.eventId,
+  //             eventTitle: event.eventTitle,
+  //             startDate: event.startDate,
+  //             endDate: event.endDate,
+  //             organizer: event.organizer,
+  //             organization: event.organization,
+  //           },
+  //           invoices,
+  //         },
+  //       });
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//       const updateResult = await EventRepository.update(id, eventData);
-//       if (!updateResult.success || !updateResult.data) {
-//         res.status(500).json({ message: updateResult.message });
-//         return;
-//       }
-//       res.json(updateResult.data);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //   static async getEventById(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { id } = req.params;
+  //       const result = await EventRepository.getById(id);
+  //       if (!result.success || !result.data) {
+  //         res.status(404).json({ message: result.message });
+  //         return;
+  //       }
+  //       res.json(result.data);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//   static async deleteEvent(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const result = await EventRepository.delete(id);
-//       if (!result.success) {
-//         res.status(500).json({ message: result.message });
-//         return;
-//       }
-//       res.json({ message: "Event deleted" });
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //   static async getAllEvents(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const result = await EventRepository.getAll();
+  //       if (!result.success || !result.data) {
+  //         res.status(500).json({ message: result.message });
+  //         return;
+  //       }
+  //       res.json(result.data);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//   static async bulkCreateVenueBookings(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { organizationId, bookings } = req.body;
-//       const userId = req.user?.userId; // From AuthMiddleware
-//       const eventId = req.params.eventId;
+  //   static async updateEvent(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { id } = req.params;
+  //       const eventData: Partial<EventInterface> = {
+  //         ...req.body,
+  //         status: EventStatus.PENDING,
+  //       };
 
-//       if (!userId) {
-//         res.status(401).json({
-//           success: false,
-//           message: "Unauthorized: User ID not found in token",
-//         });
-//         return;
-//       }
+  //       const updateResult = await EventRepository.update(id, eventData);
+  //       if (!updateResult.success || !updateResult.data) {
+  //         res.status(500).json({ message: updateResult.message });
+  //         return;
+  //       }
+  //       res.json(updateResult.data);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//       if (!organizationId) {
-//         res
-//           .status(400)
-//           .json({ success: false, message: "organizationId is required" });
-//         return;
-//       }
+  //   static async deleteEvent(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { id } = req.params;
+  //       const result = await EventRepository.delete(id);
+  //       if (!result.success) {
+  //         res.status(500).json({ message: result.message });
+  //         return;
+  //       }
+  //       res.json({ message: "Event deleted" });
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//       if (!Array.isArray(bookings) || bookings.length === 0) {
-//         res
-//           .status(400)
-//           .json({ success: false, message: "Booking array is required" });
-//         return;
-//       }
+  //   static async bulkCreateVenueBookings(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { organizationId, bookings } = req.body;
+  //       const userId = req.user?.userId; // From AuthMiddleware
+  //       const eventId = req.params.eventId;
 
-//       // Validate venues exist
-//       const venueRepo = AppDataSource.getRepository(Venue);
-//       const venueIds = bookings.map((b) => b.venueId);
-//       const venues = await venueRepo.find({
-//         where: { venueId: In(venueIds) },
-//         relations: ["organization"],
-//       });
+  //       if (!userId) {
+  //         res.status(401).json({
+  //           success: false,
+  //           message: "Unauthorized: User ID not found in token",
+  //         });
+  //         return;
+  //       }
 
-//       if (venues.length !== bookings.length) {
-//         res
-//           .status(404)
-//           .json({ success: false, message: "One or more venues not found" });
-//         return;
-//       }
+  //       if (!organizationId) {
+  //         res
+  //           .status(400)
+  //           .json({ success: false, message: "organizationId is required" });
+  //         return;
+  //       }
 
-//       const result = await EventRepository.bulkCreateVenueBookings(
-//         bookings.map((b) => ({
-//           ...b,
-//           organizationId,
-//           approvalStatus: ApprovalStatus.PENDING,
-//         })),
-//         userId,
-//         eventId,
-//         organizationId
-//       );
+  //       if (!Array.isArray(bookings) || bookings.length === 0) {
+  //         res
+  //           .status(400)
+  //           .json({ success: false, message: "Booking array is required" });
+  //         return;
+  //       }
 
-//       if (!result.success) {
-//         res.status(400).json({ success: false, message: result.message });
-//         return;
-//       }
+  //       // Validate venues exist
+  //       const venueRepo = AppDataSource.getRepository(Venue);
+  //       const venueIds = bookings.map((b) => b.venueId);
+  //       const venues = await venueRepo.find({
+  //         where: { venueId: In(venueIds) },
+  //         relations: ["organization"],
+  //       });
 
-//       // Format response with full venue data
-//       const formattedBookings = result.data?.map((booking) => ({
-//         bookingId: booking.bookingId,
-//         venue: {
-//           venueId: booking.venue.venueId,
-//           venueName: booking.venue.venueName,
-//           location: booking.venue.venueLocation,
-//           capacity: booking.venue.capacity,
-//           amount: booking.venue.venueVariables,
-//           latitude: booking.venue.latitude,
-//           longitude: booking.venue.longitude,
-//           googleMapsLink: booking.venue.googleMapsLink,
-//           managerId: booking.venue.venueVariables,
-//           organizationId: booking.venue.organizationId,
-//           amenities: booking.venue.amenities,
-//           venueType: booking.venue.venueTypeId,
-//           createdAt: booking.venue.createdAt,
-//           updatedAt: booking.venue.updatedAt,
-//           deletedAt: booking.venue.deletedAt,
-//         },
-//         eventId: booking.eventId,
-//         userId: booking.userId,
-//         organizationId: booking.organizationId,
-//         totalAmountDue: booking.totalAmountDue,
-//         venueInvoiceId: booking.venueInvoiceId,
-//         approvalStatus: booking.approvalStatus,
-//         notes: booking.notes,
-//         createdAt: booking.createdAt,
-//         updatedAt: booking.updatedAt,
-//         deletedAt: booking.deletedAt,
-//       }));
+  //       if (venues.length !== bookings.length) {
+  //         res
+  //           .status(404)
+  //           .json({ success: false, message: "One or more venues not found" });
+  //         return;
+  //       }
 
-//       res.status(201).json({
-//         success: true,
-//         message: "Bookings created",
-//         data: formattedBookings,
-//       });
-//     } catch (error) {
-//       console.error("Error in bulkCreateVenueBookings:", error);
-//       next(error);
-//     }
-//   }
-//   static async approveVenueBooking(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { bookingId } = req.params;
-//       const updateResult = await EventRepository.updateVenueBooking(bookingId, {
-//         approvalStatus: ApprovalStatus.APPROVED,
-//       });
-//       if (!updateResult.success || !updateResult.data) {
-//         res.status(500).json({ message: updateResult.message });
-//         return;
-//       }
+  //       const result = await EventRepository.bulkCreateVenueBookings(
+  //         bookings.map((b) => ({
+  //           ...b,
+  //           organizationId,
+  //           approvalStatus: ApprovalStatus.PENDING,
+  //         })),
+  //         userId,
+  //         eventId,
+  //         organizationId
+  //       );
 
-//       res.json(updateResult.data);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //       if (!result.success) {
+  //         res.status(400).json({ success: false, message: result.message });
+  //         return;
+  //       }
 
-//   static async getVenueBookings(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { eventId } = req.params;
-//       const eventResult = await EventRepository.getById(eventId);
-//       if (!eventResult.success || !eventResult.data) {
-//         res.status(404).json({ message: eventResult.message });
-//         return;
-//       }
-//       res.json(eventResult.data.venueBookings || []);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //       // Format response with full venue data
+  //       const formattedBookings = result.data?.map((booking) => ({
+  //         bookingId: booking.bookingId,
+  //         venue: {
+  //           venueId: booking.venue.venueId,
+  //           venueName: booking.venue.venueName,
+  //           location: booking.venue.venueLocation,
+  //           capacity: booking.venue.capacity,
+  //           amount: booking.venue.venueVariables,
+  //           latitude: booking.venue.latitude,
+  //           longitude: booking.venue.longitude,
+  //           googleMapsLink: booking.venue.googleMapsLink,
+  //           managerId: booking.venue.venueVariables,
+  //           organizationId: booking.venue.organizationId,
+  //           amenities: booking.venue.amenities,
+  //           venueType: booking.venue.venueTypeId,
+  //           createdAt: booking.venue.createdAt,
+  //           updatedAt: booking.venue.updatedAt,
+  //           deletedAt: booking.venue.deletedAt,
+  //         },
+  //         eventId: booking.eventId,
+  //         userId: booking.userId,
+  //         organizationId: booking.organizationId,
+  //         totalAmountDue: booking.totalAmountDue,
+  //         venueInvoiceId: booking.venueInvoiceId,
+  //         approvalStatus: booking.approvalStatus,
+  //         notes: booking.notes,
+  //         createdAt: booking.createdAt,
+  //         updatedAt: booking.updatedAt,
+  //         deletedAt: booking.deletedAt,
+  //       }));
 
-//   static async updateVenueBooking(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { bookingId } = req.params;
-//       const bookingData: Partial<VenueBookingInterface> = {
-//         ...req.body,
-//         approvalStatus: ApprovalStatus.PENDING,
-//       };
+  //       res.status(201).json({
+  //         success: true,
+  //         message: "Bookings created",
+  //         data: formattedBookings,
+  //       });
+  //     } catch (error) {
+  //       console.error("Error in bulkCreateVenueBookings:", error);
+  //       next(error);
+  //     }
+  //   }
+  //   static async approveVenueBooking(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { bookingId } = req.params;
+  //       const updateResult = await EventRepository.updateVenueBooking(bookingId, {
+  //         approvalStatus: ApprovalStatus.APPROVED,
+  //       });
+  //       if (!updateResult.success || !updateResult.data) {
+  //         res.status(500).json({ message: updateResult.message });
+  //         return;
+  //       }
 
-//       const updateResult = await EventRepository.updateVenueBooking(
-//         bookingId,
-//         bookingData
-//       );
-//       if (!updateResult.success || !updateResult.data) {
-//         res.status(500).json({ message: updateResult.message });
-//         return;
-//       }
-//       res.json(updateResult.data);
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //       res.json(updateResult.data);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//   static async deleteVenueBooking(
-//     req: Request,
-//     res: Response,
-//     next: NextFunction
-//   ): Promise<void> {
-//     try {
-//       const { eventId, bookingId } = req.params;
-//       const removeResult = await EventRepository.removeVenueBookings(eventId, [
-//         bookingId,
-//       ]);
-//       if (!removeResult.success) {
-//         res.status(500).json({ message: removeResult.message });
-//         return;
-//       }
+  //   static async getVenueBookings(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { eventId } = req.params;
+  //       const eventResult = await EventRepository.getById(eventId);
+  //       if (!eventResult.success || !eventResult.data) {
+  //         res.status(404).json({ message: eventResult.message });
+  //         return;
+  //       }
+  //       res.json(eventResult.data.venueBookings || []);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-//       const deleteResult = await EventRepository.deleteVenueBooking(bookingId);
-//       if (!deleteResult.success) {
-//         res.status(500).json({ message: deleteResult.message });
-//         return;
-//       }
-//       res.json({ message: "Venue booking deleted" });
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
+  //   static async updateVenueBooking(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { bookingId } = req.params;
+  //       const bookingData: Partial<VenueBookingInterface> = {
+  //         ...req.body,
+  //         approvalStatus: ApprovalStatus.PENDING,
+  //       };
 
-//   static validate(data: Partial<VenueBookingInterface>): string[] {
-//     const errors: string[] = [];
-//     if (!data.eventId) errors.push("eventId is required");
-//     if (!data.venueId) errors.push("venueId is required");
-//     // organizerId is set from the token, not required in request body
-//     if (!data.organizationId) errors.push("organizationId is required");
-//     return errors;
-//   }
-// }
-// function sanitizeVenue(venue: any) {
-//   if (!venue) return venue;
-//   const { events, ...venueWithoutEvents } = venue;
-//   return venueWithoutEvents;
-// }
+  //       const updateResult = await EventRepository.updateVenueBooking(
+  //         bookingId,
+  //         bookingData
+  //       );
+  //       if (!updateResult.success || !updateResult.data) {
+  //         res.status(500).json({ message: updateResult.message });
+  //         return;
+  //       }
+  //       res.json(updateResult.data);
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
 
-// function sanitizeEvent(event: any) {
-//   if (!event) return event;
-//   // Remove circular references for venues
-//   const sanitizedVenues = event.venues?.map(sanitizeVenue);
-//   return {
-//     ...event,
-//     venues: sanitizedVenues,
-//   };
+  //   static async deleteVenueBooking(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const { eventId, bookingId } = req.params;
+  //       const removeResult = await EventRepository.removeVenueBookings(eventId, [
+  //         bookingId,
+  //       ]);
+  //       if (!removeResult.success) {
+  //         res.status(500).json({ message: removeResult.message });
+  //         return;
+  //       }
+
+  //       const deleteResult = await EventRepository.deleteVenueBooking(bookingId);
+  //       if (!deleteResult.success) {
+  //         res.status(500).json({ message: deleteResult.message });
+  //         return;
+  //       }
+  //       res.json({ message: "Venue booking deleted" });
+  //     } catch (error) {
+  //       next(error);
+  //     }
+  //   }
+
+  //   static validate(data: Partial<VenueBookingInterface>): string[] {
+  //     const errors: string[] = [];
+  //     if (!data.eventId) errors.push("eventId is required");
+  //     if (!data.venueId) errors.push("venueId is required");
+  //     // organizerId is set from the token, not required in request body
+  //     if (!data.organizationId) errors.push("organizationId is required");
+  //     return errors;
+  //   }
+  // }
+  // function sanitizeVenue(venue: any) {
+  //   if (!venue) return venue;
+  //   const { events, ...venueWithoutEvents } = venue;
+  //   return venueWithoutEvents;
+  // }
+
+  // function sanitizeEvent(event: any) {
+  //   if (!event) return event;
+  //   // Remove circular references for venues
+  //   const sanitizedVenues = event.venues?.map(sanitizeVenue);
+  //   return {
+  //     ...event,
+  //     venues: sanitizedVenues,
+  //   };
 }

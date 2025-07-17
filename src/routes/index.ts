@@ -7,7 +7,7 @@ import YAML from "yamljs";
 import { userRoutes } from "./UserRoutes";
 import roleRoutes from "./RoleRoutes";
 import { organizationRoutes } from "./OrganizationRoutes";
-import tickets from "./TicketTyeRoutes"; // Ensure tickets is exported from TicketType
+// import tickets from "./TicketTyeRoutes"; // Ensure tickets is exported from TicketType
 import resourceRoutes from "./ResourceRoutes"; // Ensure resourceRoutes is exported from ResourceRoutes
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 // import VenueBookingRoutes from "./VenueBookingRoutes";
@@ -17,6 +17,7 @@ import InstallmentPlanRoutes from "./InstallmentPlanRoutes";
 import EventRoute from "./EventRoutes";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./Venue";
+import VenueBookingRoutes from "./VenueBookingRoutes";
 import { Registration } from "../models/Registration";
 // import RegistrationRoutes from "./RegistrationRoutes";
 const router = Router();
@@ -30,12 +31,13 @@ router.use(
 router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/organizations", organizationRoutes); // This makes `/api/v1/organizations/*` available
-router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
+// router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
 // router.use("/registrations",RegistrationRoutes)
 //resources
 router.use("/resources", resourceRoutes);
 router.use("/venue", venueRoute); // This makes `/api/v1/venue/*` available
 router.use("/event", EventRoute);
+router.use("/venue-bookings", VenueBookingRoutes);
 // Event Booking routes
 // router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available
 //routes for registration

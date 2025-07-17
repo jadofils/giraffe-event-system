@@ -96,8 +96,7 @@ export class Invoice {
   @OneToMany(() => Payment, (payment) => payment.invoice)
   payments?: Payment[];
 
-  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.invoice)
-  venueBookings?: VenueBooking[];
+  
   @OneToMany(() => InstallmentPlan, (plan) => plan.invoice)
   installmentPlans!: InstallmentPlan[];
   @OneToOne(() => Registration, (registration) => registration.invoice, {
