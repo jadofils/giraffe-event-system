@@ -26,7 +26,7 @@ import { InvoiceStatus } from "../interfaces/Enums/InvoiceStatus";
 
 // Assuming these exist and are properly defined
 import { User } from "./User";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { Payment } from "./Payment";
 import { Registration } from "./Registration";
 import { InstallmentPlan } from "./InstallmentPlan";
@@ -96,8 +96,7 @@ export class Invoice {
   @OneToMany(() => Payment, (payment) => payment.invoice)
   payments?: Payment[];
 
-  @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.invoice)
-  venueBookings?: VenueBooking[];
+  
   @OneToMany(() => InstallmentPlan, (plan) => plan.invoice)
   installmentPlans!: InstallmentPlan[];
   @OneToOne(() => Registration, (registration) => registration.invoice, {

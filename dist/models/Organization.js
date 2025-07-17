@@ -12,9 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Organization = void 0;
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
-const Event_1 = require("./Event");
 const User_1 = require("./User");
-const VenueBooking_1 = require("./VenueBooking");
 const Venue_1 = require("./Venue Tables/Venue");
 const VenueInvoice_1 = require("./VenueInvoice");
 const TicketType_1 = require("./TicketType");
@@ -124,17 +122,9 @@ __decorate([
     __metadata("design:type", Array)
 ], Organization.prototype, "users", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => Event_1.Event, (event) => event.organization),
-    __metadata("design:type", Array)
-], Organization.prototype, "events", void 0);
-__decorate([
     (0, typeorm_1.OneToMany)(() => Venue_1.Venue, (venue) => venue.organization),
     __metadata("design:type", Array)
 ], Organization.prototype, "venues", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (booking) => booking.organization),
-    __metadata("design:type", Array)
-], Organization.prototype, "bookings", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => VenueInvoice_1.VenueInvoice, (venueInvoice) => venueInvoice.organization),
     __metadata("design:type", Array)

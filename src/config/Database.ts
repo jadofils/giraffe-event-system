@@ -3,7 +3,7 @@ import { Role } from "../models/Role";
 import { User } from "../models/User";
 import { Venue } from "../models/Venue Tables/Venue";
 import { TicketType } from "../models/TicketType";
-import { Event } from "../models/Event";
+import { Event } from "../models/Event Tables/Event";
 import { VenueAmenities } from "../models/Venue Tables/VenueAmenities";
 import { Feedback } from "../models/Feedback";
 import { Permission } from "../models/Permission";
@@ -22,6 +22,8 @@ import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { VenueAvailabilitySlot } from "../models/Venue Tables/VenueAvailabilitySlot";
 import { VenueReview } from "../models/Venue Tables/VenueReview";
 import { Resources } from "../models/Resources";
+import { EventVenue } from "../models/Event Tables/EventVenue";
+import { EventGuest } from "../models/Event Tables/EventGuest";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -55,6 +57,8 @@ export const AppDataSource = new DataSource({
     VenueAvailabilitySlot,
     VenueReview,
     Resources,
+    EventVenue,
+    EventGuest,
   ],
   migrations: [
     isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

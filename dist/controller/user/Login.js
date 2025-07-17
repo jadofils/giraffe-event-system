@@ -241,7 +241,10 @@ class LoginController {
                 }
                 const firstOrganization = user.organizations[0];
                 // Filter venues and only include approved events for each venue
-                const venuesWithApprovedEvents = (firstOrganization.venues || []).map(venue => (Object.assign(Object.assign({}, venue), { events: (venue.events || []).filter(event => event.status === "APPROVED") })));
+                // const venuesWithApprovedEvents = (firstOrganization.venues || []).map(venue => ({
+                //   ...venue,
+                //   events: (venue.events || []).filter(event => event.status === "APPROVED")
+                // }));
                 const organization = {
                     organizationId: firstOrganization.organizationId,
                     organizationName: firstOrganization.organizationName,

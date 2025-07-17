@@ -17,12 +17,11 @@ const class_validator_1 = require("class-validator");
 const InvoiceStatus_1 = require("../interfaces/Enums/InvoiceStatus");
 // Assuming these exist and are properly defined
 const User_1 = require("./User");
-const Event_1 = require("./Event");
+const Event_1 = require("./Event Tables/Event");
 const Payment_1 = require("./Payment");
 const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");
 const Venue_1 = require("./Venue Tables/Venue");
-const VenueBooking_1 = require("./VenueBooking");
 let Invoice = class Invoice {
 };
 exports.Invoice = Invoice;
@@ -104,10 +103,6 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => Payment_1.Payment, (payment) => payment.invoice),
     __metadata("design:type", Array)
 ], Invoice.prototype, "payments", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => VenueBooking_1.VenueBooking, (venueBooking) => venueBooking.invoice),
-    __metadata("design:type", Array)
-], Invoice.prototype, "venueBookings", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => InstallmentPlan_1.InstallmentPlan, (plan) => plan.invoice),
     __metadata("design:type", Array)

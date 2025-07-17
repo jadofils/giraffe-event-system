@@ -23,7 +23,7 @@ import {
   ValidateIf,
 } from "class-validator";
 import { TicketType } from "./TicketType";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { User } from "./User";
 import { Venue } from "./Venue Tables/Venue";
 import { Payment } from "./Payment"; // Import Payment

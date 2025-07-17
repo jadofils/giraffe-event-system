@@ -11,7 +11,7 @@ import {
 import { Invoice } from "./Invoice";
 import { Registration } from "./Registration";
 import { InstallmentPlan } from "./InstallmentPlan";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { PaymentStatus } from "../interfaces/Enums/PaymentStatusEnum";
 import { Venue } from "./Venue Tables/Venue";
 

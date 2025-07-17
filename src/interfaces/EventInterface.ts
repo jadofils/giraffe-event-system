@@ -1,11 +1,12 @@
-import { EventStatus } from './Enums/EventStatusEnum';
-import { EventType } from './Enums/EventTypeEnum';
-import { UserInterface } from './UserInterface';
-import { VenueInterface } from './VenueInterface';
-import { VenueBookingInterface } from './VenueBookingInterface';
-import { RegistrationInterface } from './RegistrationInterface';
-import { PaymentInterface } from './PaymentInterface';
-import { InvoiceInterface } from './InvoiceInterface';
+import { EventStatus } from "./Enums/EventStatusEnum";
+import { EventType } from "./Enums/EventTypeEnum";
+import { UserInterface } from "./UserInterface";
+import { OrganizationInterface } from "./OrganizationInterface";
+import { VenueInterface } from "./VenueInterface";
+import { VenueBookingInterface } from "./VenueBookingInterface";
+import { RegistrationInterface } from "./RegistrationInterface";
+import { PaymentInterface } from "./PaymentInterface";
+import { InvoiceInterface } from "./InvoiceInterface";
 
 export class EventInterface {
   eventId!: string;
@@ -14,17 +15,14 @@ export class EventInterface {
   eventCategory?: string | undefined;
   eventType!: EventType;
   startDate!: string; // plain date string (YYYY-MM-DD)
-  endDate!: string;   // plain date string (YYYY-MM-DD)
+  endDate!: string; // plain date string (YYYY-MM-DD)
   startTime!: string;
   endTime!: string;
   maxAttendees?: number | undefined;
   status!: EventStatus;
-  isFeatured!: boolean;
   qrCode?: string;
   imageURL?: string;
-  organizerId!: string;
-  organizationId!: string;
-  venueOrganizationId?: string;
+  eventOrganizer!: UserInterface | OrganizationInterface;
   venueId!: string;
   organizer?: UserInterface;
   venue?: VenueInterface;
@@ -39,24 +37,21 @@ export class EventInterface {
 
   constructor(data: Partial<EventInterface>) {
     Object.assign(this, {
-      eventId: data.eventId || '',
-      eventTitle: data.eventTitle || '',
+      eventId: data.eventId || "",
+      eventTitle: data.eventTitle || "",
       description: data.description ?? undefined,
       eventCategory: data.eventCategory,
-      eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || '',
-      endDate: data.endDate || '',
-      startTime: data.startTime || '',
-      endTime: data.endTime || '',
+      eventType: data.eventType || EventType.MEETING,
+      startDate: data.startDate || "",
+      endDate: data.endDate || "",
+      startTime: data.startTime || "",
+      endTime: data.endTime || "",
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFTED,
-      isFeatured: data.isFeatured ?? false,
+      status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizerId: data.organizerId || '',
-      organizationId: data.organizationId || '',
-      venueOrganizationId: data.venueOrganizationId,
-      venueId: data.venueId || '',
+      eventOrganizer: data.eventOrganizer,
+      venueId: data.venueId || "",
       organizer: data.organizer,
       venue: data.venue,
       venues: data.venues || [],
@@ -64,44 +59,53 @@ export class EventInterface {
       registrations: data.registrations || [],
       payments: data.payments || [],
       invoices: data.invoices || [],
-      createdAt: data.createdAt || '',
-      updatedAt: data.updatedAt || '',
+      createdAt: data.createdAt || "",
+      updatedAt: data.updatedAt || "",
       deletedAt: data.deletedAt,
     });
   }
 
   static validate(data: Partial<EventInterface>): string[] {
     const errors: string[] = [];
-    if (!data.eventTitle) errors.push('Event title is required');
-    if (data.eventTitle && (data.eventTitle.length < 3 || data.eventTitle.length > 100)) {
-      errors.push('Event title must be between 3 and 100 characters');
+    if (!data.eventTitle) errors.push("Event title is required");
+    if (
+      data.eventTitle &&
+      (data.eventTitle.length < 3 || data.eventTitle.length > 100)
+    ) {
+      errors.push("Event title must be between 3 and 100 characters");
     }
     if (data.description && data.description.length > 5000) {
-      errors.push('Description must be at most 5000 characters long');
+      errors.push("Description must be at most 5000 characters long");
     }
     if (data.eventCategory && data.eventCategory.length > 50) {
-      errors.push('Event category must be at most 50 characters long');
+      errors.push("Event category must be at most 50 characters long");
     }
     if (!Object.values(EventType).includes(data.eventType!)) {
-      errors.push(`Event type must be one of: ${Object.values(EventType).join(', ')}`);
+      errors.push(
+        `Event type must be one of: ${Object.values(EventType).join(", ")}`
+      );
     }
-    if (data.maxAttendees && (typeof data.maxAttendees !== 'number' || data.maxAttendees < 1)) {
-      errors.push('Max attendees must be an integer and at least 1');
+    if (
+      data.maxAttendees &&
+      (typeof data.maxAttendees !== "number" || data.maxAttendees < 1)
+    ) {
+      errors.push("Max attendees must be an integer and at least 1");
     }
     if (!Object.values(EventStatus).includes(data.status!)) {
-      errors.push(`Invalid event status: must be one of ${Object.values(EventStatus).join(', ')}`);
-    }
-    if (typeof data.isFeatured !== 'boolean') {
-      errors.push('isFeatured must be a boolean');
+      errors.push(
+        `Invalid event status: must be one of ${Object.values(EventStatus).join(
+          ", "
+        )}`
+      );
     }
     if (data.qrCode && data.qrCode.length > 255) {
-      errors.push('QR Code must be at most 255 characters long');
+      errors.push("QR Code must be at most 255 characters long");
     }
     if (data.imageURL && data.imageURL.length > 255) {
-      errors.push('Image URL must be at most 255 characters long');
+      errors.push("Image URL must be at most 255 characters long");
     }
-    if (!data.organizerId) errors.push('Organizer ID is required');
-    if (!data.venueId) errors.push('Venue ID is required');
+    if (!data.eventOrganizer) errors.push("Event organizer is required");
+    if (!data.venueId) errors.push("Venue ID is required");
     return errors;
   }
 
@@ -118,10 +122,9 @@ export class EventInterface {
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      isFeatured: data.isFeatured,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizerId: data.organizerId,
+      eventOrganizer: data.eventOrganizer,
       venueId: data.venueId,
     });
   }
@@ -139,10 +142,9 @@ export class EventInterface {
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      isFeatured: data.isFeatured,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizer: data.organizer,
+      eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,
@@ -167,30 +169,28 @@ export class EventRequestInterface {
   endTime!: string;
   maxAttendees?: number;
   status!: EventStatus;
-  isFeatured?: boolean;
   qrCode?: string;
   imageURL?: string;
-  organizerId!: string;
+  eventOrganizer!: UserInterface | OrganizationInterface;
   venueId!: string;
 
   constructor(data: Partial<EventRequestInterface>) {
     Object.assign(this, {
       eventId: data.eventId,
-      eventTitle: data.eventTitle || '',
+      eventTitle: data.eventTitle || "",
       description: data.description,
       eventCategory: data.eventCategory,
-      eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || '',
-      endDate: data.endDate || '',
-      startTime: data.startTime || '',
-      endTime: data.endTime || '',
+      eventType: data.eventType || EventType.MEETING,
+      startDate: data.startDate || "",
+      endDate: data.endDate || "",
+      startTime: data.startTime || "",
+      endTime: data.endTime || "",
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFTED,
-      isFeatured: data.isFeatured,
+      status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizerId: data.organizerId || '',
-      venueId: data.venueId || '',
+      eventOrganizer: data.eventOrganizer,
+      venueId: data.venueId || "",
     });
   }
   static toEntity(data: EventRequestInterface): EventInterface {
@@ -206,10 +206,9 @@ export class EventRequestInterface {
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      isFeatured: data.isFeatured ?? false,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizerId: data.organizerId,
+      eventOrganizer: data.eventOrganizer,
       venueId: data.venueId,
     });
   }
@@ -227,10 +226,9 @@ export class EventResponseInterface {
   endTime!: string;
   maxAttendees?: number;
   status!: EventStatus;
-  isFeatured!: boolean;
   qrCode?: string;
   imageURL?: string;
-  organizer?: UserInterface;
+  eventOrganizer!: UserInterface | OrganizationInterface;
   venue?: VenueInterface;
   venueBookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
@@ -242,28 +240,27 @@ export class EventResponseInterface {
 
   constructor(data: Partial<EventResponseInterface>) {
     Object.assign(this, {
-      eventId: data.eventId || '',
-      eventTitle: data.eventTitle || '',
+      eventId: data.eventId || "",
+      eventTitle: data.eventTitle || "",
       description: data.description,
       eventCategory: data.eventCategory,
-      eventType: data.eventType || EventType.PUBLIC,
-      startDate: data.startDate || '',
-      endDate: data.endDate || '',
-      startTime: data.startTime || '',
-      endTime: data.endTime || '',
+      eventType: data.eventType || EventType.MEETING,
+      startDate: data.startDate || "",
+      endDate: data.endDate || "",
+      startTime: data.startTime || "",
+      endTime: data.endTime || "",
       maxAttendees: data.maxAttendees,
-      status: data.status || EventStatus.DRAFTED,
-      isFeatured: data.isFeatured ?? false,
+      status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizer: data.organizer,
+      eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,
       payments: data.payments,
       invoices: data.invoices,
-      createdAt: data.createdAt || '',
-      updatedAt: data.updatedAt || '',
+      createdAt: data.createdAt || "",
+      updatedAt: data.updatedAt || "",
       deletedAt: data.deletedAt,
     });
   }
@@ -280,10 +277,9 @@ export class EventResponseInterface {
       endTime: data.endTime,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      isFeatured: data.isFeatured,
       qrCode: data.qrCode,
       imageURL: data.imageURL,
-      organizer: data.organizer,
+      eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,

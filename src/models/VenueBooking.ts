@@ -3,21 +3,23 @@ import {
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Event } from "./Event";
 import { Venue } from "./Venue Tables/Venue";
+import { EventType } from "../interfaces/Enums/EventTypeEnum";
 import { User } from "./User";
-import { Organization } from "./Organization";
-import { Invoice } from "./Invoice";
 
-export enum ApprovalStatus {
-  PENDING = "pending",
-  APPROVED = "approved",
-  REJECTED = "rejected",
+export enum VenueStatus {
+  AVAILABLE = "AVAILABLE",
+  BOOKED = "BOOKED",
+  MAINTENANCE = "MAINTENANCE",
+}
+
+export enum BookingStatus {
+  APPROVED_PAID = "APPROVED_PAID",
+  APPROVED_NOT_PAID = "APPROVED_NOT_PAID",
+  PENDING = "PENDING",
 }
 
 @Entity("venue_bookings")
@@ -26,61 +28,58 @@ export class VenueBooking {
   bookingId!: string;
 
   @Column("uuid")
-  @JoinColumn({ name: "event_id" })
-  eventId!: string;
-
-  @ManyToOne(() => Event, (event) => event.venueBookings, { nullable: false })
-  event!: Event;
-
-  @Column("uuid")
-  @JoinColumn({ name: "venue_id" })
   venueId!: string;
 
   @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
+  @JoinColumn({ name: "venue_id" })
   venue!: Venue;
 
-  @Column("uuid")
-  @JoinColumn({ name: "user_id" })
-  userId!: string;
-
-  @ManyToOne(() => User, { nullable: false })
-  user!: User;
-
-  @Column("uuid", { nullable: true })
-  @JoinColumn({ name: "organization_id" })
-  organizationId?: string;
-
-  @ManyToOne(() => Organization, { nullable: true })
-  organization?: Organization;
-
-  @Column("uuid", { nullable: true })
-  @JoinColumn({ name: "venue_invoice_id" })
-  venueInvoiceId?: string;
-
-  @ManyToOne(() => Invoice, (invoice) => invoice.venueBookings, {
-    nullable: true,
-  })
-  invoice?: Invoice;
-
-  @Column({ type: "decimal", precision: 10, scale: 2 })
-  totalAmountDue!: number;
-
-  @Column({
-    type: "enum",
-    enum: ApprovalStatus,
-    default: ApprovalStatus.PENDING,
-  })
-  approvalStatus!: ApprovalStatus;
+  @Column({ type: "enum", enum: EventType })
+  bookingReason!: EventType;
 
   @Column({ type: "text", nullable: true })
-  notes?: string;
+  otherReason?: string;
+
+  @Column("uuid", { nullable: true })
+  eventId?: string;
+
+  @Column("uuid")
+  createdBy!: string;
+
+  @ManyToOne(() => User, (user) => user.bookings)
+  @JoinColumn({ name: "created_by" })
+  user!: User;
+
+  @Column({ type: "date" })
+  eventStartDate!: string;
+
+  @Column({ type: "date" })
+  eventEndDate!: string;
+
+  @Column({ type: "time", nullable: true })
+  startTime?: string;
+
+  @Column({ type: "time", nullable: true })
+  endTime?: string;
+
+  @Column({ type: "enum", enum: VenueStatus, nullable: true })
+  venueStatus?: VenueStatus;
+
+  @Column({ type: "int", nullable: true })
+  venueDiscountPercent?: number;
+
+  @Column({ type: "varchar", length: 100, default: "UTC" })
+  timezone!: string;
+
+  @Column({ type: "enum", enum: BookingStatus, default: BookingStatus.PENDING })
+  bookingStatus!: BookingStatus;
+
+  @Column({ type: "float", nullable: true })
+  amountToBePaid?: number;
+
+  @Column({ type: "boolean", default: false })
+  isPaid!: boolean;
 
   @CreateDateColumn()
   createdAt!: Date;
-
-  @UpdateDateColumn()
-  updatedAt?: Date;
-
-  @DeleteDateColumn()
-  deletedAt?: Date;
 }

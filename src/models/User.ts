@@ -30,7 +30,7 @@ import { Registration } from "./Registration";
 import { VenueBooking } from "./VenueBooking";
 import { VenueInvoice } from "./VenueInvoice";
 import { VenuePayment } from "./VenuePayment";
-import { Event } from "./Event";
+import { Event } from "./Event Tables/Event";
 import { Venue } from "./Venue Tables/Venue";
 import { Invoice } from "./Invoice";
 import { VenueReview } from "./Venue Tables/VenueReview";
@@ -105,9 +105,6 @@ export class User {
   @ManyToOne(() => Role, (role) => role.users)
   @JoinColumn({ name: "roleId" })
   role!: Role;
-
-  @OneToMany(() => VenueBooking, (booking) => booking.user)
-  bookings!: VenueBooking[];
 
   @OneToMany(() => Registration, (registration) => registration.user)
   registrationsAsAttendee!: Registration[];
@@ -240,4 +237,7 @@ export class User {
 
   @DeleteDateColumn({ type: "timestamp with time zone", nullable: true })
   deletedAt?: Date;
+
+  @OneToMany(() => VenueBooking, (booking) => booking.user)
+  bookings!: VenueBooking[];
 }

@@ -10,7 +10,7 @@ import {
 import { User } from "../models/User";
 import { Venue, VenueStatus, BookingType } from "../models/Venue Tables/Venue";
 import { VenueBooking } from "../models/VenueBooking";
-import { Event as AppEvent } from "../models/Event";
+import { Event as AppEvent } from "../models/Event Tables/Event";
 import { CacheService } from "../services/CacheService";
 import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
@@ -120,6 +120,4 @@ export class VenueRepository {
       await queryRunner.release();
     }
   }
-
-  
 }
