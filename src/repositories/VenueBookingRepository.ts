@@ -378,4 +378,191 @@ export class VenueBookingRepository {
       await queryRunner.release();
     }
   }
+
+  static async getPaymentsByManagerId(managerId: string) {
+    try {
+      // 1. Find all venues managed by this manager
+      const venueVariables = await AppDataSource.getRepository(
+        VenueVariable
+      ).find({
+        where: { manager: { userId: managerId } },
+        relations: ["venue"],
+      });
+      const venueIds = venueVariables.map((vv) => vv.venue.venueId);
+      if (venueIds.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: "No venues managed by this manager.",
+        };
+      }
+      // 2. Find all bookings for these venues
+      const bookings = await AppDataSource.getRepository(VenueBooking).find({
+        where: { venueId: In(venueIds) },
+      });
+      const bookingIds = bookings.map((b) => b.bookingId);
+      if (bookingIds.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: "No bookings for venues managed by this manager.",
+        };
+      }
+      // 3. Find all payments for these bookings
+      const VenueBookingPayment =
+        require("../models/VenueBookingPayment").VenueBookingPayment;
+      const payments = await AppDataSource.getRepository(
+        VenueBookingPayment
+      ).find({
+        where: { bookingId: In(bookingIds) },
+        relations: ["booking"],
+      });
+      // 4. Enrich each payment with payer info
+      const userRepo = AppDataSource.getRepository(
+        require("../models/User").User
+      );
+      const orgRepo = AppDataSource.getRepository(
+        require("../models/Organization").Organization
+      );
+      const enrichedPayments = await Promise.all(
+        payments.map(async (payment) => {
+          let payer = null;
+          if (payment.payerType === "USER") {
+            payer = await userRepo.findOne({
+              where: { userId: payment.payerId },
+            });
+          } else if (payment.payerType === "ORGANIZATION") {
+            payer = await orgRepo.findOne({
+              where: { organizationId: payment.payerId },
+            });
+          }
+          return { ...payment, payer };
+        })
+      );
+      return {
+        success: true,
+        data: enrichedPayments,
+        message: "Payments fetched successfully.",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: [],
+        message: "Failed to fetch payments by manager.",
+      };
+    }
+  }
+
+  static async createVenueBookingPaymentWithDepositValidation(
+    paymentData: any
+  ) {
+    // 1. Save the payment
+    const paymentRepo = AppDataSource.getRepository(
+      require("../models/VenueBookingPayment").VenueBookingPayment
+    );
+    let newPayment = paymentRepo.create(paymentData);
+    await paymentRepo.save(newPayment);
+    // Always fetch the saved payment by bookingId, payerId, and latest paymentDate
+    newPayment = (await paymentRepo.findOne({
+      where: {
+        bookingId: paymentData.bookingId,
+        payerId: paymentData.payerId,
+      },
+      order: { paymentDate: "DESC" },
+    })) as any;
+
+    // 2. Fetch all payments for this booking
+    const allPayments = await paymentRepo.find({
+      where: { bookingId: paymentData.bookingId },
+    });
+    const totalPaid = allPayments.reduce(
+      (sum, p) => sum + (p.amountPaid || 0),
+      0
+    );
+
+    // 3. Fetch booking and condition
+    const bookingRepo = AppDataSource.getRepository(
+      require("../models/VenueBooking").VenueBooking
+    );
+    const booking = await bookingRepo.findOne({
+      where: { bookingId: paymentData.bookingId },
+    });
+    if (!booking) throw new Error("Booking not found");
+    const conditionRepo = AppDataSource.getRepository(
+      require("../models/Venue Tables/BookingCondition").BookingCondition
+    );
+    const condition = await conditionRepo.findOne({
+      where: { venue: { venueId: booking.venueId } },
+    });
+    if (!condition) throw new Error("Booking condition not found");
+
+    // 4. Calculate required deposit
+    const requiredDeposit =
+      ((booking.amountToBePaid || 0) *
+        (condition.depositRequiredPercent || 0)) /
+      100;
+
+    // 5. Check if deposit is fulfilled and on time
+    let depositPaidAt = null;
+    let runningTotal = 0;
+    for (const p of allPayments.sort(
+      (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime()
+    )) {
+      runningTotal += p.amountPaid || 0;
+      if (runningTotal >= requiredDeposit) {
+        depositPaidAt = p.paymentDate;
+        break;
+      }
+    }
+    const hoursSinceBooking = depositPaidAt
+      ? (depositPaidAt.getTime() - booking.createdAt.getTime()) /
+        (1000 * 60 * 60)
+      : null;
+    const depositFulfilled =
+      totalPaid >= requiredDeposit &&
+      hoursSinceBooking !== null &&
+      hoursSinceBooking <= (condition.depositRequiredTime || 0);
+
+    // 6. If deposit fulfilled, update booking status
+    if (depositFulfilled) {
+      booking.bookingStatus = "APPROVED_PAID";
+      await bookingRepo.save(booking);
+    }
+
+    // 7. If total paid >= amountToBePaid, mark all payments as COMPLETED
+    if (totalPaid >= (booking.amountToBePaid || 0)) {
+      for (const p of allPayments) {
+        if (p.paymentStatus !== "COMPLETED") {
+          p.paymentStatus = "COMPLETED";
+          await paymentRepo.save(p);
+        }
+      }
+    }
+
+    // 8. Get payer info
+    let payer = null;
+    if (newPayment && (newPayment as any).payerType === "USER") {
+      payer = await AppDataSource.getRepository(
+        require("../models/User").User
+      ).findOne({ where: { userId: (newPayment as any).payerId } });
+    } else if (newPayment && (newPayment as any).payerType === "ORGANIZATION") {
+      payer = await AppDataSource.getRepository(
+        require("../models/Organization").Organization
+      ).findOne({ where: { organizationId: (newPayment as any).payerId } });
+    }
+
+    // 9. Return enriched response
+    return {
+      payment: newPayment,
+      booking,
+      payer,
+      totalPaid,
+      requiredDeposit,
+      depositFulfilled,
+      bookingStatus: booking.bookingStatus,
+      message: depositFulfilled
+        ? "Deposit paid in full and on time. Booking approved."
+        : "Payment recorded. Deposit not yet fully paid or not within allowed time.",
+    };
+  }
 }

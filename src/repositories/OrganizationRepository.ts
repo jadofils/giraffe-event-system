@@ -690,35 +690,16 @@ export class OrganizationRepository {
     if (!userId) return { success: false, message: "User ID is required" };
 
     try {
-      const organizations = await AppDataSource.getRepository(
-        Organization
-      ).find({
-        relations: [
-          "users",
-          "users.role",
-          "events",
-          "venues",
-          "venues.manager",
-          "venues.bookings",
-          "venues.invoices",
-          "venues.payments",
-        ],
-        where: {
-          users: {
-            userId: userId,
-          },
-        },
-        order: { organizationName: "ASC" },
-      });
-
-      if (!organizations.length) {
-        return {
-          success: false,
-          message: "No organizations found for this user",
-        };
-      }
+      console.log("[DEBUG] Querying organizations for userId:", userId);
+      const organizations = await AppDataSource.getRepository(Organization)
+        .createQueryBuilder("organization")
+        .leftJoinAndSelect("organization.users", "user")
+        .where("user.userId = :userId", { userId })
+        .orderBy("organization.organizationName", "ASC")
+        .getMany();
       return { success: true, data: organizations };
     } catch (error) {
+      console.error("[DEBUG] Error in getOrganizationsByUserId:", error);
       return {
         success: false,
         message: "Failed to fetch organizations",
@@ -792,7 +773,6 @@ export class OrganizationRepository {
           venueId: venue.venueId,
           venueName: venue.venueName,
           status: venue.status ? String(venue.status).toUpperCase() : undefined,
-          
         }));
 
         return {
@@ -952,38 +932,55 @@ export class OrganizationRepository {
     }
   }
 
-  static async approveOrganization(id: string): Promise<{ success: boolean; data?: Organization; message: string }> {
+  static async approveOrganization(
+    id: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
     if (!id || !this.UUID_REGEX.test(id)) {
       return { success: false, message: "Valid organization ID is required" };
     }
     try {
       const repo = AppDataSource.getRepository(Organization);
-      const organization = await repo.findOne({ where: { organizationId: id } });
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
       if (!organization) {
         return { success: false, message: "Organization not found" };
       }
       organization.status = OrganizationStatusEnum.APPROVED;
       const updated = await repo.save(organization);
-      return { success: true, data: updated, message: "Organization approved." };
+      return {
+        success: true,
+        data: updated,
+        message: "Organization approved.",
+      };
     } catch (error) {
       return { success: false, message: "Failed to approve organization" };
     }
   }
 
-  static async rejectOrganization(id: string, reason?: string): Promise<{ success: boolean; data?: Organization; message: string }> {
+  static async rejectOrganization(
+    id: string,
+    reason?: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
     if (!id || !this.UUID_REGEX.test(id)) {
       return { success: false, message: "Valid organization ID is required" };
     }
     try {
       const repo = AppDataSource.getRepository(Organization);
-      const organization = await repo.findOne({ where: { organizationId: id } });
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
       if (!organization) {
         return { success: false, message: "Organization not found" };
       }
       organization.status = OrganizationStatusEnum.REJECTED;
       // Optionally, add a rejection reason field to the model and set it here
       const updated = await repo.save(organization);
-      return { success: true, data: updated, message: "Organization rejected." };
+      return {
+        success: true,
+        data: updated,
+        message: "Organization rejected.",
+      };
     } catch (error) {
       return { success: false, message: "Failed to reject organization" };
     }

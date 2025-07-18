@@ -35,7 +35,9 @@ export class OrganizationController {
     const { id } = req.params;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
@@ -72,12 +74,15 @@ export class OrganizationController {
         city,
         country,
         postalCode,
-        stateProvince
+        stateProvince,
       } = req.body;
 
       // Validate required fields
       if (!organizationName || !contactEmail) {
-        res.status(400).json({ success: false, message: "organizationName and contactEmail are required." });
+        res.status(400).json({
+          success: false,
+          message: "organizationName and contactEmail are required.",
+        });
         return;
       }
 
@@ -85,9 +90,20 @@ export class OrganizationController {
       let supportingDocumentUrl: string | undefined = undefined;
       if (req.file) {
         // Only allow images and pdf
-        const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"];
+        const allowedTypes = [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/jpg",
+          "image/gif",
+          "image/webp",
+        ];
         if (!allowedTypes.includes(req.file.mimetype)) {
-          res.status(400).json({ success: false, message: "Only PDF and image files are allowed as supporting documents." });
+          res.status(400).json({
+            success: false,
+            message:
+              "Only PDF and image files are allowed as supporting documents.",
+          });
           return;
         }
         const uploadResult = await CloudinaryUploadService.uploadBuffer(
@@ -110,7 +126,9 @@ export class OrganizationController {
         postalCode,
         stateProvince,
         supportingDocument: supportingDocumentUrl,
-        status: isAdmin ? OrganizationStatusEnum.APPROVED : OrganizationStatusEnum.PENDING
+        status: isAdmin
+          ? OrganizationStatusEnum.APPROVED
+          : OrganizationStatusEnum.PENDING,
       };
 
       // Use bulkCreate for consistency (single item array)
@@ -120,11 +138,14 @@ export class OrganizationController {
         return;
       }
       // Assign the creator as a user to the organization
-      await OrganizationRepository.assignUsersToOrganization([userId], result.data[0].organizationId);
+      await OrganizationRepository.assignUsersToOrganization(
+        [userId],
+        result.data[0].organizationId
+      );
       res.status(201).json({
         success: true,
         data: result.data[0],
-        message: "Organization created and creator assigned."
+        message: "Organization created and creator assigned.",
       });
     } catch (error) {
       console.error("[OrganizationController Create Error]:", error);
@@ -142,7 +163,9 @@ export class OrganizationController {
    * @access Protected
    */
   static async bulkCreate(req: Request, res: Response): Promise<void> {
-    const { organizations }: { organizations: Partial<OrganizationInterface>[] } = req.body;
+    const {
+      organizations,
+    }: { organizations: Partial<OrganizationInterface>[] } = req.body;
     const userId = req.user?.userId; // <-- Get userId from token (auth middleware must set req.user)
     const isAdmin = req.user?.isAdmin;
 
@@ -155,18 +178,25 @@ export class OrganizationController {
     }
 
     if (!userId) {
-      res.status(401).json({ success: false, message: "Unauthorized: User not found in token." });
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not found in token.",
+      });
       return;
     }
 
     try {
       // Set status for each organization based on creator's role
-      const organizationsWithStatus = organizations.map(org => ({
+      const organizationsWithStatus = organizations.map((org) => ({
         ...org,
-        status: isAdmin ? OrganizationStatusEnum.APPROVED : OrganizationStatusEnum.PENDING
+        status: isAdmin
+          ? OrganizationStatusEnum.APPROVED
+          : OrganizationStatusEnum.PENDING,
       }));
       // 1. Create organizations
-      const result = await OrganizationRepository.bulkCreate(organizationsWithStatus);
+      const result = await OrganizationRepository.bulkCreate(
+        organizationsWithStatus
+      );
 
       if (!result.success || !result.data?.length) {
         res.status(400).json(result);
@@ -175,7 +205,10 @@ export class OrganizationController {
 
       // 2. Assign the creator as a user to each organization
       for (const org of result.data) {
-        await OrganizationRepository.assignUsersToOrganization([userId], org.organizationId);
+        await OrganizationRepository.assignUsersToOrganization(
+          [userId],
+          org.organizationId
+        );
       }
 
       res.status(201).json({
@@ -202,7 +235,9 @@ export class OrganizationController {
     const data: Partial<OrganizationInterface> = req.body;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
@@ -224,7 +259,7 @@ export class OrganizationController {
    * @route PUT /organizations/bulk
    * @access Protected
    */
- 
+
   /**
    * Delete an organization
    * @route DELETE /organizations/:id
@@ -234,7 +269,9 @@ export class OrganizationController {
     const { id } = req.params;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
@@ -261,20 +298,33 @@ export class OrganizationController {
     const { userIds }: { userIds: string[] } = req.body;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
-    if (!userIds?.length || userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
-      res.status(400).json({ success: false, message: "Valid user IDs are required" });
+    if (
+      !userIds?.length ||
+      userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))
+    ) {
+      res
+        .status(400)
+        .json({ success: false, message: "Valid user IDs are required" });
       return;
     }
 
     try {
-      const result = await OrganizationRepository.assignUsersToOrganization(userIds, id);
+      const result = await OrganizationRepository.assignUsersToOrganization(
+        userIds,
+        id
+      );
       res.status(result.success ? 200 : result.data ? 400 : 404).json(result);
     } catch (error) {
-      console.error(`[OrganizationController AssignUsers Error] Org ID: ${id}:`, error);
+      console.error(
+        `[OrganizationController AssignUsers Error] Org ID: ${id}:`,
+        error
+      );
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -293,20 +343,33 @@ export class OrganizationController {
     const { userIds }: { userIds: string[] } = req.body;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
-    if (!userIds?.length || userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
-      res.status(400).json({ success: false, message: "Valid user IDs are required" });
+    if (
+      !userIds?.length ||
+      userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))
+    ) {
+      res
+        .status(400)
+        .json({ success: false, message: "Valid user IDs are required" });
       return;
     }
 
     try {
-      const result = await OrganizationRepository.removeUsersFromOrganization(userIds, id);
+      const result = await OrganizationRepository.removeUsersFromOrganization(
+        userIds,
+        id
+      );
       res.status(result.success ? 200 : result.data ? 400 : 404).json(result);
     } catch (error) {
-      console.error(`[OrganizationController RemoveUsers Error] Org ID: ${id}:`, error);
+      console.error(
+        `[OrganizationController RemoveUsers Error] Org ID: ${id}:`,
+        error
+      );
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -324,7 +387,9 @@ export class OrganizationController {
     const { id } = req.params;
 
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res.status(400).json({ success: false, message: "Valid organization ID is required" });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
       return;
     }
 
@@ -332,7 +397,10 @@ export class OrganizationController {
       const result = await OrganizationRepository.getUsersByOrganization(id);
       res.status(result.success ? 200 : 404).json(result);
     } catch (error) {
-      console.error(`[OrganizationController GetUsers Error] Org ID: ${id}:`, error);
+      console.error(
+        `[OrganizationController GetUsers Error] Org ID: ${id}:`,
+        error
+      );
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -350,13 +418,26 @@ export class OrganizationController {
     const { organizationId } = req.params;
     const { venueIds }: { venueIds: string[] } = req.body;
 
-    if (!organizationId || !OrganizationRepository.UUID_REGEX.test(organizationId)) {
-      res.status(400).json({ success: false, message: "Valid organization ID (UUID) is required." });
+    if (
+      !organizationId ||
+      !OrganizationRepository.UUID_REGEX.test(organizationId)
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID (UUID) is required.",
+      });
       return;
     }
 
-    if (!Array.isArray(venueIds) || venueIds.length === 0 || venueIds.some((vid) => !OrganizationRepository.UUID_REGEX.test(vid))) {
-      res.status(400).json({ success: false, message: "A valid array of venue IDs (UUIDs) is required." });
+    if (
+      !Array.isArray(venueIds) ||
+      venueIds.length === 0 ||
+      venueIds.some((vid) => !OrganizationRepository.UUID_REGEX.test(vid))
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid array of venue IDs (UUIDs) is required.",
+      });
       return;
     }
 
@@ -371,7 +452,10 @@ export class OrganizationController {
         // More specific error handling based on repository message
         if (result.message === "Organization not found") {
           res.status(404).json(result);
-        } else if (result.message.includes("Venue") && result.message.includes("already assigned to another organization")) {
+        } else if (
+          result.message.includes("Venue") &&
+          result.message.includes("already assigned to another organization")
+        ) {
           res.status(409).json(result); // Conflict
         } else if (result.message.includes("venue(s) not found")) {
           res.status(404).json(result); // Specific venues not found
@@ -380,10 +464,14 @@ export class OrganizationController {
         }
       }
     } catch (error) {
-      console.error(`[OrganizationController AddVenues Error] Org ID: ${organizationId}:`, error);
+      console.error(
+        `[OrganizationController AddVenues Error] Org ID: ${organizationId}:`,
+        error
+      );
       res.status(500).json({
         success: false,
-        message: "Internal server error occurred while adding venues to organization.",
+        message:
+          "Internal server error occurred while adding venues to organization.",
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -398,13 +486,26 @@ export class OrganizationController {
     const { organizationId } = req.params;
     const { venueIds }: { venueIds: string[] } = req.body; // Using body for DELETE with payload
 
-    if (!organizationId || !OrganizationRepository.UUID_REGEX.test(organizationId)) {
-      res.status(400).json({ success: false, message: "Valid organization ID (UUID) is required." });
+    if (
+      !organizationId ||
+      !OrganizationRepository.UUID_REGEX.test(organizationId)
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID (UUID) is required.",
+      });
       return;
     }
 
-    if (!Array.isArray(venueIds) || venueIds.length === 0 || venueIds.some((vid) => !OrganizationRepository.UUID_REGEX.test(vid))) {
-      res.status(400).json({ success: false, message: "A valid array of venue IDs (UUIDs) is required." });
+    if (
+      !Array.isArray(venueIds) ||
+      venueIds.length === 0 ||
+      venueIds.some((vid) => !OrganizationRepository.UUID_REGEX.test(vid))
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid array of venue IDs (UUIDs) is required.",
+      });
       return;
     }
 
@@ -419,18 +520,25 @@ export class OrganizationController {
         // More specific error handling based on repository message
         if (result.message === "Organization not found") {
           res.status(404).json(result);
-        } else if (result.message.includes("No specified venues found linked to this organization to remove")) {
-            res.status(404).json(result); // Or 200 with a message if it's considered non-error
-        }
-        else {
+        } else if (
+          result.message.includes(
+            "No specified venues found linked to this organization to remove"
+          )
+        ) {
+          res.status(404).json(result); // Or 200 with a message if it's considered non-error
+        } else {
           res.status(400).json(result);
         }
       }
     } catch (error) {
-      console.error(`[OrganizationController RemoveVenues Error] Org ID: ${organizationId}:`, error);
+      console.error(
+        `[OrganizationController RemoveVenues Error] Org ID: ${organizationId}:`,
+        error
+      );
       res.status(500).json({
         success: false,
-        message: "Internal server error occurred while removing venues from organization.",
+        message:
+          "Internal server error occurred while removing venues from organization.",
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -442,11 +550,20 @@ export class OrganizationController {
    * @route GET /organizations/:organizationId/venues
    * @access Protected
    */
-  static async getOrganizationVenues(req: Request, res: Response): Promise<void> {
+  static async getOrganizationVenues(
+    req: Request,
+    res: Response
+  ): Promise<void> {
     const { organizationId } = req.params;
 
-    if (!organizationId || !OrganizationRepository.UUID_REGEX.test(organizationId)) {
-      res.status(400).json({ success: false, message: "Valid organization ID (UUID) is required." });
+    if (
+      !organizationId ||
+      !OrganizationRepository.UUID_REGEX.test(organizationId)
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID (UUID) is required.",
+      });
       return;
     }
 
@@ -459,20 +576,27 @@ export class OrganizationController {
           success: true,
           data: {
             venues: result.data.venues || [],
-            users: result.data.users || []
+            users: result.data.users || [],
           },
-          message: (result.data.venues?.length > 0 || result.data.users?.length > 0)
-            ? "Venues and users retrieved successfully."
-            : "No venues or users found for this organization.",
+          message:
+            result.data.venues?.length > 0 || result.data.users?.length > 0
+              ? "Venues and users retrieved successfully."
+              : "No venues or users found for this organization.",
         });
       } else {
-        res.status(result.message === "Organization not found" ? 404 : 400).json(result);
+        res
+          .status(result.message === "Organization not found" ? 404 : 400)
+          .json(result);
       }
     } catch (error) {
-      console.error(`[OrganizationController GetOrganizationVenues Error] Org ID: ${organizationId}:`, error);
+      console.error(
+        `[OrganizationController GetOrganizationVenues Error] Org ID: ${organizationId}:`,
+        error
+      );
       res.status(500).json({
         success: false,
-        message: "Internal server error occurred while fetching venues for organization.",
+        message:
+          "Internal server error occurred while fetching venues for organization.",
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -482,7 +606,9 @@ export class OrganizationController {
     const { id } = req.params;
     const result = await OrganizationRepository.approveOrganization(id);
     if (result.success) {
-      res.status(200).json({ success: true, message: result.message, data: result.data });
+      res
+        .status(200)
+        .json({ success: true, message: result.message, data: result.data });
     } else {
       res.status(400).json({ success: false, message: result.message });
     }
@@ -493,9 +619,52 @@ export class OrganizationController {
     const { reason } = req.body;
     const result = await OrganizationRepository.rejectOrganization(id, reason);
     if (result.success) {
-      res.status(200).json({ success: true, message: result.message, data: result.data });
+      res
+        .status(200)
+        .json({ success: true, message: result.message, data: result.data });
     } else {
       res.status(400).json({ success: false, message: result.message });
+    }
+  }
+
+  static async getOrganizationsByUserId(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { userId } = req.params;
+    if (!userId || !OrganizationRepository.UUID_REGEX.test(userId)) {
+      res
+        .status(400)
+        .json({ success: false, message: "Valid user ID is required" });
+      return;
+    }
+    try {
+      const result = await OrganizationRepository.getOrganizationsByUserId(
+        userId
+      );
+      if (result.success && result.data) {
+        if (Array.isArray(result.data)) {
+          if (result.data.length === 1) {
+            res.status(200).json({ success: true, data: result.data[0] });
+          } else {
+            res.status(200).json({ success: true, data: result.data });
+          }
+        } else {
+          res.status(200).json({ success: true, data: result.data });
+        }
+      } else {
+        res.status(200).json({ success: true, data: [] });
+      }
+    } catch (error) {
+      console.error(
+        `[OrganizationController GetOrganizationsByUserId Error] User ID: ${userId}:`,
+        error
+      );
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 }

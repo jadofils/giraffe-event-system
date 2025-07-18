@@ -11,6 +11,7 @@ import { User } from "../models/User";
 import { Organization } from "../models/Organization";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { CacheService } from "../services/CacheService";
+import { checkVenueAvailability } from "../utils/constants";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -49,6 +50,27 @@ export class EventController {
         res.status(400).json({
           success: false,
           message: "Venue found but venueId is missing or invalid.",
+        });
+        return;
+      }
+
+      // Venue availability check (before any creation)
+      const { available, unavailableDates } = await checkVenueAvailability({
+        venueId: venue.venueId,
+        bookingType: venue.bookingType,
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+      });
+      if (!available) {
+        res.status(400).json({
+          success: false,
+          message:
+            venue.bookingType === "DAILY"
+              ? "The venue is not available for one or more selected dates. Please choose a different time."
+              : "The venue is partially unavailable during your requested time range. Please adjust your schedule.",
+          unavailableDates,
         });
         return;
       }
