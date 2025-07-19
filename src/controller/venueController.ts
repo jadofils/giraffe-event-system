@@ -40,13 +40,14 @@ export class VenueController {
     const authenticatedReq = req as AuthenticatedRequest;
     const userRoles = authenticatedReq.user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
-    const isVenueManager = userRoles.some(
-      (r: any) => (r.roleName || r) === "VENUE_MANAGER"
-    );
-    if (!isAdmin && !isVenueManager) {
+    // Instead of isVenueManager, check if user has organization and it's approved
+    // const isVenueManager = userRoles.some(
+    //   (r: any) => (r.roleName || r) === "GUEST"
+    // );
+    if (!isAdmin && !authenticatedReq.user?.organizationId) {
       res.status(403).json({
         success: false,
-        message: "Only ADMIN or VENUE_MANAGER can create a venue.",
+        message: "Only ADMIN or users with an organization can create a venue.",
       });
       return;
     }
@@ -57,8 +58,6 @@ export class VenueController {
     let status: VenueStatus;
     if (isAdmin) {
       status = VenueStatus.APPROVED;
-    } else if (isVenueManager) {
-      status = VenueStatus.PENDING;
     } else {
       status = VenueStatus.PENDING;
     }
@@ -119,17 +118,18 @@ export class VenueController {
         .json({ success: false, message: "Organization not found." });
       return;
     }
-    if (organization.status !== "APPROVED") {
-      res.status(403).json({
-        success: false,
-        message: "Only APPROVED organizations can create venues.",
-      });
-      return;
-    }
+    // Move this check up for clarity and early exit
     if (organization.organizationName === "Independent") {
       res.status(403).json({
         success: false,
         message: "The 'Independent' organization cannot create venues.",
+      });
+      return;
+    }
+    if (organization.status !== "APPROVED") {
+      res.status(403).json({
+        success: false,
+        message: "Only APPROVED organizations can create venues.",
       });
       return;
     }
@@ -144,8 +144,8 @@ export class VenueController {
       },
       withDeleted: true,
     });
-    if ((isVenueManager || isAdmin) && existingVenue) {
-      // If rejected, allow update and set to pending (manager) or approved (admin)
+    if ((isAdmin || !!organizationIdFromUser) && existingVenue) {
+      // If rejected, allow update and set to pending (non-admin) or approved (admin)
       if (existingVenue.status === VenueStatus.REJECTED) {
         // Update fields
         existingVenue.capacity = data.capacity;
@@ -482,9 +482,7 @@ export class VenueController {
     const user = authenticatedReq.user;
     const userRoles = user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
-    const isManager = userRoles.some(
-      (r: any) => (r.roleName || r) === "VENUE_MANAGER"
-    );
+    const isManager = userRoles.some((r: any) => (r.roleName || r) === "GUEST");
     const { id } = req.params;
     if (!id) {
       res
@@ -793,8 +791,6 @@ export class VenueController {
         condition.transitionTime = transitionTime;
       if (depositRequiredPercent !== undefined)
         condition.depositRequiredPercent = depositRequiredPercent;
-      if (depositRequiredTime !== undefined)
-        condition.depositRequiredTime = depositRequiredTime;
       if (paymentComplementTimeBeforeEvent !== undefined)
         condition.paymentComplementTimeBeforeEvent =
           paymentComplementTimeBeforeEvent;
@@ -946,28 +942,46 @@ export class VenueController {
       const newManagerId = venueManagerId || managerId;
       if (newManagerId) {
         const userRepo = AppDataSource.getRepository(User);
-        const manager: User | null = await userRepo.findOne({
+
+        // First check if user exists with their organization
+        const manager = await userRepo.findOne({
           where: { userId: newManagerId },
-          relations: ["role"],
+          relations: ["organizations"],
         });
+
         if (!manager) {
-          res
-            .status(404)
-            .json({ success: false, message: "Manager not found" });
-          return;
-        }
-        // Check if user has VENUE_MANAGER role
-        const hasVenueManagerRole =
-          manager.role &&
-          (manager.role.roleName || manager.role) === "VENUE_MANAGER";
-        if (!hasVenueManagerRole) {
-          res.status(400).json({
+          res.status(404).json({
             success: false,
-            message:
-              "User is not a VENUE_MANAGER and cannot be assigned as manager.",
+            message: "Manager not found",
           });
           return;
         }
+
+        // Check if user has any organization
+        if (!manager.organizations || manager.organizations.length === 0) {
+          res.status(400).json({
+            success: false,
+            message:
+              "User must belong to an organization to be assigned as manager.",
+          });
+          return;
+        }
+
+        // Find a non-Independent, approved organization
+        const validOrg = manager.organizations.find(
+          (org) =>
+            org.organizationName !== "Independent" && org.status === "APPROVED"
+        );
+
+        if (!validOrg) {
+          res.status(400).json({
+            success: false,
+            message:
+              "User must have an approved, non-Independent organization to be assigned as manager.",
+          });
+          return;
+        }
+
         venueVariable.manager = manager;
       }
 

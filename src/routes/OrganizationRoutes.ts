@@ -13,13 +13,16 @@ router.get(
   OrganizationController.getOrganizationsByUserId
 );
 router.get("/:id", authenticate, OrganizationController.getById);
+// Update the POST / route to accept both 'supportingDocument' and 'logo' files
 router.post(
   "/",
   authenticate,
-  upload.single("supportingDocument"),
+  upload.fields([
+    { name: "supportingDocument", maxCount: 1 },
+    { name: "logo", maxCount: 1 },
+  ]),
   OrganizationController.create
 );
-router.post("/bulk", authenticate, OrganizationController.bulkCreate);
 router.put("/:id", authenticate, OrganizationController.update);
 router.delete("/:id", authenticate, OrganizationController.delete);
 router.post("/:id/users", authenticate, OrganizationController.assignUsers);
@@ -45,4 +48,13 @@ router.get(
 
 router.patch("/:id/approve", authenticate, OrganizationController.approve);
 router.patch("/:id/reject", authenticate, OrganizationController.reject);
+// Add PATCH /organizations/:id/logo for updating only the logo
+router.patch(
+  "/:id/logo",
+  authenticate,
+  upload.single("logo"),
+  OrganizationController.updateLogo
+);
+// Add PATCH /organizations/:id/supporting-document for updating only the supporting document
+router.patch("/:id/supporting-document", authenticate, upload.single("supportingDocument"), OrganizationController.updateSupportingDocument);
 export const organizationRoutes = router;

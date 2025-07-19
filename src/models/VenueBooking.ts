@@ -9,6 +9,7 @@ import {
 import { Venue } from "./Venue Tables/Venue";
 import { EventType } from "../interfaces/Enums/EventTypeEnum";
 import { User } from "./User";
+import { IsArray, IsEnum, IsOptional, IsUUID } from "class-validator";
 
 export enum VenueStatus {
   AVAILABLE = "AVAILABLE",
@@ -26,9 +27,11 @@ export enum BookingStatus {
 @Entity("venue_bookings")
 export class VenueBooking {
   @PrimaryGeneratedColumn("uuid")
+  @IsUUID("4")
   bookingId!: string;
 
   @Column("uuid")
+  @IsUUID("4")
   venueId!: string;
 
   @ManyToOne(() => Venue, (venue) => venue.bookings, { nullable: false })
@@ -36,34 +39,34 @@ export class VenueBooking {
   venue!: Venue;
 
   @Column({ type: "enum", enum: EventType })
+  @IsEnum(EventType)
   bookingReason!: EventType;
 
   @Column({ type: "text", nullable: true })
   otherReason?: string;
 
   @Column("uuid", { nullable: true })
+  @IsOptional()
+  @IsUUID("4")
   eventId?: string;
 
   @Column("uuid")
+  @IsUUID("4")
   createdBy!: string;
 
   @ManyToOne(() => User, (user) => user.bookings)
   @JoinColumn({ name: "created_by" })
   user!: User;
 
-  @Column({ type: "date" })
-  eventStartDate!: string;
-
-  @Column({ type: "date" })
-  eventEndDate!: string;
-
-  @Column({ type: "time", nullable: true })
-  startTime?: string;
-
-  @Column({ type: "time", nullable: true })
-  endTime?: string;
+  @Column("json")
+  @IsArray()
+  bookingDates!: {
+    date: string;
+    hours?: number[];
+  }[];
 
   @Column({ type: "enum", enum: VenueStatus, nullable: true })
+  @IsEnum(VenueStatus)
   venueStatus?: VenueStatus;
 
   @Column({ type: "int", nullable: true })
@@ -73,6 +76,7 @@ export class VenueBooking {
   timezone!: string;
 
   @Column({ type: "enum", enum: BookingStatus, default: BookingStatus.PENDING })
+  @IsEnum(BookingStatus)
   bookingStatus!: BookingStatus;
 
   @Column({ type: "float", nullable: true })

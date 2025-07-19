@@ -185,6 +185,7 @@ export class OrganizationRepository {
           createdAt: new Date(),
           updatedAt: new Date(),
           supportingDocument: item.supportingDocument,
+          logo: item.logo,
           status: item.status || OrganizationStatusEnum.PENDING, // <-- use enum, not string
         });
         organizations.push(org);
@@ -337,6 +338,9 @@ export class OrganizationRepository {
         address: data.address ?? organization.address,
         organizationType:
           data.organizationType ?? organization.organizationType,
+        logo: data.logo ?? organization.logo,
+        supportingDocument:
+          data.supportingDocument ?? organization.supportingDocument,
         updatedAt: new Date(),
       });
 
@@ -974,7 +978,9 @@ export class OrganizationRepository {
         return { success: false, message: "Organization not found" };
       }
       organization.status = OrganizationStatusEnum.REJECTED;
-      // Optionally, add a rejection reason field to the model and set it here
+      if (reason) {
+        organization.cancellationReason = reason;
+      }
       const updated = await repo.save(organization);
       return {
         success: true,

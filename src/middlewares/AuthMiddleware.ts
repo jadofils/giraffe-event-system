@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { VenueController } from "../controller/venueController";
-import { isAdmin } from "../middlewares/IsAdmin"; 
+import { isAdmin } from "../middlewares/IsAdmin";
 
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
@@ -40,48 +40,59 @@ export const authenticate = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(" ")[1];
-
-  if (!token) {
-    console.log("Access denied: No token provided.");
-    res.status(401).json({
-      success: false,
-      message: "Access denied. No token provided.",
-    });
-    return;
-  }
-
   try {
-    const decoded = jwt.verify(token, SECRET_KEY) as JwtPayload & { role?: any };
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(" ")[1];
+
+    if (!token) {
+      console.log("Access denied: No token provided.");
+      res.status(401).json({
+        success: false,
+        message: "Access denied. No token provided.",
+      });
+      return;
+    }
+
+    const decoded = jwt.verify(token, SECRET_KEY) as JwtPayload & {
+      role?: any;
+    };
     console.log("Decoded JWT:", decoded);
-    
+
     // If role and permissions are present in the token, use them directly
     if (decoded.role && decoded.role.permissions) {
-    (req as AuthenticatedRequest).user = {
-    id: decoded.userId,
-    userId: decoded.userId,
-    email: decoded.email,
-    username: decoded.username,
-    organizations: decoded.organizations || [],
-    organizationId: decoded.organizationId,
-    roles: [{
-    roleName: decoded.role.roleName,
-    permissions: decoded.role.permissions.map((p: any) => p.name),
-    }],
-    role: decoded.role,
-    isAdmin: decoded.role.roleName === "ADMIN",
-    } as any;
-    console.log("req.user populated from token:", (req as AuthenticatedRequest).user);
-    return next();
+      (req as AuthenticatedRequest).user = {
+        id: decoded.userId,
+        userId: decoded.userId,
+        email: decoded.email,
+        username: decoded.username,
+        organizations: decoded.organizations || [],
+        organizationId: decoded.organizationId,
+        roles: [
+          {
+            roleName: decoded.role.roleName,
+            permissions: decoded.role.permissions.map((p: any) => p.name),
+          },
+        ],
+        role: decoded.role,
+        isAdmin: decoded.role.roleName === "ADMIN",
+      } as any;
+      console.log(
+        "req.user populated from token:",
+        (req as AuthenticatedRequest).user
+      );
+      return next();
     }
-    
+
     // Fallback: fetch from DB if not present in token
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOne({
-      where: { userId: decoded.userId },
-      relations: ["role", "role.permissions", "organizations"],
-    });
+    const user = await userRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.role", "role")
+      .leftJoinAndSelect("role.permissions", "permissions")
+      .leftJoinAndSelect("user.organizations", "organizations")
+      .where("user.userId = :userId", { userId: decoded.userId })
+      .andWhere("user.deletedAt IS NULL")
+      .getOne();
 
     if (!user) {
       console.warn(`Invalid token: User ${decoded.userId} not found.`);
@@ -92,19 +103,21 @@ export const authenticate = async (
       return;
     }
 
-    const organizations = user.organizations?.map(org => ({
-      organizationId: org.organizationId,
-      organizationName: org.organizationName,
-      description: org.description,
-      contactEmail: org.contactEmail,
-      contactPhone: org.contactPhone,
-      address: org.address,
-      organizationType: org.organizationType,
-      city: org.city,
-      country: org.country,
-      postalCode: org.postalCode,
-      stateProvince: org.stateProvince,
-    })) || [];
+    const organizations =
+      user.organizations?.map((org) => ({
+        organizationId: org.organizationId,
+        organizationName: org.organizationName,
+        description: org.description,
+        contactEmail: org.contactEmail,
+        contactPhone: org.contactPhone,
+        address: org.address,
+        organizationType: org.organizationType,
+        city: org.city,
+        country: org.country,
+        postalCode: org.postalCode,
+        stateProvince: org.stateProvince,
+        status: org.status,
+      })) || [];
 
     const isAdmin = user.role?.roleName?.toLowerCase() === "admin";
 
@@ -134,38 +147,58 @@ export const authenticate = async (
       role: mappedRole,
       isAdmin,
       roles: user.role
-        ? [{
-            roleName: user.role.roleName,
-            permissions: user.role.permissions?.map(p => p.name) || [],
-          }]
+        ? [
+            {
+              roleName: user.role.roleName,
+              permissions: user.role.permissions?.map((p) => p.name) || [],
+            },
+          ]
         : [],
-      socialMediaLinks: user.socialMediaLinks && typeof user.socialMediaLinks === 'object'
-        ? Object.fromEntries(
-            Object.entries(user.socialMediaLinks).filter(([k, v]) => typeof v === 'string')
-          ) as { [key: string]: string }
-        : undefined,
+      socialMediaLinks:
+        user.socialMediaLinks && typeof user.socialMediaLinks === "object"
+          ? (Object.fromEntries(
+              Object.entries(user.socialMediaLinks).filter(
+                ([k, v]) => typeof v === "string"
+              )
+            ) as { [key: string]: string })
+          : undefined,
     };
 
     console.log("req.user populated:", (req as AuthenticatedRequest).user);
     next();
-    } catch (err) {
+  } catch (err) {
     console.error("JWT verification error:", err);
-    
-    if (err instanceof jwt.TokenExpiredError) {
-    res.status(401).json({ success: false, message: "Token expired. Please log in again." });
-    } else if (err instanceof jwt.JsonWebTokenError) {
-    res.status(401).json({ success: false, message: "Invalid token. Please log in again." });
-    } else {
-    res.status(500).json({ success: false, message: "Authentication failed due to server error." });
-    }
-    }
-    };
 
-// Type guard to check if request has authenticated user
-export const isAuthenticatedRequest = (req: Request): req is AuthenticatedRequest => {
-  return 'user' in req && req.user !== undefined;
+    if (err instanceof jwt.TokenExpiredError) {
+      res
+        .status(401)
+        .json({
+          success: false,
+          message: "Token expired. Please log in again.",
+        });
+    } else if (err instanceof jwt.JsonWebTokenError) {
+      res
+        .status(401)
+        .json({
+          success: false,
+          message: "Invalid token. Please log in again.",
+        });
+    } else {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Authentication failed due to server error.",
+        });
+    }
+  }
 };
 
+// Type guard to check if request has authenticated user
+export const isAuthenticatedRequest = (
+  req: Request
+): req is AuthenticatedRequest => {
+  return "user" in req && req.user !== undefined;
+};
 
 //router.use("/", checkAbsenceRoutes);
-

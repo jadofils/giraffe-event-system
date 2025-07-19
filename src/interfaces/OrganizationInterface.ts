@@ -18,6 +18,7 @@ export class OrganizationInterface {
   organizationProfile?: string;
   description?: string;
   supportingDocument?: string;
+  logo?: string;
   status!: OrganizationStatusEnum;
       
 

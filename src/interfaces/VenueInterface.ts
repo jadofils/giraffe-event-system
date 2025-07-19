@@ -5,7 +5,6 @@ export interface BookingConditionRequest {
   notaBene?: string;
   transitionTime?: number;
   depositRequiredPercent?: number;
-  depositRequiredTime?: number;
   paymentComplementTimeBeforeEvent?: number;
 }
 

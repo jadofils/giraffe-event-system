@@ -13,6 +13,8 @@ import { Organization } from "../models/Organization";
 import { UUID_REGEX } from "../utils/constants";
 import { EventVenue } from "../models/Event Tables/EventVenue";
 import { EventGuest } from "../models/Event Tables/EventGuest";
+import { BookingDateDTO } from "../interfaces/BookingDateInterface";
+import { BookingValidationService } from "../services/bookings/BookingValidationService";
 
 export class EventRepository {
   private static readonly CACHE_PREFIX = "event:";
@@ -20,9 +22,10 @@ export class EventRepository {
 
   static async createEventWithRelations(
     eventData: any,
-    venue: any,
+    venue: Venue,
     guests: any[],
-    venueAmount: number
+    venueAmount: number,
+    dates: BookingDateDTO[]
   ) {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -30,38 +33,28 @@ export class EventRepository {
 
     try {
       // 1. Create Event
-      const event = queryRunner.manager.create(Event, eventData);
+      const event = queryRunner.manager.create(Event, {
+        ...eventData,
+        bookingDates: dates, // Add bookingDates to event
+      });
       await queryRunner.manager.save(event);
 
-      // 2. Create EventVenue
+      // 2. Create EventVenue with multiple dates
       const eventVenue = queryRunner.manager.create(EventVenue, {
         eventId: event.eventId,
         venueId: venue.venueId,
-        eventStartDate: event.startDate,
-        eventEndDate: event.endDate,
-        startTime: venue.bookingType === "HOURLY" ? event.startTime : undefined,
-        endTime: venue.bookingType === "HOURLY" ? event.endTime : undefined,
+        bookingDates: dates,
         timezone: "UTC",
       });
       await queryRunner.manager.save(eventVenue);
 
       // 3. Create VenueBooking
-      if (!venue.venueId) {
-        throw new Error(
-          "VenueBooking creation failed: venue.venueId is missing or undefined."
-        );
-      }
-      // Debug log
-      console.log("Creating VenueBooking with venueId:", venue.venueId);
       const venueBooking = queryRunner.manager.create(VenueBooking, {
         eventId: event.eventId,
         venueId: venue.venueId,
         venue: venue,
         bookingReason: event.eventType,
-        eventStartDate: event.startDate,
-        eventEndDate: event.endDate,
-        startTime: venue.bookingType === "HOURLY" ? event.startTime : undefined,
-        endTime: venue.bookingType === "HOURLY" ? event.endTime : undefined,
+        bookingDates: dates,
         bookingStatus: BookingStatus.PENDING,
         isPaid: false,
         timezone: "UTC",
@@ -84,6 +77,9 @@ export class EventRepository {
           })
         );
       }
+
+      // 5. Create availability slots
+      await BookingValidationService.createAvailabilitySlots(venue, dates);
 
       await queryRunner.commitTransaction();
       return {
@@ -109,7 +105,7 @@ export class EventRepository {
     try {
       const events = await AppDataSource.getRepository(Event).find({
         relations: ["venueBookings", "eventVenues", "eventGuests"],
-        order: { startDate: "ASC" },
+        order: { createdAt: "DESC" },
       });
       return { success: true, data: events };
     } catch (error) {

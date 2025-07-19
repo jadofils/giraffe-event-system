@@ -62,7 +62,15 @@ export class OrganizationController {
   static async create(req: Request, res: Response): Promise<void> {
     const userId = req.user?.userId;
     const isAdmin = req.user?.isAdmin;
+
+    // Track uploaded files for cleanup in case of failure
+    const uploadedFiles: { url: string; type: "image" | "raw" }[] = [];
+
     try {
+      console.log("=== Organization Creation Debug ===");
+      console.log("Request body:", req.body);
+      console.log("Files received:", req.files);
+
       // Parse fields from form-data
       const {
         organizationName,
@@ -86,10 +94,17 @@ export class OrganizationController {
         return;
       }
 
-      // Handle file upload if present
+      // Handle supportingDocument upload if present
       let supportingDocumentUrl: string | undefined = undefined;
-      if (req.file) {
-        // Only allow images and pdf
+      if (req.files && (req.files as any)["supportingDocument"]) {
+        console.log("Processing supporting document...");
+        const docFile = (req.files as any)["supportingDocument"][0];
+        console.log("Supporting document file:", {
+          filename: docFile.originalname,
+          mimetype: docFile.mimetype,
+          size: docFile.size,
+        });
+
         const allowedTypes = [
           "application/pdf",
           "image/jpeg",
@@ -98,7 +113,7 @@ export class OrganizationController {
           "image/gif",
           "image/webp",
         ];
-        if (!allowedTypes.includes(req.file.mimetype)) {
+        if (!allowedTypes.includes(docFile.mimetype)) {
           res.status(400).json({
             success: false,
             message:
@@ -106,12 +121,99 @@ export class OrganizationController {
           });
           return;
         }
-        const uploadResult = await CloudinaryUploadService.uploadBuffer(
-          req.file.buffer,
-          "uploads/organization-supporting-document"
-        );
-        supportingDocumentUrl = uploadResult.url;
+        try {
+          const uploadResult = await CloudinaryUploadService.uploadBuffer(
+            docFile.buffer,
+            "uploads/organization-supporting-document"
+          );
+          console.log("Supporting document upload result:", uploadResult);
+          supportingDocumentUrl = uploadResult.url;
+          uploadedFiles.push({
+            url: uploadResult.url,
+            type: docFile.mimetype.startsWith("image/") ? "image" : "raw",
+          });
+        } catch (uploadError) {
+          console.error("Supporting document upload error:", uploadError);
+          res.status(500).json({
+            success: false,
+            message: "Failed to upload supporting document",
+            error:
+              uploadError instanceof Error
+                ? uploadError.message
+                : "Unknown error",
+          });
+          return;
+        }
       }
+
+      // Handle logo upload if present
+      let logoUrl: string | undefined = undefined;
+      console.log("Processing logo...");
+      if (req.files && (req.files as any)["logo"]) {
+        const logoFile = (req.files as any)["logo"][0];
+        console.log("Logo file:", {
+          filename: logoFile.originalname,
+          mimetype: logoFile.mimetype,
+          size: logoFile.size,
+        });
+
+        const allowedLogoTypes = [
+          "image/jpeg",
+          "image/png",
+          "image/jpg",
+          "image/gif",
+          "image/webp",
+        ];
+        if (!allowedLogoTypes.includes(logoFile.mimetype)) {
+          res.status(400).json({
+            success: false,
+            message: "Only image files are allowed as logo.",
+          });
+          return;
+        }
+        try {
+          const uploadLogoResult = await CloudinaryUploadService.uploadBuffer(
+            logoFile.buffer,
+            "uploads/organization-logo"
+          );
+          console.log("Logo upload result:", uploadLogoResult);
+          logoUrl = uploadLogoResult.url;
+          uploadedFiles.push({
+            url: uploadLogoResult.url,
+            type: "image",
+          });
+        } catch (uploadError) {
+          console.error("Logo upload error:", uploadError);
+          // If logo upload fails, clean up any previously uploaded supporting document
+          if (supportingDocumentUrl) {
+            try {
+              await CloudinaryUploadService.deleteFromCloudinary(
+                supportingDocumentUrl,
+                uploadedFiles[0].type
+              );
+            } catch (cleanupError) {
+              console.error(
+                "Failed to cleanup supporting document:",
+                cleanupError
+              );
+            }
+          }
+          res.status(500).json({
+            success: false,
+            message: "Failed to upload logo",
+            error:
+              uploadError instanceof Error
+                ? uploadError.message
+                : "Unknown error",
+          });
+          return;
+        }
+      }
+
+      console.log("Building organization data with URLs:", {
+        supportingDocumentUrl,
+        logoUrl,
+      });
 
       // Build organization object
       const orgData = {
@@ -126,6 +228,7 @@ export class OrganizationController {
         postalCode,
         stateProvince,
         supportingDocument: supportingDocumentUrl,
+        logo: logoUrl,
         status: isAdmin
           ? OrganizationStatusEnum.APPROVED
           : OrganizationStatusEnum.PENDING,
@@ -134,14 +237,68 @@ export class OrganizationController {
       // Use bulkCreate for consistency (single item array)
       const result = await OrganizationRepository.bulkCreate([orgData]);
       if (!result.success || !result.data?.length) {
-        res.status(400).json(result);
+        console.error("Failed to create organization:", result);
+
+        // Clean up uploaded files if organization creation fails
+        for (const file of uploadedFiles) {
+          try {
+            await CloudinaryUploadService.deleteFromCloudinary(
+              file.url,
+              file.type
+            );
+          } catch (cleanupError) {
+            console.error(`Failed to cleanup file ${file.url}:`, cleanupError);
+          }
+        }
+
+        res.status(400).json({
+          ...result,
+          message: result.message || "Failed to create organization",
+        });
         return;
       }
+
       // Assign the creator as a user to the organization
-      await OrganizationRepository.assignUsersToOrganization(
-        [userId],
-        result.data[0].organizationId
-      );
+      const assignResult =
+        await OrganizationRepository.assignUsersToOrganization(
+          [userId],
+          result.data[0].organizationId
+        );
+
+      if (!assignResult.success) {
+        console.error("Failed to assign user to organization:", assignResult);
+
+        // Clean up everything if user assignment fails
+        for (const file of uploadedFiles) {
+          try {
+            await CloudinaryUploadService.deleteFromCloudinary(
+              file.url,
+              file.type
+            );
+          } catch (cleanupError) {
+            console.error(`Failed to cleanup file ${file.url}:`, cleanupError);
+          }
+        }
+
+        // Try to delete the created organization
+        try {
+          await OrganizationRepository.delete(result.data[0].organizationId);
+        } catch (deleteError) {
+          console.error("Failed to cleanup organization:", deleteError);
+        }
+
+        res.status(500).json({
+          success: false,
+          message: "Failed to assign user to organization",
+        });
+        return;
+      }
+
+      console.log("Organization creation completed:", {
+        organizationId: result.data[0].organizationId,
+        assignResult,
+      });
+
       res.status(201).json({
         success: true,
         data: result.data[0],
@@ -149,6 +306,19 @@ export class OrganizationController {
       });
     } catch (error) {
       console.error("[OrganizationController Create Error]:", error);
+
+      // Clean up any uploaded files in case of unexpected errors
+      for (const file of uploadedFiles) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            file.url,
+            file.type
+          );
+        } catch (cleanupError) {
+          console.error(`Failed to cleanup file ${file.url}:`, cleanupError);
+        }
+      }
+
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -162,68 +332,6 @@ export class OrganizationController {
    * @route POST /organizations/bulk
    * @access Protected
    */
-  static async bulkCreate(req: Request, res: Response): Promise<void> {
-    const {
-      organizations,
-    }: { organizations: Partial<OrganizationInterface>[] } = req.body;
-    const userId = req.user?.userId; // <-- Get userId from token (auth middleware must set req.user)
-    const isAdmin = req.user?.isAdmin;
-
-    if (!organizations?.length) {
-      res.status(400).json({
-        success: false,
-        message: "At least one organization is required",
-      });
-      return;
-    }
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Unauthorized: User not found in token.",
-      });
-      return;
-    }
-
-    try {
-      // Set status for each organization based on creator's role
-      const organizationsWithStatus = organizations.map((org) => ({
-        ...org,
-        status: isAdmin
-          ? OrganizationStatusEnum.APPROVED
-          : OrganizationStatusEnum.PENDING,
-      }));
-      // 1. Create organizations
-      const result = await OrganizationRepository.bulkCreate(
-        organizationsWithStatus
-      );
-
-      if (!result.success || !result.data?.length) {
-        res.status(400).json(result);
-        return;
-      }
-
-      // 2. Assign the creator as a user to each organization
-      for (const org of result.data) {
-        await OrganizationRepository.assignUsersToOrganization(
-          [userId],
-          org.organizationId
-        );
-      }
-
-      res.status(201).json({
-        ...result,
-        message: "Organizations created and creator assigned.",
-      });
-    } catch (error) {
-      console.error("[OrganizationController BulkCreate Error]:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
 
   /**
    * Update an organization
@@ -259,6 +367,219 @@ export class OrganizationController {
    * @route PUT /organizations/bulk
    * @access Protected
    */
+
+  /**
+   * Update an organization's logo
+   * @route PATCH /organizations/:id/logo
+   * @access Protected
+   */
+  static async updateLogo(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!req.file) {
+      res
+        .status(400)
+        .json({ success: false, message: "Logo file is required" });
+      return;
+    }
+
+    try {
+      console.log("=== UPDATE LOGO DEBUG ===");
+      // Get organization with current logo
+      const orgResult = await OrganizationRepository.getById(id);
+      if (!orgResult.success || !orgResult.data) {
+        res
+          .status(404)
+          .json({ success: false, message: "Organization not found" });
+        return;
+      }
+
+      // Store the old logo URL BEFORE uploading new one
+      const oldLogoUrl = orgResult.data.logo;
+      console.log("Current logo URL:", oldLogoUrl);
+
+      // Upload new logo
+      const logoFile = req.file;
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "image/gif",
+        "image/webp",
+      ];
+
+      if (!allowedTypes.includes(logoFile.mimetype)) {
+        res.status(400).json({
+          success: false,
+          message: "Only image files are allowed as logo",
+        });
+        return;
+      }
+
+      try {
+        // Upload new logo first
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          logoFile.buffer,
+          "uploads/organization-logo"
+        );
+        console.log("New logo upload result:", uploadResult);
+
+        // Update organization with new logo URL
+        const updateResult = await OrganizationRepository.update(id, {
+          logo: uploadResult.url,
+        });
+
+        if (!updateResult.success) {
+          // If organization update fails, delete the newly uploaded logo
+          try {
+            await CloudinaryUploadService.deleteFromCloudinary(
+              uploadResult.url,
+              "image"
+            );
+          } catch (cleanupError) {
+            console.error(
+              "Failed to cleanup new logo after update failure:",
+              cleanupError
+            );
+          }
+          res.status(400).json(updateResult);
+          return;
+        }
+
+        // If update successful and there was an old logo, delete it
+        if (oldLogoUrl) {
+          console.log("Deleting old logo:", oldLogoUrl);
+          try {
+            await CloudinaryUploadService.deleteFromCloudinary(
+              oldLogoUrl,
+              "image"
+            );
+            console.log("Successfully deleted old logo");
+          } catch (deleteError) {
+            // Don't fail the request if old logo deletion fails
+            console.error("Failed to delete old logo:", deleteError);
+          }
+        } else {
+          console.log("ℹ️  No old logo to delete");
+        }
+
+        console.log("=== END UPDATE LOGO DEBUG ===");
+        res.status(200).json({
+          success: true,
+          data: updateResult.data,
+          message: "Logo updated successfully",
+        });
+      } catch (uploadError) {
+        console.error("Logo upload error:", uploadError);
+        res.status(500).json({
+          success: false,
+          message: "Failed to upload new logo",
+          error:
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Unknown error",
+        });
+      }
+    } catch (error) {
+      console.error("Logo update error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Update an organization's supporting document
+   * @route PATCH /organizations/:id/supporting-document
+   * @access Protected
+   */
+  static async updateSupportingDocument(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { id } = req.params;
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
+      res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({
+        success: false,
+        message: "Supporting document file is required",
+      });
+      return;
+    }
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Only PDF and image files are allowed as supporting documents.",
+      });
+      return;
+    }
+    try {
+      // Fetch the current organization to get the old document URL
+      const orgResult = await OrganizationRepository.getById(id);
+      const oldDocUrl = orgResult.data?.supportingDocument;
+      if (!orgResult.success || !orgResult.data) {
+        res
+          .status(404)
+          .json({ success: false, message: "Organization not found" });
+        return;
+      }
+      if (oldDocUrl) {
+        const resourceType = oldDocUrl.endsWith(".pdf") ? "raw" : "image";
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            oldDocUrl,
+            resourceType
+          );
+        } catch (deleteErr) {
+          console.warn(
+            "❌ Failed to delete old document, but update was successful:",
+            deleteErr
+          );
+          // Don't fail the entire operation if old document deletion fails
+        }
+      } else {
+        console.log("ℹ️  No old document to delete");
+      }
+      const uploadResult = await CloudinaryUploadService.uploadBuffer(
+        req.file.buffer,
+        "uploads/organization-supporting-document"
+      );
+      const result = await OrganizationRepository.update(id, {
+        supportingDocument: uploadResult.url,
+      });
+      if (!result.success) {
+        res.status(400).json(result);
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        message: "Supporting document updated successfully.",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to update supporting document.",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
 
   /**
    * Delete an organization

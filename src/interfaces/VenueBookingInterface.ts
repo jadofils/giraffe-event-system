@@ -1,5 +1,6 @@
 import { VenueStatus, BookingStatus } from "../models/VenueBooking";
 import { EventType } from "./Enums/EventTypeEnum";
+import { BookingDateDTO } from "./BookingDateInterface";
 
 export class VenueBookingInterface {
   bookingId: string = "";
@@ -9,10 +10,7 @@ export class VenueBookingInterface {
   eventId?: string;
   createdBy: string = "";
   user?: any; // Replace with actual User interface if available
-  eventStartDate: string = "";
-  eventEndDate: string = "";
-  startTime?: string;
-  endTime?: string;
+  bookingDates: BookingDateDTO[] = [];
   venueStatus?: VenueStatus;
   venueDiscountPercent?: number;
   timezone: string = "UTC";
@@ -30,10 +28,7 @@ export class VenueBookingInterface {
       eventId: data.eventId,
       createdBy: data.createdBy || "",
       user: data.user,
-      eventStartDate: data.eventStartDate || "",
-      eventEndDate: data.eventEndDate || "",
-      startTime: data.startTime,
-      endTime: data.endTime,
+      bookingDates: data.bookingDates || [],
       venueStatus: data.venueStatus,
       venueDiscountPercent: data.venueDiscountPercent,
       timezone: data.timezone || "UTC",
@@ -48,13 +43,8 @@ export class VenueBookingInterface {
     const errors: string[] = [];
     if (!data.venueId) errors.push("venueId is required");
     if (!data.createdBy) errors.push("createdBy is required");
-    if (!data.eventStartDate) errors.push("eventStartDate is required");
-    if (!data.eventEndDate) errors.push("eventEndDate is required");
-    if (data.eventStartDate && data.eventEndDate) {
-      const startDate = new Date(data.eventStartDate);
-      const endDate = new Date(data.eventEndDate);
-      if (startDate > endDate)
-        errors.push("eventStartDate must be before or equal to eventEndDate");
+    if (!data.bookingDates || data.bookingDates.length === 0) {
+      errors.push("At least one booking date is required");
     }
     return errors;
   }
