@@ -84,6 +84,7 @@ export class OrganizationController {
         country,
         postalCode,
         stateProvince,
+        members,
         assignCreator = !isAdmin, // Default to true for regular users, false for admins
       } = req.body;
 
@@ -95,6 +96,9 @@ export class OrganizationController {
         });
         return;
       }
+
+      // Convert members to number if provided
+      const membersCount = members ? parseInt(members) : 0;
 
       // Handle supportingDocument upload if present
       let supportingDocumentUrl: string | undefined = undefined;
@@ -229,6 +233,7 @@ export class OrganizationController {
         country,
         postalCode,
         stateProvince,
+        members: membersCount,
         supportingDocument: supportingDocumentUrl,
         logo: logoUrl,
         status: isAdmin
@@ -371,6 +376,11 @@ export class OrganizationController {
         .status(400)
         .json({ success: false, message: "Valid organization ID is required" });
       return;
+    }
+
+    // Convert members to number if provided
+    if (data.members !== undefined) {
+      data.members = parseInt(data.members.toString());
     }
 
     try {
@@ -1141,9 +1151,6 @@ export class OrganizationController {
     }
   }
 
-
-
-
   /**
    * Enable an organization
    * @route PATCH /organizations/:id/enable-status
@@ -1379,6 +1386,127 @@ export class OrganizationController {
         `[OrganizationController GetOrganizationsByUserId Error] User ID: ${userId}:`,
         error
       );
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get public organization details including venues and events
+   * @route GET /organizations/public/:id
+   * @access Public
+   */
+  static async getPublicDetails(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID is required",
+      });
+      return;
+    }
+
+    try {
+      const result = await OrganizationRepository.getPublicDetails(id);
+
+      if (!result.success || !result.data) {
+        res.status(404).json({
+          success: false,
+          message: "Organization not found or not accessible",
+        });
+        return;
+      }
+
+      // Only return public-safe data
+      const {
+        organizationId,
+        organizationName,
+        description,
+        logo,
+        address,
+        city,
+        country,
+        members,
+        venues,
+        events,
+      } = result.data;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          organizationId,
+          organizationName,
+          description,
+          logo,
+          address,
+          city,
+          country,
+          members,
+          venues:
+            venues?.map((venue) => ({
+              venueId: venue.venueId,
+              venueName: venue.venueName,
+              description: venue.venueLocation,
+              address: venue.venueLocation,
+              capacity: venue.capacity,
+              images: venue.photoGallery || [],
+            })) || [],
+          events:
+            events?.map((event) => ({
+              eventId: event.eventId,
+              eventName: event.eventName,
+              description: event.description,
+              startDate: event.startDate,
+              endDate: event.endDate,
+              eventType: event.eventType,
+              status: event.status,
+            })) || [],
+        },
+      });
+    } catch (error) {
+      console.error(
+        `[OrganizationController GetPublicDetails Error] ID: ${id}:`,
+        error
+      );
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get all public organizations with their venues and events
+   * @route GET /organizations/public
+   * @access Public
+   */
+  static async getAllPublicOrganizations(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const result = await OrganizationRepository.getAllPublicOrganizations();
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          message: result.message || "Failed to fetch public organizations",
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        message: result.message,
+      });
+    } catch (error) {
+      console.error("[OrganizationController GetAllPublic Error]:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",

@@ -5,7 +5,11 @@ import { authenticate } from "../middlewares/AuthMiddleware";
 import upload from "../middlewares/upload";
 
 const router = Router();
+// Public endpoints
 
+router.get("/public", OrganizationController.getAllPublicOrganizations);
+
+// Protected endpoints
 router.get("/all", authenticate, OrganizationController.getAll);
 router.get(
   "/user/:userId",

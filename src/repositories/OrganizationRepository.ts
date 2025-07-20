@@ -6,6 +6,7 @@ import { In } from "typeorm";
 import { CacheService } from "../services/CacheService";
 import { Venue, VenueStatus } from "../models/Venue Tables/Venue";
 import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
+import { EventStatus } from "../interfaces/Enums/EventStatusEnum";
 
 const CACHE_TTL = 3600; // 1 hour
 
@@ -120,6 +121,7 @@ export class OrganizationRepository {
     organization.contactPhone = data.contactPhone ?? "";
     organization.address = data.address;
     organization.organizationType = data.organizationType;
+    organization.members = data.members ?? 0;
     organization.createdAt = new Date();
     organization.updatedAt = new Date();
     organization.isEnabled = true; // Set enabled by default
@@ -187,6 +189,7 @@ export class OrganizationRepository {
           updatedAt: new Date(),
           supportingDocument: item.supportingDocument,
           logo: item.logo,
+          members: item.members ?? 0,
           status: item.status || OrganizationStatusEnum.PENDING,
           isEnabled: true, // Set enabled by default
         });
@@ -343,6 +346,7 @@ export class OrganizationRepository {
         logo: data.logo ?? organization.logo,
         supportingDocument:
           data.supportingDocument ?? organization.supportingDocument,
+        members: data.members ?? organization.members,
         updatedAt: new Date(),
       });
 
@@ -723,6 +727,153 @@ export class OrganizationRepository {
         success: false,
         message: "Failed to fetch organizations",
         error,
+      };
+    }
+  }
+
+  /**
+   * Get all public organizations (approved and enabled) with their venues and events
+   * @returns List of public organizations
+   */
+  static async getAllPublicOrganizations(): Promise<{
+    success: boolean;
+    data?: any[];
+    message?: string;
+  }> {
+    try {
+      const organizations = await AppDataSource.getRepository(Organization)
+        .createQueryBuilder("organization")
+        .leftJoinAndSelect(
+          "organization.venues",
+          "venue",
+          "venue.status = :venueStatus AND venue.deletedAt IS NULL",
+          { venueStatus: VenueStatus.APPROVED }
+        )
+        .where("organization.status = :status", {
+          status: OrganizationStatusEnum.APPROVED,
+        })
+        .andWhere("organization.isEnabled = :isEnabled", { isEnabled: true })
+        .orderBy("organization.organizationName", "ASC")
+        .getMany();
+
+      // Format the response to include only necessary information
+      const formattedOrganizations = organizations.map((org) => ({
+        organizationId: org.organizationId,
+        organizationName: org.organizationName,
+        description: org.description,
+        contactEmail: org.contactEmail,
+        contactPhone: org.contactPhone,
+        address: org.address,
+        organizationType: org.organizationType,
+        city: org.city,
+        country: org.country,
+        postalCode: org.postalCode,
+        stateProvince: org.stateProvince,
+        supportingDocument: org.supportingDocument,
+        logo: org.logo,
+        cancellationReason: org.cancellationReason,
+        status: org.status,
+        isEnabled: org.isEnabled,
+        members: org.members,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+        venues: (org.venues || [])
+          .filter((venue) => venue.status === VenueStatus.APPROVED)
+          .map((venue) => ({
+            venueId: venue.venueId,
+            venueName: venue.venueName,
+            location: venue.venueLocation,
+            capacity: venue.capacity,
+            mainPhotoUrl: venue.mainPhotoUrl,
+            photoGallery: venue.photoGallery,
+            latitude: venue.latitude,
+            longitude: venue.longitude,
+            googleMapsLink: venue.googleMapsLink,
+            virtualTourUrl: venue.virtualTourUrl,
+            venueTypeId: venue.venueTypeId,
+            venueDocuments: venue.venueDocuments,
+            status: venue.status,
+            visitPurposeOnly: venue.visitPurposeOnly,
+            bookingType: venue.bookingType,
+            createdAt: venue.createdAt,
+            updatedAt: venue.updatedAt,
+          })),
+      }));
+
+      return {
+        success: true,
+        data: formattedOrganizations,
+        message:
+          formattedOrganizations.length > 0
+            ? "Organizations retrieved successfully"
+            : "No public organizations found",
+      };
+    } catch (error) {
+      console.error("[Public Organizations Fetch Error]:", error);
+      return {
+        success: false,
+        message: "Failed to fetch public organizations",
+      };
+    }
+  }
+
+  /**
+   * Get public organization details including venues and events
+   * @param id Organization UUID
+   * @returns Organization with venues and events
+   */
+  static async getPublicDetails(id: string): Promise<{
+    success: boolean;
+    data?: Organization & { events?: any[] };
+    message?: string;
+  }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+
+    try {
+      const organization = await AppDataSource.getRepository(Organization)
+        .createQueryBuilder("organization")
+        .leftJoinAndSelect("organization.venues", "venue")
+        .leftJoin("venue.events", "event")
+        .leftJoinAndSelect("event", "fullEvent")
+        .where("organization.organizationId = :id", { id })
+        .andWhere("organization.isEnabled = :isEnabled", { isEnabled: true })
+        .andWhere("venue.status = :venueStatus", { venueStatus: "APPROVED" })
+        .andWhere("(event.status = :eventStatus OR event.status IS NULL)", {
+          eventStatus: "PUBLISHED",
+        })
+        .getOne();
+
+      if (!organization) {
+        return {
+          success: false,
+          message: "Organization not found or not accessible",
+        };
+      }
+
+      // Get events for this organization's venues
+      const events = await AppDataSource.createQueryBuilder()
+        .select("event")
+        .from("events", "event")
+        .innerJoin("event_venues", "ev", "ev.eventId = event.eventId")
+        .innerJoin("venues", "venue", "venue.venueId = ev.venueId")
+        .where("venue.organizationId = :organizationId", { organizationId: id })
+        .andWhere("event.status = :status", { status: "PUBLISHED" })
+        .getRawMany();
+
+      return {
+        success: true,
+        data: {
+          ...organization,
+          events,
+        },
+      };
+    } catch (error) {
+      console.error(`[Organization Public Details Error] ID: ${id}:`, error);
+      return {
+        success: false,
+        message: "Failed to fetch organization details",
       };
     }
   }

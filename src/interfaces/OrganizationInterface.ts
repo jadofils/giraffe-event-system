@@ -17,6 +17,7 @@ export interface OrganizationInterface {
   country?: string;
   postalCode?: string;
   stateProvince?: string;
+  members?: number;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;

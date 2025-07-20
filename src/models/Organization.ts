@@ -137,6 +137,11 @@ export class Organization {
 
   @OneToMany(() => TicketType, (ticketType) => ticketType.organization)
   ticketTypes!: TicketType[];
+
+  @Column({ type: "integer", default: 0 })
+  @IsOptional()
+  members?: number;
+
   // --- Timestamp Columns ---
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

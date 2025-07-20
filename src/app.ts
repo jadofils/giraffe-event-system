@@ -29,7 +29,7 @@ app.use(
       const allowedOrigins = [
         "http://localhost:3001",
         "http://localhost:3000",
-        "https://giraffespace.vercel.app",
+        "https://venue-and-event-management-front-si.vercel.app/",
         AppConfig.CORS_ORIGIN, // fallback to env/config
       ];
       if (!origin || allowedOrigins.includes(origin)) {
