@@ -122,6 +122,7 @@ export class OrganizationRepository {
     organization.organizationType = data.organizationType;
     organization.createdAt = new Date();
     organization.updatedAt = new Date();
+    organization.isEnabled = true; // Set enabled by default
 
     return { success: true, data: organization };
   }
@@ -186,7 +187,8 @@ export class OrganizationRepository {
           updatedAt: new Date(),
           supportingDocument: item.supportingDocument,
           logo: item.logo,
-          status: item.status || OrganizationStatusEnum.PENDING, // <-- use enum, not string
+          status: item.status || OrganizationStatusEnum.PENDING,
+          isEnabled: true, // Set enabled by default
         });
         organizations.push(org);
       }
@@ -453,48 +455,61 @@ export class OrganizationRepository {
   }
 
   /**
-   * Delete an organization
-   * @param id Organization UUID
+   * Delete one or more organizations
+   * @param ids Organization UUID or array of UUIDs
    * @returns Deletion result
    */
   static async delete(
-    id: string
+    ids: string | string[]
   ): Promise<{ success: boolean; message: string }> {
-    if (!id || !this.UUID_REGEX.test(id)) {
-      return { success: false, message: "Valid organization ID is required" };
+    const idArray = Array.isArray(ids) ? ids : [ids];
+
+    // Validate all IDs
+    if (idArray.some((id) => !this.UUID_REGEX.test(id))) {
+      return { success: false, message: "Valid organization ID(s) required" };
     }
 
     try {
       const repo = AppDataSource.getRepository(Organization);
-      const organization = await repo.findOne({
-        where: { organizationId: id },
+
+      // Find organizations with their users
+      const organizations = await repo.find({
+        where: { organizationId: In(idArray) },
         relations: ["users"],
       });
 
-      if (!organization) {
-        return { success: false, message: "Organization not found" };
+      if (organizations.length !== idArray.length) {
+        return {
+          success: false,
+          message: "One or more organizations not found",
+        };
       }
 
-      const result = await repo.delete(id);
+      // Delete the organizations
+      const result = await repo.delete(idArray);
 
       if (result.affected === 0) {
         return {
           success: false,
-          message: "Organization not found or already deleted",
+          message: "Organizations not found or already deleted",
         };
       }
 
-      // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...organization.users.map((user) => `org:user:${user.userId}`),
-      ]);
+      // Invalidate cache for all deleted organizations
+      const cacheKeys = ["org:all"];
+      organizations.forEach((org) => {
+        cacheKeys.push(`org:id:${org.organizationId}`);
+        org.users.forEach((user) => cacheKeys.push(`org:user:${user.userId}`));
+      });
+      await CacheService.invalidateMultiple(cacheKeys);
 
-      return { success: true, message: "Organization deleted successfully" };
+      return {
+        success: true,
+        message: `${result.affected} organization(s) deleted successfully`,
+      };
     } catch (error) {
-      console.error(`[Organization Delete Error] ID: ${id}:`, error);
-      return { success: false, message: "Failed to delete organization" };
+      console.error(`[Organization Delete Error] IDs: ${ids}:`, error);
+      return { success: false, message: "Failed to delete organization(s)" };
     }
   }
 
@@ -856,14 +871,14 @@ export class OrganizationRepository {
   }
 
   /**
-   * Remove one or more venues from an organization.
-   * @param organizationId Organization UUID
+   * Remove one or more venues from an organization
    * @param venueIds Array of Venue UUIDs to remove
+   * @param organizationId Organization UUID
    * @returns Removal result
    */
   static async removeVenuesFromOrganization(
-    organizationId: string,
-    venueIds: string[]
+    venueIds: string[],
+    organizationId: string
   ): Promise<{ success: boolean; message: string; data?: Organization }> {
     if (!organizationId || !this.UUID_REGEX.test(organizationId)) {
       return { success: false, message: "Valid organization ID is required" };
@@ -888,7 +903,7 @@ export class OrganizationRepository {
       const venuesToRemove = await venueRepo.find({
         where: {
           venueId: In(venueIds),
-          organization: { organizationId: organizationId }, // Ensure we only target venues already linked to this org
+          organization: { organizationId: organizationId },
         },
       });
 
@@ -913,7 +928,7 @@ export class OrganizationRepository {
 
       const updatedOrganization = await organizationRepo.findOne({
         where: { organizationId },
-        relations: ["venues"], // Refetch to get updated list
+        relations: ["venues"],
       });
 
       // Invalidate cache
@@ -989,6 +1004,90 @@ export class OrganizationRepository {
       };
     } catch (error) {
       return { success: false, message: "Failed to reject organization" };
+    }
+  }
+
+  /**
+   * Enable an organization
+   * @param id Organization UUID
+   * @returns Operation result
+   */
+  static async enableOrganization(
+    id: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
+
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+
+      organization.isEnabled = true;
+      const updated = await repo.save(organization);
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${id}`,
+        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
+      ]);
+
+      return {
+        success: true,
+        data: updated,
+        message: "Organization enabled successfully",
+      };
+    } catch (error) {
+      console.error(`[Organization Enable Error] ID: ${id}:`, error);
+      return { success: false, message: "Failed to enable organization" };
+    }
+  }
+
+  /**
+   * Disable an organization
+   * @param id Organization UUID
+   * @returns Operation result
+   */
+  static async disableOrganization(
+    id: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
+
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+
+      organization.isEnabled = false;
+      const updated = await repo.save(organization);
+
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${id}`,
+        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
+      ]);
+
+      return {
+        success: true,
+        data: updated,
+        message: "Organization disabled successfully",
+      };
+    } catch (error) {
+      console.error(`[Organization Disable Error] ID: ${id}:`, error);
+      return { success: false, message: "Failed to disable organization" };
     }
   }
 }

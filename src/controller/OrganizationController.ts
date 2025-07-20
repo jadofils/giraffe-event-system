@@ -70,6 +70,7 @@ export class OrganizationController {
       console.log("=== Organization Creation Debug ===");
       console.log("Request body:", req.body);
       console.log("Files received:", req.files);
+      console.log("User role:", isAdmin ? "ADMIN" : "REGULAR USER");
 
       // Parse fields from form-data
       const {
@@ -83,6 +84,7 @@ export class OrganizationController {
         country,
         postalCode,
         stateProvince,
+        assignCreator = !isAdmin, // Default to true for regular users, false for admins
       } = req.body;
 
       // Validate required fields
@@ -258,52 +260,74 @@ export class OrganizationController {
         return;
       }
 
-      // Assign the creator as a user to the organization
-      const assignResult =
-        await OrganizationRepository.assignUsersToOrganization(
-          [userId],
-          result.data[0].organizationId
-        );
-
-      if (!assignResult.success) {
-        console.error("Failed to assign user to organization:", assignResult);
-
-        // Clean up everything if user assignment fails
-        for (const file of uploadedFiles) {
-          try {
-            await CloudinaryUploadService.deleteFromCloudinary(
-              file.url,
-              file.type
-            );
-          } catch (cleanupError) {
-            console.error(`Failed to cleanup file ${file.url}:`, cleanupError);
-          }
-        }
-
-        // Try to delete the created organization
-        try {
-          await OrganizationRepository.delete(result.data[0].organizationId);
-        } catch (deleteError) {
-          console.error("Failed to cleanup organization:", deleteError);
-        }
-
-        res.status(500).json({
-          success: false,
-          message: "Failed to assign user to organization",
+      // Only assign creator if they're not an admin or if explicitly requested
+      if (assignCreator && userId) {
+        console.log("Assigning creator to organization:", {
+          userId,
+          organizationId: result.data[0].organizationId,
         });
-        return;
+
+        const assignResult =
+          await OrganizationRepository.assignUsersToOrganization(
+            [userId],
+            result.data[0].organizationId
+          );
+
+        if (!assignResult.success) {
+          console.error("Failed to assign user to organization:", assignResult);
+
+          // Clean up everything if user assignment fails
+          for (const file of uploadedFiles) {
+            try {
+              await CloudinaryUploadService.deleteFromCloudinary(
+                file.url,
+                file.type
+              );
+            } catch (cleanupError) {
+              console.error(
+                `Failed to cleanup file ${file.url}:`,
+                cleanupError
+              );
+            }
+          }
+
+          // Try to delete the created organization
+          try {
+            await OrganizationRepository.delete(result.data[0].organizationId);
+          } catch (deleteError) {
+            console.error("Failed to cleanup organization:", deleteError);
+          }
+
+          res.status(500).json({
+            success: false,
+            message: "Failed to assign user to organization",
+          });
+          return;
+        }
+
+        console.log("Organization creation completed with user assignment:", {
+          organizationId: result.data[0].organizationId,
+          assignResult,
+        });
+
+        res.status(201).json({
+          success: true,
+          data: result.data[0],
+          message: "Organization created and creator assigned.",
+        });
+      } else {
+        console.log("Organization created without user assignment:", {
+          organizationId: result.data[0].organizationId,
+          isAdmin,
+          assignCreator,
+        });
+
+        res.status(201).json({
+          success: true,
+          data: result.data[0],
+          message: "Organization created successfully.",
+        });
       }
-
-      console.log("Organization creation completed:", {
-        organizationId: result.data[0].organizationId,
-        assignResult,
-      });
-
-      res.status(201).json({
-        success: true,
-        data: result.data[0],
-        message: "Organization created and creator assigned.",
-      });
     } catch (error) {
       console.error("[OrganizationController Create Error]:", error);
 
@@ -582,25 +606,119 @@ export class OrganizationController {
   }
 
   /**
-   * Delete an organization
+   * Delete an organization and all its associated data
    * @route DELETE /organizations/:id
-   * @access Protected
+   * @access Admin Only
    */
   static async delete(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
+    const isAdmin = req.user?.isAdmin;
 
+    // Check if user is admin
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can delete organizations",
+      });
+      return;
+    }
+
+    // Validate organization ID
     if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid organization ID is required" });
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID is required",
+      });
       return;
     }
 
     try {
-      const result = await OrganizationRepository.delete(id);
-      res.status(result.success ? 200 : 404).json(result);
+      console.log("=== DELETE ORGANIZATION DEBUG ===");
+      console.log("Organization ID:", id);
+
+      // First check if organization exists with its venues and users
+      const orgCheck = await OrganizationRepository.getById(id);
+      if (!orgCheck.success || !orgCheck.data) {
+        res.status(404).json({
+          success: false,
+          message: "Organization not found",
+        });
+        return;
+      }
+
+      const organization = orgCheck.data;
+      console.log("Organization found with:", {
+        venueCount: organization.venues?.length || 0,
+        userCount: organization.users?.length || 0,
+      });
+
+      // 1. First remove all venues from the organization
+      if (organization.venues && organization.venues.length > 0) {
+        const venueIds = organization.venues.map((v) => v.venueId);
+        console.log("Removing venues:", venueIds);
+
+        const venueResult =
+          await OrganizationRepository.removeVenuesFromOrganization(
+            venueIds,
+            id
+          );
+
+        if (!venueResult.success) {
+          console.error("Failed to remove venues:", venueResult.message);
+          res.status(500).json({
+            success: false,
+            message: "Failed to remove associated venues",
+          });
+          return;
+        }
+        console.log("Successfully removed all venues");
+      }
+
+      // 2. Then remove all users from the organization
+      if (organization.users && organization.users.length > 0) {
+        console.log(
+          "Removing users:",
+          organization.users.map((u) => u.userId)
+        );
+        const userResult =
+          await OrganizationRepository.removeUsersFromOrganization(
+            organization.users.map((u) => u.userId),
+            id
+          );
+        if (!userResult.success) {
+          console.error("Failed to remove users:", userResult.message);
+          res.status(500).json({
+            success: false,
+            message: "Failed to remove associated users",
+          });
+          return;
+        }
+        console.log("Successfully removed users");
+      }
+
+      // 3. Finally delete the organization itself
+      console.log("Deleting organization");
+      const deleteResult = await OrganizationRepository.delete(id);
+
+      console.log("Delete result:", deleteResult);
+      console.log("=== END DELETE ORGANIZATION DEBUG ===");
+
+      if (deleteResult.success) {
+        res.status(200).json({
+          success: true,
+          message: "Organization and all associated data deleted successfully",
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: deleteResult.message || "Failed to delete organization",
+        });
+      }
     } catch (error) {
-      console.error(`[OrganizationController Delete Error] ID: ${id}:`, error);
+      console.error(
+        `[OrganizationController Delete Error] Org ID: ${id}:`,
+        error
+      );
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -612,35 +730,108 @@ export class OrganizationController {
   /**
    * Assign users to an organization
    * @route POST /organizations/:id/users
-   * @access Protected
+   * @access Admin Only
    */
   static async assignUsers(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const { userIds }: { userIds: string[] } = req.body;
+    const isAdmin = req.user?.isAdmin;
 
-    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid organization ID is required" });
+    // Check if user is admin
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can assign users to organizations",
+      });
       return;
     }
 
-    if (
-      !userIds?.length ||
-      userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))
-    ) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid user IDs are required" });
+    // Validate organization ID
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID is required",
+      });
+      return;
+    }
+
+    // Validate user IDs array
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "At least one user ID is required",
+      });
+      return;
+    }
+
+    // Validate each user ID format
+    if (userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
+      res.status(400).json({
+        success: false,
+        message: "One or more user IDs are invalid",
+      });
       return;
     }
 
     try {
+      console.log("=== ASSIGN USERS DEBUG ===");
+      console.log("Organization ID:", id);
+      console.log("Users to assign:", userIds);
+
+      // First check if organization exists and is approved
+      const orgCheck = await OrganizationRepository.getById(id);
+      if (!orgCheck.success || !orgCheck.data) {
+        res.status(404).json({
+          success: false,
+          message: "Organization not found",
+        });
+        return;
+      }
+
+      // Check organization status
+      if (orgCheck.data.status !== OrganizationStatusEnum.APPROVED) {
+        res.status(400).json({
+          success: false,
+          message: `Cannot assign users to organization with status: ${orgCheck.data.status}. Organization must be APPROVED.`,
+        });
+        return;
+      }
+
+      // Attempt to assign users
       const result = await OrganizationRepository.assignUsersToOrganization(
         userIds,
         id
       );
-      res.status(result.success ? 200 : result.data ? 400 : 404).json(result);
+
+      console.log("Assignment result:", result);
+      console.log("=== END ASSIGN USERS DEBUG ===");
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message:
+            result.message || "Users successfully assigned to organization",
+        });
+      } else {
+        // Handle different failure scenarios
+        if (result.message?.includes("already assigned")) {
+          res.status(409).json({
+            success: false,
+            message: result.message,
+          });
+        } else if (result.message?.includes("not found")) {
+          res.status(404).json({
+            success: false,
+            message: result.message,
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            message: result.message || "Failed to assign users to organization",
+          });
+        }
+      }
     } catch (error) {
       console.error(
         `[OrganizationController AssignUsers Error] Org ID: ${id}:`,
@@ -657,35 +848,120 @@ export class OrganizationController {
   /**
    * Remove users from an organization
    * @route DELETE /organizations/:id/users
-   * @access Protected
+   * @access Admin Only
    */
   static async removeUsers(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const { userIds }: { userIds: string[] } = req.body;
+    const isAdmin = req.user?.isAdmin;
 
-    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid organization ID is required" });
+    // Check if user is admin
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can remove users from organizations",
+      });
       return;
     }
 
-    if (
-      !userIds?.length ||
-      userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))
-    ) {
-      res
-        .status(400)
-        .json({ success: false, message: "Valid user IDs are required" });
+    // Validate organization ID
+    if (!id || !OrganizationRepository.UUID_REGEX.test(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID is required",
+      });
+      return;
+    }
+
+    // Validate user IDs array
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "At least one user ID is required",
+      });
+      return;
+    }
+
+    // Validate each user ID format
+    if (userIds.some((uid) => !OrganizationRepository.UUID_REGEX.test(uid))) {
+      res.status(400).json({
+        success: false,
+        message: "One or more user IDs are invalid",
+      });
       return;
     }
 
     try {
+      console.log("=== REMOVE USERS DEBUG ===");
+      console.log("Organization ID:", id);
+      console.log("Users to remove:", userIds);
+
+      // First check if organization exists
+      const orgCheck = await OrganizationRepository.getById(id);
+      if (!orgCheck.success || !orgCheck.data) {
+        res.status(404).json({
+          success: false,
+          message: "Organization not found",
+        });
+        return;
+      }
+
+      // Check if any of the users to be removed are the last admin of the organization
+      const orgUsers = await OrganizationRepository.getUsersByOrganization(id);
+      if (orgUsers.success && orgUsers.data) {
+        const adminUsers = orgUsers.data.filter(
+          (user) => user.role.roleName === "ADMIN"
+        );
+        if (adminUsers.length > 0) {
+          const remainingAdmins = adminUsers.filter(
+            (admin) => !userIds.includes(admin.userId)
+          );
+          if (remainingAdmins.length === 0) {
+            res.status(400).json({
+              success: false,
+              message: "Cannot remove all admin users from the organization",
+            });
+            return;
+          }
+        }
+      }
+
+      // Attempt to remove users
       const result = await OrganizationRepository.removeUsersFromOrganization(
         userIds,
         id
       );
-      res.status(result.success ? 200 : result.data ? 400 : 404).json(result);
+
+      console.log("Removal result:", result);
+      console.log("=== END REMOVE USERS DEBUG ===");
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message:
+            result.message || "Users successfully removed from organization",
+        });
+      } else {
+        // Handle different failure scenarios
+        if (result.message?.includes("not found")) {
+          res.status(404).json({
+            success: false,
+            message: result.message,
+          });
+        } else if (result.message?.includes("Cannot remove")) {
+          res.status(400).json({
+            success: false,
+            message: result.message,
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            message:
+              result.message || "Failed to remove users from organization",
+          });
+        }
+      }
     } catch (error) {
       console.error(
         `[OrganizationController RemoveUsers Error] Org ID: ${id}:`,
@@ -832,8 +1108,8 @@ export class OrganizationController {
 
     try {
       const result = await OrganizationRepository.removeVenuesFromOrganization(
-        organizationId,
-        venueIds
+        venueIds,
+        organizationId
       );
       if (result.success) {
         res.status(200).json(result);
@@ -865,17 +1141,122 @@ export class OrganizationController {
     }
   }
 
-  // You might want a method to get venues by organization as well
+
+
+
   /**
-   * Get venues for a specific organization
+   * Enable an organization
+   * @route PATCH /organizations/:id/enable-status
+   * @access Admin Only
+   */
+  static async enableStatus(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const isAdmin = req.user?.isAdmin;
+
+    // Check if user is admin
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can enable organizations",
+      });
+      return;
+    }
+
+    try {
+      console.log("=== ENABLE ORGANIZATION STATUS DEBUG ===");
+
+      const result = await OrganizationRepository.enableOrganization(id);
+
+      console.log("Enable result:", result);
+      console.log("=== END ENABLE ORGANIZATION STATUS DEBUG ===");
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message: result.message,
+        });
+      } else {
+        res.status(result.data ? 400 : 404).json({
+          success: false,
+          message: result.message,
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[OrganizationController EnableStatus Error] ID: ${id}:`,
+        error
+      );
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Disable an organization
+   * @route PATCH /organizations/:id/disable-status
+   * @access Admin Only
+   */
+  static async disableStatus(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const isAdmin = req.user?.isAdmin;
+
+    // Check if user is admin
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can disable organizations",
+      });
+      return;
+    }
+
+    try {
+      console.log("=== DISABLE ORGANIZATION STATUS DEBUG ===");
+
+      const result = await OrganizationRepository.disableOrganization(id);
+
+      console.log("Disable result:", result);
+      console.log("=== END DISABLE ORGANIZATION STATUS DEBUG ===");
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message: result.message,
+        });
+      } else {
+        res.status(result.data ? 400 : 404).json({
+          success: false,
+          message: result.message,
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[OrganizationController DisableStatus Error] ID: ${id}:`,
+        error
+      );
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get organization venues with status check
    * @route GET /organizations/:organizationId/venues
-   * @access Protected
+   * @access Protected - Admin can see all, users can only see venues from enabled organizations
    */
   static async getOrganizationVenues(
     req: Request,
     res: Response
   ): Promise<void> {
     const { organizationId } = req.params;
+    const isAdmin = req.user?.isAdmin;
 
     if (
       !organizationId ||
@@ -889,26 +1270,43 @@ export class OrganizationController {
     }
 
     try {
-      // Assuming you have a VenueRepository with a method like getVenuesByOrganizationId
-      // Or you can extend the OrganizationRepository to fetch organizations with their venues
-      const result = await OrganizationRepository.getById(organizationId); // Fetch organization with venues and users relation
-      if (result.success && result.data) {
-        res.status(200).json({
-          success: true,
-          data: {
-            venues: result.data.venues || [],
-            users: result.data.users || [],
-          },
-          message:
-            result.data.venues?.length > 0 || result.data.users?.length > 0
-              ? "Venues and users retrieved successfully."
-              : "No venues or users found for this organization.",
+      console.log("=== GET ORGANIZATION VENUES DEBUG ===");
+      console.log("Organization ID:", organizationId);
+      console.log("User Role:", isAdmin ? "ADMIN" : "REGULAR USER");
+
+      const result = await OrganizationRepository.getById(organizationId);
+
+      if (!result.success || !result.data) {
+        res.status(404).json({
+          success: false,
+          message: "Organization not found",
         });
-      } else {
-        res
-          .status(result.message === "Organization not found" ? 404 : 400)
-          .json(result);
+        return;
       }
+
+      // Check organization status for non-admin users
+      if (!isAdmin && result.data.status === OrganizationStatusEnum.DISABLED) {
+        res.status(403).json({
+          success: false,
+          message: "This organization is currently disabled",
+        });
+        return;
+      }
+
+      console.log("Organization Status:", result.data.status);
+      console.log("=== END GET ORGANIZATION VENUES DEBUG ===");
+
+      res.status(200).json({
+        success: true,
+        data: {
+          venues: result.data.venues || [],
+          users: isAdmin ? result.data.users || [] : [], // Only send users data to admin
+        },
+        message:
+          result.data.venues?.length > 0
+            ? "Venues retrieved successfully"
+            : "No venues found for this organization",
+      });
     } catch (error) {
       console.error(
         `[OrganizationController GetOrganizationVenues Error] Org ID: ${organizationId}:`,

@@ -56,5 +56,21 @@ router.patch(
   OrganizationController.updateLogo
 );
 // Add PATCH /organizations/:id/supporting-document for updating only the supporting document
-router.patch("/:id/supporting-document", authenticate, upload.single("supportingDocument"), OrganizationController.updateSupportingDocument);
+router.patch(
+  "/:id/supporting-document",
+  authenticate,
+  upload.single("supportingDocument"),
+  OrganizationController.updateSupportingDocument
+);
+
+router.patch(
+  "/:id/enable-status",
+  authenticate,
+  OrganizationController.enableStatus
+);
+router.patch(
+  "/:id/disable-status",
+  authenticate,
+  OrganizationController.disableStatus
+);
 export const organizationRoutes = router;

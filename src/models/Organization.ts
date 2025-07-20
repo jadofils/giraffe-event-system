@@ -123,6 +123,9 @@ export class Organization {
   })
   status!: OrganizationStatusEnum;
 
+  @Column({ type: "boolean", default: true })
+  isEnabled!: boolean;
+
   @ManyToMany(() => User, (user) => user.organizations)
   users!: User[];
 
