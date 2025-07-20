@@ -26,9 +26,6 @@ export class BookingCondition {
   depositRequiredPercent?: number;
 
   @Column({ type: "int", nullable: true })
-  depositRequiredTime?: number;
-
-  @Column({ type: "int", nullable: true })
   paymentComplementTimeBeforeEvent?: number;
 
   @CreateDateColumn()

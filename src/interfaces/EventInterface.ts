@@ -7,17 +7,15 @@ import { VenueBookingInterface } from "./VenueBookingInterface";
 import { RegistrationInterface } from "./RegistrationInterface";
 import { PaymentInterface } from "./PaymentInterface";
 import { InvoiceInterface } from "./InvoiceInterface";
+import { BookingDateDTO } from "./BookingDateInterface";
 
 export class EventInterface {
   eventId!: string;
-  eventTitle!: string;
+  eventName!: string;
   description?: string | undefined;
   eventCategory?: string | undefined;
   eventType!: EventType;
-  startDate!: string; // plain date string (YYYY-MM-DD)
-  endDate!: string; // plain date string (YYYY-MM-DD)
-  startTime!: string;
-  endTime!: string;
+  bookingDates!: BookingDateDTO[];
   maxAttendees?: number | undefined;
   status!: EventStatus;
   qrCode?: string;
@@ -38,14 +36,11 @@ export class EventInterface {
   constructor(data: Partial<EventInterface>) {
     Object.assign(this, {
       eventId: data.eventId || "",
-      eventTitle: data.eventTitle || "",
+      eventName: data.eventName || "",
       description: data.description ?? undefined,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.MEETING,
-      startDate: data.startDate || "",
-      endDate: data.endDate || "",
-      startTime: data.startTime || "",
-      endTime: data.endTime || "",
+      bookingDates: data.bookingDates || [],
       maxAttendees: data.maxAttendees,
       status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
@@ -67,10 +62,10 @@ export class EventInterface {
 
   static validate(data: Partial<EventInterface>): string[] {
     const errors: string[] = [];
-    if (!data.eventTitle) errors.push("Event title is required");
+    if (!data.eventName) errors.push("Event title is required");
     if (
-      data.eventTitle &&
-      (data.eventTitle.length < 3 || data.eventTitle.length > 100)
+      data.eventName &&
+      (data.eventName.length < 3 || data.eventName.length > 100)
     ) {
       errors.push("Event title must be between 3 and 100 characters");
     }
@@ -84,6 +79,9 @@ export class EventInterface {
       errors.push(
         `Event type must be one of: ${Object.values(EventType).join(", ")}`
       );
+    }
+    if (!data.bookingDates || data.bookingDates.length === 0) {
+      errors.push("At least one booking date is required");
     }
     if (
       data.maxAttendees &&
@@ -112,14 +110,11 @@ export class EventInterface {
   static toRequest(data: EventInterface): EventRequestInterface {
     return new EventRequestInterface({
       eventId: data.eventId,
-      eventTitle: data.eventTitle,
+      eventName: data.eventName,
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      startTime: data.startTime,
-      endTime: data.endTime,
+      bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
       qrCode: data.qrCode,
@@ -132,14 +127,11 @@ export class EventInterface {
   static toResponse(data: EventInterface): EventResponseInterface {
     return new EventResponseInterface({
       eventId: data.eventId,
-      eventTitle: data.eventTitle,
+      eventName: data.eventName,
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      startTime: data.startTime,
-      endTime: data.endTime,
+      bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
       qrCode: data.qrCode,
@@ -159,14 +151,11 @@ export class EventInterface {
 
 export class EventRequestInterface {
   eventId?: string;
-  eventTitle!: string;
+  eventName!: string;
   description?: string;
   eventCategory?: string;
   eventType!: EventType;
-  startDate!: string;
-  endDate!: string;
-  startTime!: string;
-  endTime!: string;
+  bookingDates!: BookingDateDTO[];
   maxAttendees?: number;
   status!: EventStatus;
   qrCode?: string;
@@ -177,14 +166,11 @@ export class EventRequestInterface {
   constructor(data: Partial<EventRequestInterface>) {
     Object.assign(this, {
       eventId: data.eventId,
-      eventTitle: data.eventTitle || "",
+      eventName: data.eventName || "",
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.MEETING,
-      startDate: data.startDate || "",
-      endDate: data.endDate || "",
-      startTime: data.startTime || "",
-      endTime: data.endTime || "",
+      bookingDates: data.bookingDates || [],
       maxAttendees: data.maxAttendees,
       status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
@@ -196,14 +182,11 @@ export class EventRequestInterface {
   static toEntity(data: EventRequestInterface): EventInterface {
     return new EventInterface({
       eventId: data.eventId,
-      eventTitle: data.eventTitle,
+      eventName: data.eventName,
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      startTime: data.startTime,
-      endTime: data.endTime,
+      bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
       qrCode: data.qrCode,
@@ -216,14 +199,11 @@ export class EventRequestInterface {
 
 export class EventResponseInterface {
   eventId!: string;
-  eventTitle!: string;
+  eventName!: string;
   description?: string;
   eventCategory?: string;
   eventType!: EventType;
-  startDate!: string;
-  endDate!: string;
-  startTime!: string;
-  endTime!: string;
+  bookingDates!: BookingDateDTO[];
   maxAttendees?: number;
   status!: EventStatus;
   qrCode?: string;
@@ -241,14 +221,11 @@ export class EventResponseInterface {
   constructor(data: Partial<EventResponseInterface>) {
     Object.assign(this, {
       eventId: data.eventId || "",
-      eventTitle: data.eventTitle || "",
+      eventName: data.eventName || "",
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType || EventType.MEETING,
-      startDate: data.startDate || "",
-      endDate: data.endDate || "",
-      startTime: data.startTime || "",
-      endTime: data.endTime || "",
+      bookingDates: data.bookingDates || [],
       maxAttendees: data.maxAttendees,
       status: data.status || EventStatus.REQUESTED,
       qrCode: data.qrCode,
@@ -267,14 +244,11 @@ export class EventResponseInterface {
   static fromEntity(data: EventInterface): EventResponseInterface {
     return new EventResponseInterface({
       eventId: data.eventId,
-      eventTitle: data.eventTitle,
+      eventName: data.eventName,
       description: data.description,
       eventCategory: data.eventCategory,
       eventType: data.eventType,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      startTime: data.startTime,
-      endTime: data.endTime,
+      bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
       qrCode: data.qrCode,

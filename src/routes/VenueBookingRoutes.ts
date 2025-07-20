@@ -12,6 +12,20 @@ router.get(
   VenueBookingController.getBookingsByManagerId
 );
 router.get("/:bookingId", VenueBookingController.getBookingById);
+router.patch("/:bookingId/approve", VenueBookingController.approveBooking);
+router.post("/:bookingId/payments", VenueBookingController.addPaymentToBooking);
+router.get(
+  "/payments/manager/:managerId",
+  VenueBookingController.getPaymentsByManagerId
+);
+router.get(
+  "/:bookingId/payments",
+  VenueBookingController.getPaymentsForBooking
+);
+router.get(
+  "/user/:userId/payments",
+  VenueBookingController.getPaymentsForUserBookings
+);
 // ...other routes can remain commented or be enabled as needed
 
 export default router;

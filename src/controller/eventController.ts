@@ -11,6 +11,8 @@ import { User } from "../models/User";
 import { Organization } from "../models/Organization";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { CacheService } from "../services/CacheService";
+import { BookingValidationService } from "../services/bookings/BookingValidationService";
+import { BookingDateDTO } from "../interfaces/BookingDateInterface";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -24,6 +26,7 @@ export class EventController {
       const {
         eventTitle,
         eventType,
+        dates,
         startDate,
         endDate,
         startTime,
@@ -45,13 +48,78 @@ export class EventController {
         res.status(404).json({ success: false, message: "Venue not found." });
         return;
       }
-      if (!venue.venueId) {
+
+      // Handle both old and new format
+      let bookingDates: BookingDateDTO[] = [];
+
+      if (dates) {
+        // New format with explicit dates array
+        bookingDates = dates;
+      } else if (startDate && endDate) {
+        // Old format with date range
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        // Create array of dates between start and end
+        for (
+          let date = new Date(start);
+          date <= end;
+          date.setDate(date.getDate() + 1)
+        ) {
+          if (venue.bookingType === "HOURLY" && startTime && endTime) {
+            // For hourly bookings, extract hours from time range
+            const startHour = parseInt(startTime.split(":")[0]);
+            const endHour = parseInt(endTime.split(":")[0]);
+            const hours = [];
+            for (let h = startHour; h <= endHour; h++) {
+              hours.push(h);
+            }
+            bookingDates.push({
+              date: date.toISOString().split("T")[0],
+              hours,
+            });
+          } else {
+            // For daily bookings, no hours needed
+            bookingDates.push({
+              date: date.toISOString().split("T")[0],
+            });
+          }
+        }
+      } else {
         res.status(400).json({
           success: false,
-          message: "Venue found but venueId is missing or invalid.",
+          message: "Either dates array or startDate/endDate is required",
         });
         return;
       }
+
+      // Validate dates based on venue booking type
+      try {
+        const { isAvailable, unavailableDates } =
+          await BookingValidationService.validateBookingDates(
+            venue,
+            bookingDates
+          );
+
+        if (!isAvailable) {
+          res.status(400).json({
+            success: false,
+            message: "Some requested dates/hours are not available",
+            unavailableDates,
+          });
+          return;
+        }
+      } catch (error) {
+        res.status(400).json({
+          success: false,
+          message: error instanceof Error ? error.message : "Validation failed",
+        });
+        return;
+      }
+
+      // Get date range for event record
+      const { startDate: firstDate, endDate: lastDate } =
+        BookingValidationService.getDateRange(bookingDates);
 
       // Fetch venueAmount from VenueVariable
       if (!venue.venueVariables || venue.venueVariables.length === 0) {
@@ -61,27 +129,7 @@ export class EventController {
         });
         return;
       }
-      // Use the first VenueVariable (or apply your own selection logic)
       const venueAmount = venue.venueVariables[0].venueAmount;
-
-      // Validate based on booking type
-      if (venue.bookingType === "DAILY") {
-        if (!startDate || !endDate) {
-          res.status(400).json({
-            success: false,
-            message: "Start and end date are required for daily booking.",
-          });
-          return;
-        }
-      } else if (venue.bookingType === "HOURLY") {
-        if (!startDate || !endDate || !startTime || !endTime) {
-          res.status(400).json({
-            success: false,
-            message: "Start/end date and time are required for hourly booking.",
-          });
-          return;
-        }
-      }
 
       // Determine if event is public
       const isPublic = visibilityScope === "PUBLIC";
@@ -121,11 +169,12 @@ export class EventController {
       if (isPublic && req.body.eventStatus === EventStatus.REQUESTED) {
         eventStatus = EventStatus.REQUESTED;
       }
+
       const eventData: any = {
         eventName: eventTitle,
         eventType,
-        startDate,
-        endDate,
+        startDate: firstDate,
+        endDate: lastDate,
         visibilityScope,
         eventStatus,
         publishStatus: "DRAFT",
@@ -134,9 +183,6 @@ export class EventController {
       };
 
       if (isPublic) {
-        // Set all fields for public events
-        eventData.startTime = startTime;
-        eventData.endTime = endTime;
         eventData.eventDescription = description;
         eventData.maxAttendees = req.body.maxAttendees;
         eventData.imageURL = req.body.imageURL;
@@ -146,17 +192,17 @@ export class EventController {
         eventData.specialNotes = req.body.specialNotes;
         eventData.eventPhoto = req.body.eventPhoto;
         eventData.eventOtherType = req.body.eventOtherType;
-        // Add any other fields you want to support
       }
 
       const guestList = isPublic && Array.isArray(guests) ? guests : [];
 
-      // Pass venueAmount to repository
+      // Create event with booking dates
       const result = await EventRepository.createEventWithRelations(
         eventData,
         venue,
         guestList,
-        venueAmount
+        venueAmount,
+        bookingDates
       );
 
       if (!result.success) {

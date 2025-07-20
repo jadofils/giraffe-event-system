@@ -1,5 +1,6 @@
 export enum OrganizationStatusEnum {
   APPROVED = "APPROVED",
   REJECTED = "REJECTED",
-  PENDING = "PENDING"
-} 
+  PENDING = "PENDING",
+  DISABLED = "DISABLED",
+}

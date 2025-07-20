@@ -20,6 +20,7 @@ import {
   Min,
   IsBoolean,
   IsString,
+  IsArray,
 } from "class-validator";
 import { Venue } from "../Venue Tables/Venue";
 import { User } from "../User";
@@ -73,25 +74,12 @@ export class Event {
   })
   eventPhoto?: string;
 
-  @Column({ type: "varchar", length: 10, nullable: true })
-  @IsNotEmpty({ message: "Start date is required" })
-  @Length(10, 10, { message: "Start date must be in YYYY-MM-DD format" })
-  startDate!: string;
-
-  @Column({ type: "varchar", length: 10, nullable: true })
-  @IsNotEmpty({ message: "End date is required" })
-  @Length(10, 10, { message: "End date must be in YYYY-MM-DD format" })
-  endDate!: string;
-
-  @Column({ type: "varchar", length: 8, nullable: true })
-  @IsNotEmpty({ message: "Start time is required" })
-  @IsString({ message: "Start time must be a string" })
-  startTime!: string;
-
-  @Column({ type: "varchar", length: 8, nullable: true })
-  @IsNotEmpty({ message: "End time is required" })
-  @IsString({ message: "End time must be a string" })
-  endTime!: string;
+  @Column({ type: "json" })
+  @IsArray()
+  bookingDates!: {
+    date: string;
+    hours?: number[];
+  }[];
 
   @Column({ type: "int", nullable: true })
   @IsOptional()

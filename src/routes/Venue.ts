@@ -6,6 +6,9 @@ import { authenticate } from "../middlewares/AuthMiddleware";
 import upload from "../middlewares/upload";
 
 const router = Router();
+router.get("/public/:id", VenueController.getPublicVenueDetails);
+router.get("/public/list", VenueController.getPublicVenuesList);
+
 router.post(
   "/add",
   authenticate,

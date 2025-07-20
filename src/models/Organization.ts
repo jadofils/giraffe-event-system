@@ -106,6 +106,16 @@ export class Organization {
   @IsString({ message: "supportingDocument must be a string (URL)" })
   supportingDocument?: string;
 
+  @Column({ nullable: true })
+  @IsOptional()
+  @IsString({ message: "logo must be a string (URL)" })
+  logo?: string;
+
+  @Column({ type: "text", nullable: true })
+  @IsOptional()
+  @IsString({ message: "cancellationReason must be a string" })
+  cancellationReason?: string;
+
   @Column({
     type: "enum",
     enum: OrganizationStatusEnum,
@@ -113,24 +123,15 @@ export class Organization {
   })
   status!: OrganizationStatusEnum;
 
-  // --- Relationships ---
-  // Many-to-Many with User
+  @Column({ type: "boolean", default: true })
+  isEnabled!: boolean;
+
   @ManyToMany(() => User, (user) => user.organizations)
   users!: User[];
 
-  // // Relationship to Events (Organizer)
-  // @OneToMany(() => Event, (event) => event.organization)
-  // events!: Event[];
-
-  // Relationship to Venues (Owned by Organization)
   @OneToMany(() => Venue, (venue) => venue.organization)
   venues!: Venue[];
 
-  // Relationship to VenueBookings
-  // @OneToMany(() => VenueBooking, (booking) => booking.organization)
-  // bookings!: VenueBooking[];
-
-  // Relationship to VenueInvoices
   @OneToMany(() => VenueInvoice, (venueInvoice) => venueInvoice.organization)
   venueInvoices!: VenueInvoice[];
 

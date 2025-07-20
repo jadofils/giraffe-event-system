@@ -16,9 +16,10 @@ import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { VenueRequest } from "../interfaces/VenueInterface";
 import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
-import { In } from "typeorm";
+import { In, Not } from "typeorm";
 import { Organization } from "../models/Organization";
 import { User } from "../models/User";
+import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -40,13 +41,14 @@ export class VenueController {
     const authenticatedReq = req as AuthenticatedRequest;
     const userRoles = authenticatedReq.user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
-    const isVenueManager = userRoles.some(
-      (r: any) => (r.roleName || r) === "VENUE_MANAGER"
-    );
-    if (!isAdmin && !isVenueManager) {
+    // Instead of isVenueManager, check if user has organization and it's approved
+    // const isVenueManager = userRoles.some(
+    //   (r: any) => (r.roleName || r) === "GUEST"
+    // );
+    if (!isAdmin && !authenticatedReq.user?.organizationId) {
       res.status(403).json({
         success: false,
-        message: "Only ADMIN or VENUE_MANAGER can create a venue.",
+        message: "Only ADMIN or users with an organization can create a venue.",
       });
       return;
     }
@@ -57,8 +59,6 @@ export class VenueController {
     let status: VenueStatus;
     if (isAdmin) {
       status = VenueStatus.APPROVED;
-    } else if (isVenueManager) {
-      status = VenueStatus.PENDING;
     } else {
       status = VenueStatus.PENDING;
     }
@@ -119,17 +119,18 @@ export class VenueController {
         .json({ success: false, message: "Organization not found." });
       return;
     }
-    if (organization.status !== "APPROVED") {
-      res.status(403).json({
-        success: false,
-        message: "Only APPROVED organizations can create venues.",
-      });
-      return;
-    }
+    // Move this check up for clarity and early exit
     if (organization.organizationName === "Independent") {
       res.status(403).json({
         success: false,
         message: "The 'Independent' organization cannot create venues.",
+      });
+      return;
+    }
+    if (organization.status !== "APPROVED") {
+      res.status(403).json({
+        success: false,
+        message: "Only APPROVED organizations can create venues.",
       });
       return;
     }
@@ -144,8 +145,8 @@ export class VenueController {
       },
       withDeleted: true,
     });
-    if ((isVenueManager || isAdmin) && existingVenue) {
-      // If rejected, allow update and set to pending (manager) or approved (admin)
+    if ((isAdmin || !!organizationIdFromUser) && existingVenue) {
+      // If rejected, allow update and set to pending (non-admin) or approved (admin)
       if (existingVenue.status === VenueStatus.REJECTED) {
         // Update fields
         existingVenue.capacity = data.capacity;
@@ -482,9 +483,7 @@ export class VenueController {
     const user = authenticatedReq.user;
     const userRoles = user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
-    const isManager = userRoles.some(
-      (r: any) => (r.roleName || r) === "VENUE_MANAGER"
-    );
+    const isManager = userRoles.some((r: any) => (r.roleName || r) === "GUEST");
     const { id } = req.params;
     if (!id) {
       res
@@ -793,8 +792,6 @@ export class VenueController {
         condition.transitionTime = transitionTime;
       if (depositRequiredPercent !== undefined)
         condition.depositRequiredPercent = depositRequiredPercent;
-      if (depositRequiredTime !== undefined)
-        condition.depositRequiredTime = depositRequiredTime;
       if (paymentComplementTimeBeforeEvent !== undefined)
         condition.paymentComplementTimeBeforeEvent =
           paymentComplementTimeBeforeEvent;
@@ -946,28 +943,46 @@ export class VenueController {
       const newManagerId = venueManagerId || managerId;
       if (newManagerId) {
         const userRepo = AppDataSource.getRepository(User);
-        const manager: User | null = await userRepo.findOne({
+
+        // First check if user exists with their organization
+        const manager = await userRepo.findOne({
           where: { userId: newManagerId },
-          relations: ["role"],
+          relations: ["organizations"],
         });
+
         if (!manager) {
-          res
-            .status(404)
-            .json({ success: false, message: "Manager not found" });
-          return;
-        }
-        // Check if user has VENUE_MANAGER role
-        const hasVenueManagerRole =
-          manager.role &&
-          (manager.role.roleName || manager.role) === "VENUE_MANAGER";
-        if (!hasVenueManagerRole) {
-          res.status(400).json({
+          res.status(404).json({
             success: false,
-            message:
-              "User is not a VENUE_MANAGER and cannot be assigned as manager.",
+            message: "Manager not found",
           });
           return;
         }
+
+        // Check if user has any organization
+        if (!manager.organizations || manager.organizations.length === 0) {
+          res.status(400).json({
+            success: false,
+            message:
+              "User must belong to an organization to be assigned as manager.",
+          });
+          return;
+        }
+
+        // Find a non-Independent, approved organization
+        const validOrg = manager.organizations.find(
+          (org) =>
+            org.organizationName !== "Independent" && org.status === "APPROVED"
+        );
+
+        if (!validOrg) {
+          res.status(400).json({
+            success: false,
+            message:
+              "User must have an approved, non-Independent organization to be assigned as manager.",
+          });
+          return;
+        }
+
         venueVariable.manager = manager;
       }
 
@@ -1175,6 +1190,273 @@ export class VenueController {
         success: false,
         message: "Server error",
         error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  /**
+   * Get public venue details including all related information
+   * @route GET /venues/public/:id
+   * @access Public
+   */
+  static async getPublicVenueDetails(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { id } = req.params;
+
+    if (!id || !VenueController.UUID_REGEX.test(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Valid venue ID is required",
+      });
+      return;
+    }
+
+    try {
+      console.log("=== GET PUBLIC VENUE DETAILS DEBUG ===");
+      console.log("Venue ID:", id);
+
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({
+        where: {
+          venueId: id,
+          status: VenueStatus.APPROVED,
+        },
+        relations: [
+          "organization",
+          "availabilitySlots",
+          "venueVariables",
+          "venueVariables.manager",
+          "bookingConditions",
+          "amenities",
+        ],
+      });
+
+      if (!venue) {
+        res.status(404).json({
+          success: false,
+          message: "Venue not found or not available",
+        });
+        return;
+      }
+
+      // Check if organization is approved and enabled
+      if (
+        venue.organization?.status !== OrganizationStatusEnum.APPROVED ||
+        !venue.organization?.isEnabled
+      ) {
+        res.status(403).json({
+          success: false,
+          message: "This venue is currently not available",
+        });
+        return;
+      }
+
+      // Format manager details if available
+      const manager = venue.venueVariables?.[0]?.manager;
+      const managerDetails = manager
+        ? {
+            userId: manager.userId,
+            firstName: manager.firstName,
+            lastName: manager.lastName,
+            email: manager.email,
+            phoneNumber: manager.phoneNumber,
+            profilePictureURL: manager.profilePictureURL,
+          }
+        : null;
+
+      // Structure the response
+      const venueDetails = {
+        venueId: venue.venueId,
+        venueName: venue.venueName,
+        capacity: venue.capacity,
+        venueLocation: venue.venueLocation,
+        latitude: venue.latitude,
+        longitude: venue.longitude,
+        googleMapsLink: venue.googleMapsLink,
+        mainPhotoUrl: venue.mainPhotoUrl,
+        photoGallery: venue.photoGallery,
+        virtualTourUrl: venue.virtualTourUrl,
+        venueDocuments: venue.venueDocuments,
+        status: venue.status,
+        visitPurposeOnly: venue.visitPurposeOnly,
+        bookingType: venue.bookingType,
+
+        // Related information
+        organization: {
+          organizationId: venue.organization?.organizationId,
+          organizationName: venue.organization?.organizationName,
+          contactEmail: venue.organization?.contactEmail,
+          contactPhone: venue.organization?.contactPhone,
+          address: venue.organization?.address,
+        },
+
+        manager: managerDetails,
+
+        availabilitySlots: venue.availabilitySlots?.map((slot) => ({
+          id: slot.id,
+          date: slot.Date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          isAvailable: slot.isAvailable,
+        })),
+
+        bookingConditions: venue.bookingConditions?.map((condition) => ({
+          id: condition.id,
+          descriptionCondition: condition.descriptionCondition,
+          notaBene: condition.notaBene,
+          transitionTime: condition.transitionTime,
+          depositRequiredPercent: condition.depositRequiredPercent,
+          paymentComplementTimeBeforeEvent:
+            condition.paymentComplementTimeBeforeEvent,
+        })),
+
+        amenities: venue.amenities?.map((amenity) => ({
+          id: amenity.id,
+          resourceName: amenity.resourceName,
+          quantity: amenity.quantity,
+          amenitiesDescription: amenity.amenitiesDescription,
+          costPerUnit: amenity.costPerUnit,
+        })),
+      };
+
+      console.log("Venue details retrieved successfully");
+      console.log("=== END GET PUBLIC VENUE DETAILS DEBUG ===");
+
+      res.status(200).json({
+        success: true,
+        data: venueDetails,
+        message: "Venue details retrieved successfully",
+      });
+    } catch (error) {
+      console.error("[VenueController GetPublicVenueDetails Error]:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get all approved venues from approved organizations
+   * @route GET /venues/public/list
+   * @access Public
+   */
+  static async getPublicVenuesList(req: Request, res: Response): Promise<void> {
+    try {
+      console.log("=== GET PUBLIC VENUES LIST DEBUG ===");
+
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venues = await venueRepo.find({
+        where: {
+          status: VenueStatus.APPROVED,
+          organization: {
+            status: OrganizationStatusEnum.APPROVED,
+            isEnabled: true,
+          },
+        },
+        relations: [
+          "organization",
+          "availabilitySlots",
+          "venueVariables",
+          "venueVariables.manager",
+          "bookingConditions",
+          "amenities",
+        ],
+        order: {
+          venueName: "ASC",
+        },
+      });
+
+      console.log(
+        `Found ${venues.length} approved venues from approved and enabled organizations`
+      );
+
+      // Format the response to include only necessary information
+      const formattedVenues = venues.map((venue) => {
+        // Format manager details if available
+        const manager = venue.venueVariables?.[0]?.manager;
+        const managerDetails = manager
+          ? {
+              userId: manager.userId,
+              firstName: manager.firstName,
+              lastName: manager.lastName,
+              email: manager.email,
+              phoneNumber: manager.phoneNumber,
+              profilePictureURL: manager.profilePictureURL,
+            }
+          : null;
+
+        return {
+          venueId: venue.venueId,
+          venueName: venue.venueName,
+          capacity: venue.capacity,
+          venueLocation: venue.venueLocation,
+          latitude: venue.latitude,
+          longitude: venue.longitude,
+          googleMapsLink: venue.googleMapsLink,
+          mainPhotoUrl: venue.mainPhotoUrl,
+          photoGallery: venue.photoGallery,
+          virtualTourUrl: venue.virtualTourUrl,
+          venueDocuments: venue.venueDocuments,
+          status: venue.status,
+          visitPurposeOnly: venue.visitPurposeOnly,
+          bookingType: venue.bookingType,
+
+          organization: {
+            organizationId: venue.organization?.organizationId,
+            organizationName: venue.organization?.organizationName,
+            contactEmail: venue.organization?.contactEmail,
+            contactPhone: venue.organization?.contactPhone,
+            address: venue.organization?.address,
+          },
+
+          manager: managerDetails,
+
+          availabilitySlots: venue.availabilitySlots?.map((slot) => ({
+            id: slot.id,
+            date: slot.Date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            isAvailable: slot.isAvailable,
+          })),
+
+          bookingConditions: venue.bookingConditions?.map((condition) => ({
+            id: condition.id,
+            descriptionCondition: condition.descriptionCondition,
+            notaBene: condition.notaBene,
+            transitionTime: condition.transitionTime,
+            depositRequiredPercent: condition.depositRequiredPercent,
+            paymentComplementTimeBeforeEvent:
+              condition.paymentComplementTimeBeforeEvent,
+          })),
+
+          amenities: venue.amenities?.map((amenity) => ({
+            id: amenity.id,
+            resourceName: amenity.resourceName,
+            quantity: amenity.quantity,
+            amenitiesDescription: amenity.amenitiesDescription,
+            costPerUnit: amenity.costPerUnit,
+          })),
+        };
+      });
+
+      console.log("Venues list retrieved successfully");
+      console.log("=== END GET PUBLIC VENUES LIST DEBUG ===");
+
+      res.status(200).json({
+        success: true,
+        data: formattedVenues,
+        message: "Approved venues list retrieved successfully",
+      });
+    } catch (error) {
+      console.error("[VenueController GetPublicVenuesList Error]:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }

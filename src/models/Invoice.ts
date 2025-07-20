@@ -33,6 +33,11 @@ import { InstallmentPlan } from "./InstallmentPlan";
 import { Venue } from "./Venue Tables/Venue";
 import { VenueBooking } from "./VenueBooking";
 
+export enum PayerType {
+  USER = "USER",
+  ORGANIZATION = "ORGANIZATION",
+}
+
 @Entity("invoices")
 export class Invoice {
   @PrimaryGeneratedColumn("uuid") // <--- CHANGE THIS LINE
@@ -44,10 +49,10 @@ export class Invoice {
   @IsNotEmpty()
   eventId!: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: true })
   @IsUUID()
-  @IsNotEmpty()
-  userId!: string; // User who is responsible for or is the recipient of the invoice
+  @IsOptional()
+  userId?: string; // User who is responsible for or is the recipient of the invoice
 
   @Column({ type: "timestamp" })
   @IsDateString() // Validates if it's a valid date string (e.g., ISO 8601)
@@ -75,6 +80,12 @@ export class Invoice {
   @IsUUID()
   registrationId?: string; // Foreign key to Registration
 
+  @Column("uuid")
+  payerId!: string;
+
+  @Column({ type: "enum", enum: PayerType })
+  payerType!: PayerType;
+
   // Relationships
   @ManyToOne(() => Event, (event) => event.invoices) // Assuming 'invoices' property exists on Event entity
   @JoinColumn({ name: "eventId" })
@@ -96,7 +107,6 @@ export class Invoice {
   @OneToMany(() => Payment, (payment) => payment.invoice)
   payments?: Payment[];
 
-  
   @OneToMany(() => InstallmentPlan, (plan) => plan.invoice)
   installmentPlans!: InstallmentPlan[];
   @OneToOne(() => Registration, (registration) => registration.invoice, {
