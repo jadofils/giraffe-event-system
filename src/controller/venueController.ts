@@ -1332,9 +1332,6 @@ export class VenueController {
     }
 
     try {
-      console.log("=== GET PUBLIC VENUE DETAILS DEBUG ===");
-      console.log("Venue ID:", id);
-
       const venueRepo = AppDataSource.getRepository(Venue);
       const venue = await venueRepo.findOne({
         where: {
@@ -1343,6 +1340,7 @@ export class VenueController {
         },
         relations: [
           "organization",
+          "venueType",
           "availabilitySlots",
           "venueVariables",
           "venueVariables.manager",
@@ -1401,14 +1399,43 @@ export class VenueController {
         visitPurposeOnly: venue.visitPurposeOnly,
         bookingType: venue.bookingType,
 
-        // Related information
-        organization: {
-          organizationId: venue.organization?.organizationId,
-          organizationName: venue.organization?.organizationName,
-          contactEmail: venue.organization?.contactEmail,
-          contactPhone: venue.organization?.contactPhone,
-          address: venue.organization?.address,
-        },
+        // Full organization details (OrganizationInterface)
+        organization: venue.organization
+          ? {
+              organizationId: venue.organization.organizationId,
+              organizationName: venue.organization.organizationName,
+              description: venue.organization.description,
+              contactEmail: venue.organization.contactEmail,
+              contactPhone: venue.organization.contactPhone,
+              address: venue.organization.address,
+              organizationType: venue.organization.organizationType,
+              logo: venue.organization.logo,
+              supportingDocument: venue.organization.supportingDocument,
+              cancellationReason: venue.organization.cancellationReason,
+              status: venue.organization.status,
+              isEnabled: venue.organization.isEnabled,
+              city: venue.organization.city,
+              country: venue.organization.country,
+              postalCode: venue.organization.postalCode,
+              stateProvince: venue.organization.stateProvince,
+              members: venue.organization.members,
+              createdAt: venue.organization.createdAt,
+              updatedAt: venue.organization.updatedAt,
+              deletedAt: venue.organization.deletedAt,
+            }
+          : null,
+
+        // Full venue type details
+        venueType: venue.venueType
+          ? {
+              id: venue.venueType.id,
+              name: venue.venueType.name,
+              description: venue.venueType.description,
+              isActive: venue.venueType.isActive,
+              createdAt: venue.venueType.createdAt,
+              updatedAt: venue.venueType.updatedAt,
+            }
+          : null,
 
         manager: managerDetails,
 
@@ -1439,16 +1466,12 @@ export class VenueController {
         })),
       };
 
-      console.log("Venue details retrieved successfully");
-      console.log("=== END GET PUBLIC VENUE DETAILS DEBUG ===");
-
       res.status(200).json({
         success: true,
         data: venueDetails,
         message: "Venue details retrieved successfully",
       });
     } catch (error) {
-      console.error("[VenueController GetPublicVenueDetails Error]:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -1529,8 +1552,25 @@ export class VenueController {
             contactEmail: venue.organization?.contactEmail,
             contactPhone: venue.organization?.contactPhone,
             address: venue.organization?.address,
+            organizationType: venue.organization?.organizationType,
+            logo: venue.organization?.logo,
+            supportingDocument: venue.organization?.supportingDocument,
+            cancellationReason: venue.organization?.cancellationReason,
+            status: venue.organization?.status,
+            isEnabled: venue.organization?.isEnabled,
           },
-
+          //get all details for the venueType
+ // Full venue type details
+ venueType: venue.venueType
+ ? {
+     id: venue.venueType.id,
+     name: venue.venueType.name,
+     description: venue.venueType.description,
+     isActive: venue.venueType.isActive,
+     createdAt: venue.venueType.createdAt,
+     updatedAt: venue.venueType.updatedAt,
+   }
+ : null,
           manager: managerDetails,
 
           availabilitySlots: venue.availabilitySlots?.map((slot) => ({
