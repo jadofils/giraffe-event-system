@@ -114,7 +114,7 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
     );
 
     // Create reset link
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:5000";
+    const baseUrl = process.env.FRONTEND_URL || "https://venue-and-event-management-front-si.vercel.app/";
     const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
 
     // Log the reset link for debugging

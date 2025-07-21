@@ -423,6 +423,30 @@ export class UserController {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         deletedAt: user.deletedAt,
+        organizations: Array.isArray(user.organizations)
+          ? user.organizations.map(org => ({
+              organizationId: org.organizationId,
+              organizationName: org.organizationName,
+              description: org.description,
+              contactEmail: org.contactEmail,
+              contactPhone: org.contactPhone,
+              address: org.address,
+              organizationType: org.organizationType,
+              logo: org.logo,
+              supportingDocument: org.supportingDocument,
+              cancellationReason: org.cancellationReason,
+              status: org.status,
+              isEnabled: org.isEnabled,
+              city: org.city,
+              country: org.country,
+              postalCode: org.postalCode,
+              stateProvince: org.stateProvince,
+              members: org.members,
+              createdAt: org.createdAt,
+              updatedAt: org.updatedAt,
+              deletedAt: org.deletedAt,
+            }))
+          : [],
         role: user.role
           ? {
               roleId: user.role.roleId,
