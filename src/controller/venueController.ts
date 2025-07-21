@@ -20,6 +20,7 @@ import { In, Not } from "typeorm";
 import { Organization } from "../models/Organization";
 import { User } from "../models/User";
 import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
+import { VenueType } from "../models/Venue Tables/VenueType";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -135,6 +136,30 @@ export class VenueController {
       return;
     }
 
+    // Check if venueType exists and is active
+    if (data.venueTypeId) {
+      const venueTypeRepo = AppDataSource.getRepository(VenueType);
+      const venueType = await venueTypeRepo.findOne({
+        where: { id: data.venueTypeId }
+      });
+      
+      if (!venueType) {
+        res.status(404).json({
+          success: false,
+          message: "Venue type not found"
+        });
+        return;
+      }
+
+      if (!venueType.isActive) {
+        res.status(400).json({
+          success: false,
+          message: "Selected venue type is not active"
+        });
+        return;
+      }
+    }
+
     // Prevent duplication for managers: check for existing venue with same name/location/org
     const venueRepo = AppDataSource.getRepository(Venue);
     const existingVenue = await venueRepo.findOne({
@@ -153,7 +178,9 @@ export class VenueController {
         existingVenue.latitude = data.latitude;
         existingVenue.longitude = data.longitude;
         existingVenue.googleMapsLink = data.googleMapsLink;
-        existingVenue.venueTypeId = data.venueTypeId;
+        if (data.venueTypeId !== undefined) {
+          existingVenue.venueTypeId = data.venueTypeId;
+        }
         existingVenue.mainPhotoUrl = data.mainPhotoUrl;
         existingVenue.photoGallery = data.photoGallery;
         existingVenue.virtualTourUrl = data.virtualTourUrl;
@@ -275,6 +302,7 @@ export class VenueController {
             typeof bookingType === "string"
               ? BookingType[bookingType as keyof typeof BookingType]
               : bookingType,
+          venueTypeId: data.venueTypeId // This should work now
         });
         await queryRunner.manager.save(venue);
 
@@ -312,7 +340,24 @@ export class VenueController {
         }
 
         await queryRunner.commitTransaction();
-        res.status(201).json({ success: true, venueId: venue.venueId });
+        
+        // Fetch complete venue details for response
+        const createdVenue = await venueRepo.findOne({
+          where: { venueId: venue.venueId },
+          relations: [
+            "organization",
+            "venueType",
+            "amenities",
+            "bookingConditions",
+            "venueVariables",
+            "venueVariables.manager"
+          ]
+        });
+
+        res.status(201).json({ 
+          success: true, 
+          data: createdVenue
+        });
       } catch (err) {
         await queryRunner.rollbackTransaction();
         res.status(500).json({
@@ -332,13 +377,79 @@ export class VenueController {
     }
   }
 
-  // GET /venues/:id
+  // Helper method to format venue data
+  private static formatVenueResponse(venue: Venue) {
+    const manager = venue.venueVariables?.[0]?.manager;
+    const amount = venue.venueVariables?.[0]?.venueAmount || 0;
+
+    return {
+      venueId: venue.venueId,
+      venueName: venue.venueName,
+      capacity: venue.capacity,
+      amount: amount,
+      location: venue.venueLocation,
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+      googleMapsLink: venue.googleMapsLink,
+      managerId: manager?.userId,
+      organizationId: venue.organizationId,
+      amenities: venue.amenities?.map(a => ({
+        id: a.id,
+        resourceName: a.resourceName,
+        quantity: a.quantity,
+        amenitiesDescription: a.amenitiesDescription,
+        costPerUnit: a.costPerUnit
+      })),
+      venueType: venue.venueType ? {
+        id: venue.venueType.id,
+        name: venue.venueType.name,
+        description: venue.venueType.description,
+        isActive: venue.venueType.isActive,
+        createdAt: venue.venueType.createdAt,
+        updatedAt: venue.venueType.updatedAt
+      } : null,
+      contactEmail: venue.organization?.contactEmail,
+      contactPhone: venue.organization?.contactPhone,
+      status: venue.status,
+      createdAt: venue.createdAt,
+      updatedAt: venue.updatedAt,
+      deletedAt: venue.deletedAt,
+      cancellationReason: venue.cancellationReason,
+      mainPhotoUrl: venue.mainPhotoUrl,
+      subPhotoUrls: venue.photoGallery,
+      
+      // Additional details not in interface but useful
+      organization: {
+        organizationId: venue.organization?.organizationId,
+        organizationName: venue.organization?.organizationName,
+        contactEmail: venue.organization?.contactEmail,
+        contactPhone: venue.organization?.contactPhone,
+        address: venue.organization?.address,
+        status: venue.organization?.status
+      },
+      bookingConditions: venue.bookingConditions,
+      availabilitySlots: venue.availabilitySlots,
+      venueVariables: venue.venueVariables?.map(vv => ({
+        ...vv,
+        manager: {
+          userId: vv.manager?.userId,
+          firstName: vv.manager?.firstName,
+          lastName: vv.manager?.lastName,
+          email: vv.manager?.email,
+          phoneNumber: vv.manager?.phoneNumber
+        }
+      })),
+      bookingType: venue.bookingType,
+      virtualTourUrl: venue.virtualTourUrl,
+      venueDocuments: venue.venueDocuments
+    };
+  }
+
+  // Update GET methods to use the formatter
   static async getVenueById(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     if (!id) {
-      res
-        .status(400)
-        .json({ success: false, message: "Venue ID is required." });
+      res.status(400).json({ success: false, message: "Venue ID is required." });
       return;
     }
     try {
@@ -346,37 +457,36 @@ export class VenueController {
       const venue = await venueRepo.findOne({
         where: { venueId: id },
         relations: [
+          "organization",
+          "venueType",
           "amenities",
           "availabilitySlots",
           "bookingConditions",
           "venueVariables",
-          "venueVariables.manager",
-        ],
+          "venueVariables.manager"
+        ]
       });
       if (!venue) {
         res.status(404).json({ success: false, message: "Venue not found." });
         return;
       }
-      res.status(200).json({ success: true, data: venue });
+      res.status(200).json({ 
+        success: true, 
+        data: VenueController.formatVenueResponse(venue)
+      });
     } catch (err) {
       res.status(500).json({
         success: false,
         message: "Server error",
-        error: err instanceof Error ? err.message : err,
+        error: err instanceof Error ? err.message : err
       });
     }
   }
 
-  // GET /organizations/:organizationId/venues
-  static async getVenuesByOrganization(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async getVenuesByOrganization(req: Request, res: Response): Promise<void> {
     const { organizationId } = req.params;
     if (!organizationId) {
-      res
-        .status(400)
-        .json({ success: false, message: "Organization ID is required." });
+      res.status(400).json({ success: false, message: "Organization ID is required." });
       return;
     }
     try {
@@ -384,39 +494,41 @@ export class VenueController {
       const venues = await venueRepo.find({
         where: { organizationId },
         relations: [
+          "organization",
+          "venueType",
           "amenities",
           "availabilitySlots",
           "bookingConditions",
           "venueVariables",
-        ],
+          "venueVariables.manager"
+        ]
       });
-      res.status(200).json({ success: true, data: venues });
+      res.status(200).json({ 
+        success: true, 
+        data: venues.map(venue => VenueController.formatVenueResponse(venue))
+      });
     } catch (err) {
       res.status(500).json({
         success: false,
         message: "Server error",
-        error: err instanceof Error ? err.message : err,
+        error: err instanceof Error ? err.message : err
       });
     }
   }
 
-  // GET /managers/:managerId/venues
   static async getVenuesByManager(req: Request, res: Response): Promise<void> {
     const { managerId } = req.params;
     if (!managerId) {
-      res
-        .status(400)
-        .json({ success: false, message: "Manager ID is required." });
+      res.status(400).json({ success: false, message: "Manager ID is required." });
       return;
     }
     try {
-      // Find all VenueVariables for this manager, then get their venues
       const vvRepo = AppDataSource.getRepository(VenueVariable);
       const venueVariables = await vvRepo.find({
         where: { manager: { userId: managerId } },
-        relations: ["venue"],
+        relations: ["venue"]
       });
-      const venueIds = venueVariables.map((vv) => vv.venue.venueId);
+      const venueIds = venueVariables.map(vv => vv.venue.venueId);
       if (!venueIds.length) {
         res.status(200).json({ success: true, data: [] });
         return;
@@ -425,18 +537,24 @@ export class VenueController {
       const venues = await venueRepo.find({
         where: { venueId: In(venueIds) },
         relations: [
+          "organization",
+          "venueType",
           "amenities",
           "availabilitySlots",
           "bookingConditions",
           "venueVariables",
-        ],
+          "venueVariables.manager"
+        ]
       });
-      res.status(200).json({ success: true, data: venues });
+      res.status(200).json({ 
+        success: true, 
+        data: venues.map(venue => VenueController.formatVenueResponse(venue))
+      });
     } catch (err) {
       res.status(500).json({
         success: false,
         message: "Server error",
-        error: err instanceof Error ? err.message : err,
+        error: err instanceof Error ? err.message : err
       });
     }
   }
@@ -1160,36 +1278,36 @@ export class VenueController {
     }
   }
 
-  static async getAllVenuesWithManagers(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+  static async getAllVenuesWithManagers(req: Request, res: Response): Promise<void> {
     const authenticatedReq = req as AuthenticatedRequest;
     const userRoles = authenticatedReq.user?.roles || [];
     const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
     if (!isAdmin) {
-      res
-        .status(403)
-        .json({ success: false, message: "Only ADMIN can list all venues." });
+      res.status(403).json({ success: false, message: "Only ADMIN can list all venues." });
       return;
     }
     try {
       const venueRepo = AppDataSource.getRepository(Venue);
       const venues = await venueRepo.find({
         relations: [
+          "organization",
+          "venueType",
           "amenities",
           "availabilitySlots",
           "bookingConditions",
           "venueVariables",
-          "venueVariables.manager",
-        ],
+          "venueVariables.manager"
+        ]
       });
-      res.status(200).json({ success: true, data: venues });
+      res.status(200).json({ 
+        success: true, 
+        data: venues.map(venue => VenueController.formatVenueResponse(venue))
+      });
     } catch (err) {
       res.status(500).json({
         success: false,
         message: "Server error",
-        error: err instanceof Error ? err.message : err,
+        error: err instanceof Error ? err.message : err
       });
     }
   }

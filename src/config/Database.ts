@@ -2,6 +2,7 @@ import { DataSource } from "typeorm";
 import { Role } from "../models/Role";
 import { User } from "../models/User";
 import { Venue } from "../models/Venue Tables/Venue";
+import { VenueType } from "../models/Venue Tables/VenueType";
 import { TicketType } from "../models/TicketType";
 import { Event } from "../models/Event Tables/Event";
 import { VenueAmenities } from "../models/Venue Tables/VenueAmenities";
@@ -37,6 +38,7 @@ export const AppDataSource = new DataSource({
   entities: [
     User,
     Venue,
+    VenueType,
     TicketType,
     Event,
     VenueAmenities,

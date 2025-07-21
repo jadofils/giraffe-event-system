@@ -7,7 +7,7 @@ import upload from "../middlewares/upload";
 
 const router = Router();
 router.get("/public/:id", VenueController.getPublicVenueDetails);
-router.get("/public/list", VenueController.getPublicVenuesList);
+router.get("/public-venues/list", VenueController.getPublicVenuesList);
 
 router.post(
   "/add",

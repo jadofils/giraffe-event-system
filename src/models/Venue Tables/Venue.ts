@@ -4,8 +4,6 @@ import {
   Column,
   OneToMany,
   ManyToOne,
-  ManyToMany,
-  JoinTable,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -35,6 +33,7 @@ import { VenueVariable } from "./VenueVariable";
 import { VenueAvailabilitySlot } from "./VenueAvailabilitySlot";
 import { VenueReview } from "./VenueReview";
 import { EventVenue } from "../Event Tables/EventVenue";
+import { VenueType } from "./VenueType";
 
 export enum VenueStatus {
   PENDING = "PENDING",
@@ -90,7 +89,11 @@ export class Venue {
   @Column({ type: "uuid" })
   organizationId!: string;
 
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @ManyToOne(() => VenueType, (venueType) => venueType.venues)
+  @JoinColumn({ name: "venueTypeId" })
+  venueType?: VenueType;
+
+  @Column({ type: "uuid", nullable: true })
   venueTypeId?: string;
 
   @Column({ type: "text", nullable: true })
