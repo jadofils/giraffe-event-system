@@ -8,7 +8,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
-  JoinTable,
 } from "typeorm";
 import {
   IsUUID,
@@ -21,6 +20,7 @@ import {
   IsBoolean,
   IsString,
   IsArray,
+  ValidateIf,
 } from "class-validator";
 import { Venue } from "../Venue Tables/Venue";
 import { User } from "../User";
@@ -53,24 +53,18 @@ export class Event {
   @IsEnum(EventType, { message: "Event type must be one of: public, private" })
   eventType!: EventType;
 
-  @Column({ type: "text", nullable: true })
-  @IsOptional()
+  @Column({ type: "text" })
+  @IsNotEmpty({ message: "Event description is required" })
   @Length(0, 5000, {
     message: "Description must be at most $constraint2 characters long",
   })
-  eventOtherType?: string;
+  eventDescription!: string;
 
   @Column({ type: "text", nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
   @Length(0, 5000, {
-    message: "Description must be at most $constraint2 characters long",
-  })
-  eventDescription?: string;
-
-  @Column({ type: "text", nullable: true })
-  @IsOptional()
-  @Length(0, 5000, {
-    message: "Description must be at most $constraint2 characters long",
+    message: "Event photo URL must be at most $constraint2 characters long",
   })
   eventPhoto?: string;
 
@@ -82,20 +76,23 @@ export class Event {
   }[];
 
   @Column({ type: "int", nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
   @IsInt({ message: "Max attendees must be an integer" })
   @Min(1, { message: "Max attendees must be at least 1" })
   maxAttendees?: number;
 
-  @Column({ type: "enum", enum: EventStatus, default: EventStatus.REQUESTED })
+  @Column({ type: "enum", enum: EventStatus, default: EventStatus.DRAFTED })
   @IsEnum(EventStatus, { message: "Invalid event status" })
   eventStatus!: EventStatus;
 
   @Column({ default: false })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsBoolean({ message: "isFeatured must be a boolean" })
   isFeatured!: boolean;
 
   @Column({ nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
   @Length(0, 255, {
     message: "QR Code must be at most $constraint2 characters long",
@@ -103,6 +100,7 @@ export class Event {
   qrCode?: string;
 
   @Column({ nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
   @Length(0, 255, {
     message: "Image URL must be at most $constraint2 characters long",
@@ -126,15 +124,19 @@ export class Event {
   createdByUserId?: string;
 
   @Column({ type: "json", nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
+  @IsOptional()
   socialMediaLinks?: { [key: string]: string };
 
   @Column({ type: "int", nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
-  @IsInt({ message: "Max attendees must be an integer" })
-  @Min(1, { message: "Max attendees must be at least 1" })
+  @IsInt({ message: "Expected guests must be an integer" })
+  @Min(1, { message: "Expected guests must be at least 1" })
   expectedGuests?: number;
 
   @Column({ type: "text", nullable: true })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsOptional()
   @Length(0, 5000, {
     message: "Special notes must be at most $constraint2 characters long",
@@ -142,14 +144,11 @@ export class Event {
   specialNotes?: string;
 
   @Column({ type: "boolean", default: false })
+  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
   @IsBoolean({ message: "isEntryPaid must be a boolean" })
   isEntryPaid!: boolean;
 
-  @Column({ type: "boolean", default: false })
-  @IsBoolean({ message: "isPublic must be a boolean" })
-  isPublic!: boolean;
-
-  @Column({ type: "enum", enum: ["PUBLIC", "PRIVATE"] })
+  @Column({ type: "enum", enum: ["PUBLIC", "PRIVATE"], default: "PRIVATE" })
   @IsEnum(["PUBLIC", "PRIVATE"], {
     message: "Visibility scope must be one of: PUBLIC, PRIVATE",
   })

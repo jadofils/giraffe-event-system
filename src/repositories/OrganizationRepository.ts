@@ -790,7 +790,6 @@ export class OrganizationRepository {
             longitude: venue.longitude,
             googleMapsLink: venue.googleMapsLink,
             virtualTourUrl: venue.virtualTourUrl,
-            venueTypeId: venue.venueTypeId,
             venueDocuments: venue.venueDocuments,
             status: venue.status,
             visitPurposeOnly: venue.visitPurposeOnly,

@@ -19,7 +19,7 @@ import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./VenueRoutes";
 import VenueBookingRoutes from "./VenueBookingRoutes";
 import { Registration } from "../models/Registration";
-import venueTypeRoutes from "./VenueTypeRoutes";
+
 // import RegistrationRoutes from "./RegistrationRoutes";
 const router = Router();
 router.use(
@@ -53,8 +53,6 @@ router.use("/installments", InstallmentPlanRoutes);
 
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes);
-
-router.use("/venue-types", venueTypeRoutes);
 
 const swaggerDocument = YAML.load(
   path.join(__dirname, "../config/Swagger.yaml")

@@ -37,13 +37,13 @@ export class VenueRepository {
     const venue = new Venue();
     Object.assign(venue, {
       venueName: data.venueName,
+      description: data.description,
       capacity: data.capacity,
       venueLocation: data.venueLocation,
       latitude: data.latitude,
       longitude: data.longitude,
       googleMapsLink: data.googleMapsLink,
       organizationId: data.organizationId,
-      venueTypeId: data.venueTypeId,
       mainPhotoUrl: data.mainPhotoUrl,
       photoGallery: data.photoGallery,
       virtualTourUrl: data.virtualTourUrl,

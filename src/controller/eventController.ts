@@ -27,16 +27,38 @@ export class EventController {
         eventTitle,
         eventType,
         dates,
-        startDate,
-        endDate,
-        startTime,
-        endTime,
         description,
         guests,
         venueId,
         visibilityScope,
         eventOrganizerId,
+        // Public event fields
+        maxAttendees,
+        imageURL,
+        socialMediaLinks,
+        isEntryPaid,
+        expectedGuests,
+        specialNotes,
+        eventPhoto,
       } = req.body;
+
+      // Basic validation for required fields
+      if (!eventTitle || !eventType || !venueId || !eventOrganizerId || !dates || !description) {
+        res.status(400).json({
+          success: false,
+          message: "Missing required fields: eventTitle, eventType, venueId, eventOrganizerId, dates, description",
+        });
+        return;
+      }
+
+      // Validate dates array
+      if (!Array.isArray(dates) || dates.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: "dates must be a non-empty array of dates",
+        });
+        return;
+      }
 
       // Fetch venue WITH venueVariables
       const venueRepo = AppDataSource.getRepository(Venue);
@@ -49,49 +71,11 @@ export class EventController {
         return;
       }
 
-      // Handle both old and new format
-      let bookingDates: BookingDateDTO[] = [];
-
-      if (dates) {
-        // New format with explicit dates array
-        bookingDates = dates;
-      } else if (startDate && endDate) {
-        // Old format with date range
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-
-        // Create array of dates between start and end
-        for (
-          let date = new Date(start);
-          date <= end;
-          date.setDate(date.getDate() + 1)
-        ) {
-          if (venue.bookingType === "HOURLY" && startTime && endTime) {
-            // For hourly bookings, extract hours from time range
-            const startHour = parseInt(startTime.split(":")[0]);
-            const endHour = parseInt(endTime.split(":")[0]);
-            const hours = [];
-            for (let h = startHour; h <= endHour; h++) {
-              hours.push(h);
-            }
-            bookingDates.push({
-              date: date.toISOString().split("T")[0],
-              hours,
-            });
-          } else {
-            // For daily bookings, no hours needed
-            bookingDates.push({
-              date: date.toISOString().split("T")[0],
-            });
-          }
-        }
-      } else {
-        res.status(400).json({
-          success: false,
-          message: "Either dates array or startDate/endDate is required",
-        });
-        return;
-      }
+      // Convert dates to BookingDateDTO format
+      const bookingDates = dates.map((date: string) => ({
+        date,
+        hours: venue.bookingType === "HOURLY" ? [9, 10, 11, 12, 13, 14, 15, 16, 17] : undefined, // Default business hours for hourly bookings
+      }));
 
       // Validate dates based on venue booking type
       try {
@@ -113,30 +97,6 @@ export class EventController {
         res.status(400).json({
           success: false,
           message: error instanceof Error ? error.message : "Validation failed",
-        });
-        return;
-      }
-
-      // Get date range for event record
-      const { startDate: firstDate, endDate: lastDate } =
-        BookingValidationService.getDateRange(bookingDates);
-
-      // Fetch venueAmount from VenueVariable
-      if (!venue.venueVariables || venue.venueVariables.length === 0) {
-        res.status(400).json({
-          success: false,
-          message: "No venue variable (amount) found for this venue.",
-        });
-        return;
-      }
-      const venueAmount = venue.venueVariables[0].venueAmount;
-
-      // Determine if event is public
-      const isPublic = visibilityScope === "PUBLIC";
-      if (isPublic && !description) {
-        res.status(400).json({
-          success: false,
-          message: "Description is required for public events.",
         });
         return;
       }
@@ -165,43 +125,37 @@ export class EventController {
       }
 
       // Set event statuses and fields
-      let eventStatus = EventStatus.DRAFTED;
-      if (isPublic && req.body.eventStatus === EventStatus.REQUESTED) {
-        eventStatus = EventStatus.REQUESTED;
-      }
-
       const eventData: any = {
         eventName: eventTitle,
         eventType,
-        startDate: firstDate,
-        endDate: lastDate,
+        eventDescription: description,
         visibilityScope,
-        eventStatus,
+        eventStatus: EventStatus.DRAFTED,
         publishStatus: "DRAFT",
         eventOrganizerId,
         eventOrganizerType,
+        bookingDates,
       };
 
-      if (isPublic) {
-        eventData.eventDescription = description;
-        eventData.maxAttendees = req.body.maxAttendees;
-        eventData.imageURL = req.body.imageURL;
-        eventData.socialMediaLinks = req.body.socialMediaLinks;
-        eventData.isEntryPaid = req.body.isEntryPaid;
-        eventData.expectedGuests = req.body.expectedGuests;
-        eventData.specialNotes = req.body.specialNotes;
-        eventData.eventPhoto = req.body.eventPhoto;
-        eventData.eventOtherType = req.body.eventOtherType;
+      // Add fields based on visibility scope
+      if (visibilityScope === "PUBLIC") {
+        Object.assign(eventData, {
+          maxAttendees,
+          imageURL,
+          socialMediaLinks,
+          isEntryPaid,
+          expectedGuests,
+          specialNotes,
+          eventPhoto,
+        });
       }
-
-      const guestList = isPublic && Array.isArray(guests) ? guests : [];
 
       // Create event with booking dates
       const result = await EventRepository.createEventWithRelations(
         eventData,
         venue,
-        guestList,
-        venueAmount,
+        visibilityScope === "PUBLIC" && Array.isArray(guests) ? guests : [],
+        venue.venueVariables[0].venueAmount,
         bookingDates
       );
 

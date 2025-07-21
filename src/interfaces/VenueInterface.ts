@@ -22,6 +22,7 @@ export interface VenueAmenityRequest {
 
 export interface VenueRequest {
   venueName: string;
+  description?: string;
   capacity: number;
   venueLocation: string;
   latitude?: number;
@@ -29,7 +30,6 @@ export interface VenueRequest {
   googleMapsLink?: string;
   organizationId: string;
   venueAmenitiesId?: string;
-  venueTypeId?: string;
   mainPhotoUrl?: string;
   photoGallery?: string[];
   virtualTourUrl?: string;
@@ -46,6 +46,7 @@ export interface VenueRequest {
 export class VenueInterface {
   venueId!: string;
   venueName!: string;
+  description?: string;
   capacity!: number;
   amount!: number;
   location!: string;
@@ -55,7 +56,6 @@ export class VenueInterface {
   managerId?: string;
   organizationId?: string;
   amenities?: string;
-  venueType?: string;
   contactPerson?: string;
   contactEmail?: string;
   contactPhone?: string;
@@ -72,6 +72,7 @@ export class VenueInterface {
     Object.assign(this, {
       venueId: data.venueId || "",
       venueName: data.venueName || "",
+      description: data.description,
       organizationId: data.organizationId || "",
       capacity: data.capacity || 0,
       location: data.location || "",
@@ -84,7 +85,6 @@ export class VenueInterface {
       updatedAt: data.updatedAt || new Date(),
       deletedAt: data.deletedAt,
       amenities: data.amenities,
-      venueType: data.venueType,
       contactPerson: data.contactPerson,
       contactEmail: data.contactEmail,
       contactPhone: data.contactPhone,

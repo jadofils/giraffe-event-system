@@ -33,7 +33,6 @@ import { VenueVariable } from "./VenueVariable";
 import { VenueAvailabilitySlot } from "./VenueAvailabilitySlot";
 import { VenueReview } from "./VenueReview";
 import { EventVenue } from "../Event Tables/EventVenue";
-import { VenueType } from "./VenueType";
 
 export enum VenueStatus {
   PENDING = "PENDING",
@@ -62,6 +61,10 @@ export class Venue {
   })
   venueName!: string;
 
+  @Column({ type: "text", nullable: true })
+  @IsOptional()
+  description?: string;
+
   @Column()
   @IsNumber({}, { message: "capacity must be a number" })
   @IsPositive({ message: "capacity must be a positive number" })
@@ -88,13 +91,6 @@ export class Venue {
 
   @Column({ type: "uuid" })
   organizationId!: string;
-
-  @ManyToOne(() => VenueType, (venueType) => venueType.venues)
-  @JoinColumn({ name: "venueTypeId" })
-  venueType?: VenueType;
-
-  @Column({ type: "uuid", nullable: true })
-  venueTypeId?: string;
 
   @Column({ type: "text", nullable: true })
   mainPhotoUrl?: string;
