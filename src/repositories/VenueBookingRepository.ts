@@ -3,6 +3,10 @@ import { AppDataSource } from "../config/Database";
 import { In } from "typeorm";
 import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { CacheService } from "../services/CacheService";
+import {
+  VenueAvailabilitySlot,
+  SlotStatus,
+} from "../models/Venue Tables/VenueAvailabilitySlot";
 
 export class VenueBookingRepository {
   static async getAllBookings() {
@@ -246,26 +250,28 @@ export class VenueBookingRepository {
           d <= endDate;
           d.setDate(d.getDate() + 1)
         ) {
-          slotsToCreate.push({
+          const slot = await slotRepo.create({
             venueId: venue.venueId,
             Date: new Date(d),
-            startTime: null,
-            endTime: null,
-            isAvailable: false,
+            status: SlotStatus.BOOKED,
+            eventId: booking.eventId,
+            notes: `Booked for event ${booking.eventId}`,
           });
+          slotsToCreate.push(slot);
         }
         // Add transition time slots after last date if specified
         if (transitionTime > 0) {
           let transitionDate = new Date(endDate);
           for (let i = 1; i <= transitionTime; i++) {
             transitionDate.setDate(transitionDate.getDate() + 1);
-            slotsToCreate.push({
+            const slot = await slotRepo.create({
               venueId: venue.venueId,
               Date: new Date(transitionDate),
-              startTime: null,
-              endTime: null,
-              isAvailable: false,
+              status: SlotStatus.BOOKED,
+              eventId: booking.eventId,
+              notes: `Booked for event ${booking.eventId}`,
             });
+            slotsToCreate.push(slot);
           }
         }
       } else if (venue.bookingType === "HOURLY") {
@@ -274,7 +280,7 @@ export class VenueBookingRepository {
           d <= endDate;
           d.setDate(d.getDate() + 1)
         ) {
-          slotsToCreate.push({
+          const slot = await slotRepo.create({
             venueId: venue.venueId,
             Date: new Date(d),
             startTime: booking.startTime
@@ -283,8 +289,11 @@ export class VenueBookingRepository {
             endTime: booking.endTime
               ? new Date(`1970-01-01T${booking.endTime}`)
               : null,
-            isAvailable: false,
+            status: SlotStatus.BOOKED,
+            eventId: booking.eventId,
+            notes: `Booked for event ${booking.eventId}`,
           });
+          slotsToCreate.push(slot);
           // Add transition time between each day's slot if specified
           if (transitionTime > 0) {
             // For hourly, transition time could be added as a gap after endTime

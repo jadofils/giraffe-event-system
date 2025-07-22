@@ -13,6 +13,10 @@ import { VenueVariable } from "../models/Venue Tables/VenueVariable";
 import { CacheService } from "../services/CacheService";
 import { BookingValidationService } from "../services/bookings/BookingValidationService";
 import { BookingDateDTO } from "../interfaces/BookingDateInterface";
+import { In } from "typeorm";
+import { VenueBooking } from "../models/VenueBooking";
+import { BookingCondition } from "../models/Venue Tables/BookingCondition";
+import { Event } from "../models/Event Tables/Event";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -29,7 +33,8 @@ export class EventController {
         dates,
         description,
         guests,
-        venueId,
+        venues,
+        venueId, // Support both venues and venueId
         visibilityScope,
         eventOrganizerId,
         // Public event fields
@@ -40,65 +45,166 @@ export class EventController {
         expectedGuests,
         specialNotes,
         eventPhoto,
+        ignoreTransitionWarnings = false, // New parameter to allow proceeding despite warnings
       } = req.body;
 
+      // Handle both venues and venueId fields
+      const venueIds = venues || venueId;
+      const venueIdsArray = Array.isArray(venueIds) ? venueIds : [venueIds];
+
       // Basic validation for required fields
-      if (!eventTitle || !eventType || !venueId || !eventOrganizerId || !dates || !description) {
+      if (
+        !eventTitle ||
+        !eventType ||
+        !venueIdsArray ||
+        venueIdsArray.length === 0 ||
+        !eventOrganizerId ||
+        !dates ||
+        !description
+      ) {
         res.status(400).json({
           success: false,
-          message: "Missing required fields: eventTitle, eventType, venueId, eventOrganizerId, dates, description",
+          message:
+            "Missing required fields: eventTitle, eventType, venues/venueId (array or single), eventOrganizerId, dates, description",
         });
         return;
       }
 
-      // Validate dates array
-      if (!Array.isArray(dates) || dates.length === 0) {
-        res.status(400).json({
-          success: false,
-          message: "dates must be a non-empty array of dates",
-        });
-        return;
-      }
-
-      // Fetch venue WITH venueVariables
+      // Fetch all venues WITH venueVariables and bookingConditions
       const venueRepo = AppDataSource.getRepository(Venue);
-      const venue = await venueRepo.findOne({
-        where: { venueId },
-        relations: ["venueVariables"],
+      const selectedVenues = await venueRepo.find({
+        where: { venueId: In(venueIdsArray) },
+        relations: ["venueVariables", "bookingConditions"],
       });
-      if (!venue) {
-        res.status(404).json({ success: false, message: "Venue not found." });
+
+      if (selectedVenues.length !== venueIdsArray.length) {
+        res
+          .status(404)
+          .json({ success: false, message: "One or more venues not found." });
         return;
       }
 
-      // Convert dates to BookingDateDTO format
-      const bookingDates = dates.map((date: string) => ({
-        date,
-        hours: venue.bookingType === "HOURLY" ? [9, 10, 11, 12, 13, 14, 15, 16, 17] : undefined, // Default business hours for hourly bookings
-      }));
+      // Check if all venues belong to the same organization
+      const organizationId = selectedVenues[0].organizationId;
+      const allSameOrg = selectedVenues.every(
+        (venue) => venue.organizationId === organizationId
+      );
 
-      // Validate dates based on venue booking type
-      try {
-        const { isAvailable, unavailableDates } =
-          await BookingValidationService.validateBookingDates(
-            venue,
-            bookingDates
-          );
+      if (!allSameOrg) {
+        res.status(400).json({
+          success: false,
+          message: "All venues must belong to the same organization",
+        });
+        return;
+      }
 
-        if (!isAvailable) {
+      // Convert dates to BookingDateDTO format based on venue booking types
+      let bookingDates: BookingDateDTO[];
+      const hasHourlyVenue = selectedVenues.some(
+        (v) => v.bookingType === "HOURLY"
+      );
+
+      if (hasHourlyVenue) {
+        // If any venue is hourly, require hours for all dates
+        if (
+          !Array.isArray(dates) ||
+          !dates.every((d) => d.date && Array.isArray(d.hours))
+        ) {
           res.status(400).json({
             success: false,
-            message: "Some requested dates/hours are not available",
-            unavailableDates,
+            message:
+              "When booking hourly venues, each date must include hours array",
           });
           return;
         }
-      } catch (error) {
-        res.status(400).json({
-          success: false,
-          message: error instanceof Error ? error.message : "Validation failed",
-        });
-        return;
+        bookingDates = dates;
+      } else {
+        // For daily bookings, accept simple date strings
+        if (
+          !Array.isArray(dates) ||
+          !dates.every(
+            (d) => typeof d === "string" || typeof d.date === "string"
+          )
+        ) {
+          res.status(400).json({
+            success: false,
+            message:
+              "For daily bookings, dates should be an array of date strings",
+          });
+          return;
+        }
+        bookingDates = dates.map((d) => ({
+          date: typeof d === "string" ? d : d.date,
+        }));
+      }
+
+      // Track transition time warnings
+      const transitionWarnings: {
+        venueId: string;
+        venueName: string;
+        warnings: Array<{
+          date: string;
+          message: string;
+          alternatives?: Array<{
+            date: string;
+            hours?: number[];
+            type: "TRANSITION" | "EVENT";
+          }>;
+        }>;
+      }[] = [];
+
+      // Validate dates for each venue
+      for (const venue of selectedVenues) {
+        try {
+          const validation =
+            await BookingValidationService.validateBookingDates(
+              venue,
+              bookingDates
+            );
+
+          if (!validation.isAvailable) {
+            // If there are only transition warnings and user wants to proceed, continue
+            const hasOnlyTransitionWarnings = validation.unavailableDates.every(
+              (d) => d.warningType === "WARNING"
+            );
+
+            if (hasOnlyTransitionWarnings && ignoreTransitionWarnings) {
+              // Collect warnings for response
+              transitionWarnings.push({
+                venueId: venue.venueId,
+                venueName: venue.venueName,
+                warnings: validation.unavailableDates.map((d) => ({
+                  date: d.date,
+                  message: d.reason,
+                })),
+              });
+            } else {
+              // If there are error-level unavailabilities or user hasn't acknowledged warnings
+              res.status(400).json({
+                success: false,
+                message: `Venue ${venue.venueName} has unavailable dates`,
+                unavailableDates: validation.unavailableDates,
+                venueId: venue.venueId,
+                hasTransitionWarnings: validation.hasTransitionTimeWarnings,
+                transitionWarnings: validation.unavailableDates
+                  .filter((d) => d.warningType === "WARNING")
+                  .map((d) => ({
+                    date: d.date,
+                    message: d.reason,
+                  })),
+              });
+              return;
+            }
+          }
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            message:
+              error instanceof Error ? error.message : "Validation failed",
+            venueId: venue.venueId,
+          });
+          return;
+        }
       }
 
       // Determine eventOrganizerType
@@ -134,7 +240,6 @@ export class EventController {
         publishStatus: "DRAFT",
         eventOrganizerId,
         eventOrganizerType,
-        bookingDates,
       };
 
       // Add fields based on visibility scope
@@ -150,12 +255,11 @@ export class EventController {
         });
       }
 
-      // Create event with booking dates
+      // Create events with booking dates for each venue
       const result = await EventRepository.createEventWithRelations(
         eventData,
-        venue,
+        selectedVenues,
         visibilityScope === "PUBLIC" && Array.isArray(guests) ? guests : [],
-        venue.venueVariables[0].venueAmount,
         bookingDates
       );
 
@@ -164,10 +268,10 @@ export class EventController {
         return;
       }
 
-      // Invalidate cache for all managers of this venue
+      // Invalidate cache for all managers of these venues
       const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
       const venueVariables = await venueVariableRepo.find({
-        where: { venue: { venueId: venue.venueId } },
+        where: { venue: { venueId: In(venueIdsArray) } },
         relations: ["manager"],
       });
       for (const vv of venueVariables) {
@@ -181,7 +285,9 @@ export class EventController {
       res.status(201).json({
         success: true,
         data: result.data,
-        message: "Event created successfully.",
+        message: `Successfully created ${result.data?.length || 0} event(s)`,
+        transitionWarnings:
+          transitionWarnings.length > 0 ? transitionWarnings : undefined,
       });
       return;
     } catch (error) {
@@ -213,13 +319,14 @@ export class EventController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { id } = req.params;
-      const result = await EventRepository.getEventByIdWithRelations(id);
-      if (!result.success) {
-        res.status(404).json({ success: false, message: result.message });
+      const event = await EventRepository.getEventByIdWithRelations(
+        req.params.id
+      );
+      if (!event.success) {
+        res.status(404).json({ success: false, message: event.message });
         return;
       }
-      res.status(200).json({ success: true, data: result.data });
+      res.status(200).json({ success: true, data: event.data });
       return;
     } catch (error) {
       next(error);
@@ -233,10 +340,8 @@ export class EventController {
   ): Promise<void> {
     try {
       const { id } = req.params;
-      // Optionally: validate all required fields for public events here
       const updateResult = await EventRepository.updateEventStatus(id, {
         eventStatus: EventStatus.REQUESTED,
-        // publishStatus remains DRAFT
       });
       if (!updateResult.success) {
         res.status(400).json({ success: false, message: updateResult.message });
@@ -677,4 +782,502 @@ export class EventController {
   //     ...event,
   //     venues: sanitizedVenues,
   //   };
+  // }
+
+  static async getGroupPaymentDetails(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { groupId } = req.params;
+
+      // Get all events in the group
+      const eventRepo = AppDataSource.getRepository(Event);
+      const events = await eventRepo.find({
+        where: { groupId },
+        relations: [
+          "venueBookings",
+          "venueBookings.venue",
+          "venueBookings.venue.bookingConditions",
+          "venueBookings.venue.venueVariables",
+        ],
+      });
+
+      if (!events || events.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: "No events found for this group",
+        });
+        return;
+      }
+
+      // Get payer details from the first event (all events in group share same payer)
+      let payerDetails = null;
+      if (events[0].eventOrganizerType === "USER") {
+        const userRepo = AppDataSource.getRepository(User);
+        const user = await userRepo.findOne({
+          where: { userId: events[0].eventOrganizerId },
+        });
+        if (user) {
+          payerDetails = {
+            payerId: user.userId,
+            payerType: "USER",
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+          };
+        }
+      } else if (events[0].eventOrganizerType === "ORGANIZATION") {
+        const orgRepo = AppDataSource.getRepository(Organization);
+        const organization = await orgRepo.findOne({
+          where: { organizationId: events[0].eventOrganizerId },
+        });
+        if (organization) {
+          payerDetails = {
+            payerId: organization.organizationId,
+            payerType: "ORGANIZATION",
+            organizationName: organization.organizationName,
+            contactEmail: organization.contactEmail,
+            contactPhone: organization.contactPhone,
+            address: organization.address,
+          };
+        }
+      }
+
+      // Calculate totals and prepare booking details
+      let totalAmount = 0;
+      let totalDepositRequired = 0;
+      const bookingDetails = [];
+
+      for (const event of events) {
+        for (const booking of event.venueBookings) {
+          const venue = booking.venue;
+          const bookingCondition = venue.bookingConditions[0];
+          const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+          const depositAmount = bookingCondition?.depositRequiredPercent
+            ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
+            : venueAmount;
+
+          totalAmount += venueAmount;
+          totalDepositRequired += depositAmount;
+
+          // Get earliest booking date for this booking
+          const earliestDate = new Date(
+            Math.min(
+              ...booking.bookingDates.map((d) => new Date(d.date).getTime())
+            )
+          );
+          const paymentDeadline =
+            bookingCondition?.paymentComplementTimeBeforeEvent
+              ? new Date(
+                  earliestDate.getTime() -
+                    bookingCondition.paymentComplementTimeBeforeEvent *
+                      24 *
+                      60 *
+                      60 *
+                      1000
+                )
+              : earliestDate;
+
+          bookingDetails.push({
+            bookingId: booking.bookingId,
+            eventId: event.eventId,
+            eventName: event.eventName,
+            venue: {
+              venueId: venue.venueId,
+              venueName: venue.venueName,
+              totalAmount: venueAmount,
+              depositRequired: {
+                percentage: bookingCondition?.depositRequiredPercent || 100,
+                amount: depositAmount,
+                description: "Initial deposit required to secure the booking",
+              },
+              paymentCompletionRequired: {
+                daysBeforeEvent:
+                  bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+                amount: venueAmount - depositAmount,
+                deadline: paymentDeadline,
+                description: `Remaining payment must be completed ${
+                  bookingCondition?.paymentComplementTimeBeforeEvent || 0
+                } days before the event`,
+              },
+              bookingDates: booking.bookingDates,
+              bookingConditions: {
+                depositRequiredPercent:
+                  bookingCondition?.depositRequiredPercent || 100,
+                paymentComplementTimeBeforeEvent:
+                  bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+                description: bookingCondition?.descriptionCondition,
+                notaBene: bookingCondition?.notaBene,
+                transitionTime: bookingCondition?.transitionTime,
+              },
+            },
+            paymentSummary: {
+              totalAmount: venueAmount,
+              depositAmount: depositAmount,
+              remainingAmount: venueAmount - depositAmount,
+              bookingStatus: booking.bookingStatus,
+              isPaid: booking.isPaid,
+            },
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          groupId,
+          payer: payerDetails,
+          bookings: bookingDetails,
+          groupTotals: {
+            totalAmount,
+            totalDepositRequired,
+            totalRemainingAmount: totalAmount - totalDepositRequired,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getBookingPaymentDetails(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+
+      // Get booking with all necessary relations
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: [
+          "venue",
+          "venue.bookingConditions",
+          "venue.venueVariables",
+          "event",
+        ],
+      });
+
+      if (!booking) {
+        res.status(404).json({
+          success: false,
+          message: "Booking not found",
+        });
+        return;
+      }
+
+      // If booking is part of a group, redirect to group payment details
+      if (booking?.event?.groupId) {
+        res.redirect(
+          `/api/v1/event/group/${booking.event.groupId}/payment-details`
+        );
+        return;
+      }
+
+      // Fetch event to determine payer type
+      const eventRepo = AppDataSource.getRepository(Event);
+      const eventData = await eventRepo.findOne({
+        where: { eventId: booking.eventId },
+      });
+
+      // Get payer details based on event organizer type
+      let payerDetails = null;
+      if (eventData) {
+        if (eventData.eventOrganizerType === "USER") {
+          const userRepo = AppDataSource.getRepository(User);
+          const user = await userRepo.findOne({
+            where: { userId: eventData.eventOrganizerId },
+          });
+          if (user) {
+            payerDetails = {
+              payerId: user.userId,
+              payerType: "USER",
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+            };
+          }
+        } else if (eventData.eventOrganizerType === "ORGANIZATION") {
+          const orgRepo = AppDataSource.getRepository(Organization);
+          const organization = await orgRepo.findOne({
+            where: { organizationId: eventData.eventOrganizerId },
+          });
+          if (organization) {
+            payerDetails = {
+              payerId: organization.organizationId,
+              payerType: "ORGANIZATION",
+              organizationName: organization.organizationName,
+              contactEmail: organization.contactEmail,
+              contactPhone: organization.contactPhone,
+              address: organization.address,
+            };
+          }
+        }
+      }
+
+      const venue = booking.venue;
+      const bookingCondition = venue.bookingConditions[0]; // Get first booking condition
+      const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+
+      // Calculate required deposit
+      const depositAmount = bookingCondition?.depositRequiredPercent
+        ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
+        : venueAmount;
+
+      // Get earliest booking date to calculate payment deadline
+      const earliestDate = new Date(
+        Math.min(...booking.bookingDates.map((d) => new Date(d.date).getTime()))
+      );
+      const paymentDeadline = bookingCondition?.paymentComplementTimeBeforeEvent
+        ? new Date(
+            earliestDate.getTime() -
+              bookingCondition.paymentComplementTimeBeforeEvent *
+                24 *
+                60 *
+                60 *
+                1000
+          )
+        : earliestDate;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          bookingId: booking.bookingId,
+          eventId: eventData?.eventId,
+          eventName: eventData?.eventName,
+          eventType: eventData?.eventType,
+          eventStatus: eventData?.eventStatus,
+          payer: payerDetails,
+          venue: {
+            venueId: venue.venueId,
+            venueName: venue.venueName,
+            totalAmount: venueAmount,
+            depositRequired: {
+              percentage: bookingCondition?.depositRequiredPercent || 100,
+              amount: depositAmount,
+              description: "Initial deposit required to secure the booking",
+            },
+            paymentCompletionRequired: {
+              daysBeforeEvent:
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+              amount: venueAmount - depositAmount,
+              deadline: paymentDeadline,
+              description: `Remaining payment must be completed ${
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0
+              } days before the event`,
+            },
+            bookingDates: booking.bookingDates,
+            bookingConditions: {
+              depositRequiredPercent:
+                bookingCondition?.depositRequiredPercent || 100,
+              paymentComplementTimeBeforeEvent:
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+              description: bookingCondition?.descriptionCondition,
+              notaBene: bookingCondition?.notaBene,
+              transitionTime: bookingCondition?.transitionTime,
+            },
+          },
+          paymentSummary: {
+            totalAmount: venueAmount,
+            depositAmount: depositAmount,
+            remainingAmount: venueAmount - depositAmount,
+            bookingStatus: booking.bookingStatus,
+            isPaid: booking.isPaid,
+            paymentHistory: [], // You can add payment history here if needed
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getPaymentDetailsForSelectedBookings(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { bookingIds } = req.body;
+
+      if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: "Please provide an array of booking IDs",
+        });
+        return;
+      }
+
+      // Get all bookings with their relations
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const bookings = await bookingRepo.find({
+        where: { bookingId: In(bookingIds) },
+        relations: [
+          "venue",
+          "venue.bookingConditions",
+          "venue.venueVariables",
+          "event",
+        ],
+      });
+
+      if (bookings.length !== bookingIds.length) {
+        res.status(400).json({
+          success: false,
+          message: "One or more booking IDs are invalid",
+        });
+        return;
+      }
+
+      // Get payer details from the first booking's event
+      const event = bookings[0].event;
+      let payerDetails = null;
+
+      if (event) {
+        if (event.eventOrganizerType === "USER") {
+          const userRepo = AppDataSource.getRepository(User);
+          const user = await userRepo.findOne({
+            where: { userId: event.eventOrganizerId },
+          });
+          if (user) {
+            payerDetails = {
+              payerId: user.userId,
+              payerType: "USER",
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+            };
+          }
+        } else if (event.eventOrganizerType === "ORGANIZATION") {
+          const orgRepo = AppDataSource.getRepository(Organization);
+          const organization = await orgRepo.findOne({
+            where: { organizationId: event.eventOrganizerId },
+          });
+          if (organization) {
+            payerDetails = {
+              payerId: organization.organizationId,
+              payerType: "ORGANIZATION",
+              organizationName: organization.organizationName,
+              contactEmail: organization.contactEmail,
+              contactPhone: organization.contactPhone,
+              address: organization.address,
+            };
+          }
+        }
+      }
+
+      // Calculate totals and prepare booking details
+      let totalAmount = 0;
+      let totalDepositRequired = 0;
+      const bookingDetails = [];
+
+      for (const booking of bookings) {
+        const venue = booking.venue;
+        const bookingCondition = venue.bookingConditions[0];
+        const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+        const depositAmount = bookingCondition?.depositRequiredPercent
+          ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
+          : venueAmount;
+
+        totalAmount += venueAmount;
+        totalDepositRequired += depositAmount;
+
+        // Get earliest booking date for this booking
+        const earliestDate = new Date(
+          Math.min(
+            ...booking.bookingDates.map((d) => new Date(d.date).getTime())
+          )
+        );
+        const paymentDeadline =
+          bookingCondition?.paymentComplementTimeBeforeEvent
+            ? new Date(
+                earliestDate.getTime() -
+                  bookingCondition.paymentComplementTimeBeforeEvent *
+                    24 *
+                    60 *
+                    60 *
+                    1000
+              )
+            : earliestDate;
+
+        bookingDetails.push({
+          bookingId: booking.bookingId,
+          eventId: booking.event?.eventId,
+          eventName: booking.event?.eventName,
+          venue: {
+            venueId: venue.venueId,
+            venueName: venue.venueName,
+            totalAmount: venueAmount,
+            depositRequired: {
+              percentage: bookingCondition?.depositRequiredPercent || 100,
+              amount: depositAmount,
+              description: "Initial deposit required to secure the booking",
+            },
+            paymentCompletionRequired: {
+              daysBeforeEvent:
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+              amount: venueAmount - depositAmount,
+              deadline: paymentDeadline,
+              description: `Remaining payment must be completed ${
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0
+              } days before the event`,
+            },
+            bookingDates: booking.bookingDates,
+            bookingConditions: {
+              depositRequiredPercent:
+                bookingCondition?.depositRequiredPercent || 100,
+              paymentComplementTimeBeforeEvent:
+                bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+              description: bookingCondition?.descriptionCondition,
+              notaBene: bookingCondition?.notaBene,
+              transitionTime: bookingCondition?.transitionTime,
+            },
+          },
+          paymentSummary: {
+            totalAmount: venueAmount,
+            depositAmount: depositAmount,
+            remainingAmount: venueAmount - depositAmount,
+            bookingStatus: booking.bookingStatus,
+            isPaid: booking.isPaid,
+          },
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          payer: payerDetails,
+          bookings: bookingDetails,
+          totals: {
+            totalAmount,
+            totalDepositRequired,
+            totalRemainingAmount: totalAmount - totalDepositRequired,
+          },
+          paymentInstructions: {
+            description: "Please make payment to secure your bookings",
+            depositDeadline: new Date(
+              Math.min(
+                ...bookings.map((b) =>
+                  new Date(
+                    Math.min(
+                      ...b.bookingDates.map((d) => new Date(d.date).getTime())
+                    )
+                  ).getTime()
+                )
+              )
+            ),
+            paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY"],
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

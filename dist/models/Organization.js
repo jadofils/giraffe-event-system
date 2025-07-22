@@ -110,6 +110,18 @@ __decorate([
     __metadata("design:type", String)
 ], Organization.prototype, "supportingDocument", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)({ message: "logo must be a string (URL)" }),
+    __metadata("design:type", String)
+], Organization.prototype, "logo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "text", nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)({ message: "cancellationReason must be a string" }),
+    __metadata("design:type", String)
+], Organization.prototype, "cancellationReason", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: "enum",
         enum: OrganizationStatusEnum_1.OrganizationStatusEnum,
@@ -117,6 +129,10 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], Organization.prototype, "status", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "boolean", default: true }),
+    __metadata("design:type", Boolean)
+], Organization.prototype, "isEnabled", void 0);
 __decorate([
     (0, typeorm_1.ManyToMany)(() => User_1.User, (user) => user.organizations),
     __metadata("design:type", Array)
@@ -133,6 +149,11 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => TicketType_1.TicketType, (ticketType) => ticketType.organization),
     __metadata("design:type", Array)
 ], Organization.prototype, "ticketTypes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "integer", default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], Organization.prototype, "members", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ type: "timestamp with time zone" }),
     __metadata("design:type", Date)

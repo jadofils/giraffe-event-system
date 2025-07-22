@@ -1,118 +1,174 @@
-import { BookingType, Venue } from "../../models/Venue Tables/Venue";
+import { Venue } from "../../models/Venue Tables/Venue";
 import { BookingDateDTO } from "../../interfaces/BookingDateInterface";
-import { VenueAvailabilitySlot } from "../../models/Venue Tables/VenueAvailabilitySlot";
 import { AppDataSource } from "../../config/Database";
-import { Between, In } from "typeorm";
+import {
+  VenueAvailabilitySlot,
+  SlotStatus,
+  SlotType,
+} from "../../models/Venue Tables/VenueAvailabilitySlot";
+import { Between, LessThanOrEqual, MoreThanOrEqual } from "typeorm";
 
 export class BookingValidationService {
-  static async validateBookingDates(venue: Venue, dates: BookingDateDTO[]) {
-    // Validate based on booking type
-    if (venue.bookingType === BookingType.DAILY) {
-      const hasHours = dates.some(
-        (date) => date.hours && date.hours.length > 0
-      );
-      if (hasHours) {
-        throw new Error("Daily venues cannot have specific hours in booking");
+  static async validateBookingDates(
+    venue: Venue,
+    bookingDates: BookingDateDTO[],
+    options = { checkTransitionTime: true }
+  ) {
+    try {
+      const slotRepo = AppDataSource.getRepository(VenueAvailabilitySlot);
+      const unavailableDates: Array<{
+        date: string;
+        hours?: number[];
+        reason: string;
+        warningType: "ERROR" | "WARNING";
+        isTransitionWarning?: boolean;
+      }> = [];
+
+      // Get booking condition for transition time
+      const bookingCondition = venue.bookingConditions?.[0];
+      const transitionTime = bookingCondition?.transitionTime || 0;
+
+      for (const bookingDate of bookingDates) {
+        const eventDate = new Date(bookingDate.date);
+
+        // Check event date availability first - this is mandatory
+        const existingEventSlot = await slotRepo.findOne({
+          where: {
+            venueId: venue.venueId,
+            Date: eventDate,
+          },
+        });
+
+        if (
+          existingEventSlot &&
+          existingEventSlot.status !== SlotStatus.AVAILABLE
+        ) {
+          unavailableDates.push({
+            date: bookingDate.date,
+            hours: existingEventSlot.bookedHours,
+            reason: `Event date ${bookingDate.date} is already booked`,
+            warningType: "ERROR",
+            isTransitionWarning: false,
+          });
+          continue;
+        }
+
+        // Check transition time availability - this is optional
+        if (options.checkTransitionTime && transitionTime > 0) {
+          const transitionDate = new Date(eventDate);
+          transitionDate.setDate(transitionDate.getDate() - transitionTime);
+
+          const transitionSlot = await slotRepo.findOne({
+            where: {
+              venueId: venue.venueId,
+              Date: transitionDate,
+            },
+          });
+
+          if (
+            transitionSlot &&
+            transitionSlot.status !== SlotStatus.AVAILABLE
+          ) {
+            unavailableDates.push({
+              date: transitionDate.toISOString().split("T")[0],
+              hours: transitionSlot.bookedHours,
+              reason: `Transition time not available on ${
+                transitionDate.toISOString().split("T")[0]
+              } (day before event on ${
+                bookingDate.date
+              }). Event can still be booked but without transition time.`,
+              warningType: "WARNING",
+              isTransitionWarning: true,
+            });
+          }
+        }
       }
-    } else if (venue.bookingType === BookingType.HOURLY) {
-      const missingHours = dates.some(
-        (date) => !date.hours || date.hours.length === 0
+
+      return {
+        isAvailable: !unavailableDates.some((d) => d.warningType === "ERROR"),
+        unavailableDates,
+        hasTransitionTimeWarnings: unavailableDates.some(
+          (d) => d.isTransitionWarning
+        ),
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to validate booking dates: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
-      if (missingHours) {
-        throw new Error("Hourly venues must specify hours for each date");
-      }
     }
+  }
 
-    // Check availability for each date
+  static async reserveEventAndTransitionSlots(
+    venue: Venue,
+    eventId: string,
+    bookingDates: BookingDateDTO[],
+    transitionTime: number
+  ) {
     const slotRepo = AppDataSource.getRepository(VenueAvailabilitySlot);
-    const unavailableDates: string[] = [];
+    const reservedSlots: {
+      eventSlots: VenueAvailabilitySlot[];
+      transitionSlots: VenueAvailabilitySlot[];
+    } = {
+      eventSlots: [],
+      transitionSlots: [],
+    };
 
-    for (const bookingDate of dates) {
-      const date = new Date(bookingDate.date);
+    for (const bookingDate of bookingDates) {
+      const eventDate = new Date(bookingDate.date);
 
-      // Find existing slots for this date
-      const existingSlots = await slotRepo.find({
-        where: {
-          venueId: venue.venueId,
-          Date: date,
-          isAvailable: false,
+      // Always create event slot
+      const eventSlot = slotRepo.create({
+        venueId: venue.venueId,
+        Date: eventDate,
+        status: SlotStatus.BOOKED,
+        eventId,
+        slotType: SlotType.EVENT,
+        bookedHours: bookingDate.hours,
+        metadata: {
+          originalEventHours: bookingDate.hours,
         },
       });
+      reservedSlots.eventSlots.push(await slotRepo.save(eventSlot));
 
-      if (venue.bookingType === BookingType.DAILY) {
-        // For daily bookings, if any slot exists for this date, it's unavailable
-        if (existingSlots.length > 0) {
-          unavailableDates.push(bookingDate.date);
-        }
-      } else if (venue.bookingType === BookingType.HOURLY) {
-        // For hourly bookings, check each requested hour
-        const requestedHours = bookingDate.hours || [];
-        const unavailableHours = existingSlots.filter((slot) => {
-          const slotHour = new Date(slot.startTime!).getHours();
-          return requestedHours.includes(slotHour);
-        });
+      // Only check and create transition slot BEFORE the event
+      if (transitionTime > 0) {
+        const transitionDate = new Date(eventDate);
+        transitionDate.setDate(transitionDate.getDate() - transitionTime);
 
-        if (unavailableHours.length > 0) {
-          unavailableDates.push(bookingDate.date);
-        }
-      }
-    }
-
-    return {
-      isAvailable: unavailableDates.length === 0,
-      unavailableDates,
-    };
-  }
-
-  static async createAvailabilitySlots(venue: Venue, dates: BookingDateDTO[]) {
-    const slotRepo = AppDataSource.getRepository(VenueAvailabilitySlot);
-    const slots: VenueAvailabilitySlot[] = [];
-
-    for (const bookingDate of dates) {
-      if (venue.bookingType === BookingType.DAILY) {
-        // Create one slot for the entire day
-        const slot = slotRepo.create({
-          venueId: venue.venueId,
-          Date: new Date(bookingDate.date),
-          isAvailable: false,
-        });
-        slots.push(slot);
-      } else if (venue.bookingType === BookingType.HOURLY) {
-        // Create a slot for each hour
-        for (const hour of bookingDate.hours || []) {
-          const date = new Date(bookingDate.date);
-          const startTime = new Date(date);
-          startTime.setHours(hour, 0, 0, 0);
-
-          const endTime = new Date(date);
-          endTime.setHours(hour + 1, 0, 0, 0);
-
-          const slot = slotRepo.create({
+        // Check if transition slot before event is available
+        const existingTransitionSlot = await slotRepo.findOne({
+          where: {
             venueId: venue.venueId,
-            Date: date,
-            startTime,
-            endTime,
-            isAvailable: false,
+            Date: transitionDate,
+          },
+        });
+
+        // Only create transition slot if the day before is available
+        if (
+          !existingTransitionSlot ||
+          existingTransitionSlot.status === SlotStatus.AVAILABLE
+        ) {
+          const transitionSlot = slotRepo.create({
+            venueId: venue.venueId,
+            Date: transitionDate,
+            status: SlotStatus.TRANSITION,
+            eventId,
+            slotType: SlotType.TRANSITION,
+            metadata: {
+              relatedEventId: eventId,
+              transitionDirection: "before",
+              originalEventHours: bookingDate.hours,
+            },
           });
-          slots.push(slot);
+          reservedSlots.transitionSlots.push(
+            await slotRepo.save(transitionSlot)
+          );
         }
       }
     }
 
-    await slotRepo.save(slots);
-    return slots;
-  }
-
-  static getDateRange(dates: BookingDateDTO[]): {
-    startDate: string;
-    endDate: string;
-  } {
-    const sortedDates = [...dates].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    return {
-      startDate: sortedDates[0].date,
-      endDate: sortedDates[sortedDates.length - 1].date,
-    };
+    return reservedSlots;
   }
 }

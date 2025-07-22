@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Invoice = void 0;
+exports.Invoice = exports.PayerType = void 0;
 // src/models/Invoice.ts
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
@@ -22,6 +22,11 @@ const Payment_1 = require("./Payment");
 const Registration_1 = require("./Registration");
 const InstallmentPlan_1 = require("./InstallmentPlan");
 const Venue_1 = require("./Venue Tables/Venue");
+var PayerType;
+(function (PayerType) {
+    PayerType["USER"] = "USER";
+    PayerType["ORGANIZATION"] = "ORGANIZATION";
+})(PayerType || (exports.PayerType = PayerType = {}));
 let Invoice = class Invoice {
 };
 exports.Invoice = Invoice;
@@ -38,9 +43,9 @@ __decorate([
     __metadata("design:type", String)
 ], Invoice.prototype, "eventId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
     (0, class_validator_1.IsUUID)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], Invoice.prototype, "userId", void 0);
 __decorate([
@@ -76,6 +81,14 @@ __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], Invoice.prototype, "registrationId", void 0);
+__decorate([
+    (0, typeorm_1.Column)("uuid"),
+    __metadata("design:type", String)
+], Invoice.prototype, "payerId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "enum", enum: PayerType }),
+    __metadata("design:type", String)
+], Invoice.prototype, "payerType", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Event_1.Event, (event) => event.invoices) // Assuming 'invoices' property exists on Event entity
     ,

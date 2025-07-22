@@ -20,17 +20,17 @@ const SECRET_KEY = process.env.JWT_SECRET || "your_jwt_secret";
 // Authentication middleware - accepts standard Request and augments it
 const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d;
-    const authHeader = req.headers.authorization;
-    const token = authHeader === null || authHeader === void 0 ? void 0 : authHeader.split(" ")[1];
-    if (!token) {
-        console.log("Access denied: No token provided.");
-        res.status(401).json({
-            success: false,
-            message: "Access denied. No token provided.",
-        });
-        return;
-    }
     try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader === null || authHeader === void 0 ? void 0 : authHeader.split(" ")[1];
+        if (!token) {
+            console.log("Access denied: No token provided.");
+            res.status(401).json({
+                success: false,
+                message: "Access denied. No token provided.",
+            });
+            return;
+        }
         const decoded = jsonwebtoken_1.default.verify(token, SECRET_KEY);
         console.log("Decoded JWT:", decoded);
         // If role and permissions are present in the token, use them directly
@@ -42,10 +42,12 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
                 username: decoded.username,
                 organizations: decoded.organizations || [],
                 organizationId: decoded.organizationId,
-                roles: [{
+                roles: [
+                    {
                         roleName: decoded.role.roleName,
                         permissions: decoded.role.permissions.map((p) => p.name),
-                    }],
+                    },
+                ],
                 role: decoded.role,
                 isAdmin: decoded.role.roleName === "ADMIN",
             };
@@ -54,10 +56,14 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
         }
         // Fallback: fetch from DB if not present in token
         const userRepository = Database_1.AppDataSource.getRepository(User_1.User);
-        const user = yield userRepository.findOne({
-            where: { userId: decoded.userId },
-            relations: ["role", "role.permissions", "organizations"],
-        });
+        const user = yield userRepository
+            .createQueryBuilder("user")
+            .leftJoinAndSelect("user.role", "role")
+            .leftJoinAndSelect("role.permissions", "permissions")
+            .leftJoinAndSelect("user.organizations", "organizations")
+            .where("user.userId = :userId", { userId: decoded.userId })
+            .andWhere("user.deletedAt IS NULL")
+            .getOne();
         if (!user) {
             console.warn(`Invalid token: User ${decoded.userId} not found.`);
             res.status(401).json({
@@ -66,7 +72,7 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        const organizations = ((_a = user.organizations) === null || _a === void 0 ? void 0 : _a.map(org => ({
+        const organizations = ((_a = user.organizations) === null || _a === void 0 ? void 0 : _a.map((org) => ({
             organizationId: org.organizationId,
             organizationName: org.organizationName,
             description: org.description,
@@ -78,6 +84,7 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
             country: org.country,
             postalCode: org.postalCode,
             stateProvince: org.stateProvince,
+            status: org.status,
         }))) || [];
         const isAdmin = ((_c = (_b = user.role) === null || _b === void 0 ? void 0 : _b.roleName) === null || _c === void 0 ? void 0 : _c.toLowerCase()) === "admin";
         const mappedRole = user.role
@@ -95,12 +102,14 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
             : undefined;
         // Augment the request object with user data
         req.user = Object.assign(Object.assign({}, user), { id: user.userId, userId: decoded.userId, email: decoded.email, username: decoded.username, organizations, organizationId: decoded.organizationId, role: mappedRole, isAdmin, roles: user.role
-                ? [{
+                ? [
+                    {
                         roleName: user.role.roleName,
-                        permissions: ((_d = user.role.permissions) === null || _d === void 0 ? void 0 : _d.map(p => p.name)) || [],
-                    }]
-                : [], socialMediaLinks: user.socialMediaLinks && typeof user.socialMediaLinks === 'object'
-                ? Object.fromEntries(Object.entries(user.socialMediaLinks).filter(([k, v]) => typeof v === 'string'))
+                        permissions: ((_d = user.role.permissions) === null || _d === void 0 ? void 0 : _d.map((p) => p.name)) || [],
+                    },
+                ]
+                : [], socialMediaLinks: user.socialMediaLinks && typeof user.socialMediaLinks === "object"
+                ? Object.fromEntries(Object.entries(user.socialMediaLinks).filter(([k, v]) => typeof v === "string"))
                 : undefined });
         console.log("req.user populated:", req.user);
         next();
@@ -108,20 +117,35 @@ const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
     catch (err) {
         console.error("JWT verification error:", err);
         if (err instanceof jsonwebtoken_1.default.TokenExpiredError) {
-            res.status(401).json({ success: false, message: "Token expired. Please log in again." });
+            res
+                .status(401)
+                .json({
+                success: false,
+                message: "Token expired. Please log in again.",
+            });
         }
         else if (err instanceof jsonwebtoken_1.default.JsonWebTokenError) {
-            res.status(401).json({ success: false, message: "Invalid token. Please log in again." });
+            res
+                .status(401)
+                .json({
+                success: false,
+                message: "Invalid token. Please log in again.",
+            });
         }
         else {
-            res.status(500).json({ success: false, message: "Authentication failed due to server error." });
+            res
+                .status(500)
+                .json({
+                success: false,
+                message: "Authentication failed due to server error.",
+            });
         }
     }
 });
 exports.authenticate = authenticate;
 // Type guard to check if request has authenticated user
 const isAuthenticatedRequest = (req) => {
-    return 'user' in req && req.user !== undefined;
+    return "user" in req && req.user !== undefined;
 };
 exports.isAuthenticatedRequest = isAuthenticatedRequest;
 //router.use("/", checkAbsenceRoutes);

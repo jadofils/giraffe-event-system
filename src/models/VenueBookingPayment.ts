@@ -8,6 +8,14 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { VenueBooking } from "./VenueBooking";
+import {
+  IsUUID,
+  IsNumber,
+  Min,
+  IsEnum,
+  IsOptional,
+  IsString,
+} from "class-validator";
 
 export enum VenueBookingPaymentStatus {
   PENDING = "PENDING",
@@ -23,12 +31,21 @@ export enum PayerType {
   ORGANIZATION = "ORGANIZATION",
 }
 
+export enum PaymentMethod {
+  CARD = "CARD",
+  BANK_TRANSFER = "BANK_TRANSFER",
+  MOBILE_MONEY = "MOBILE_MONEY",
+  CASH = "CASH",
+}
+
 @Entity("venue_booking_payments")
 export class VenueBookingPayment {
   @PrimaryGeneratedColumn("uuid")
+  @IsUUID("4")
   paymentId!: string;
 
   @Column("uuid")
+  @IsUUID("4")
   bookingId!: string;
 
   @ManyToOne(() => VenueBooking, { nullable: false })
@@ -36,12 +53,16 @@ export class VenueBookingPayment {
   booking!: VenueBooking;
 
   @Column("uuid")
+  @IsUUID("4")
   payerId!: string;
 
   @Column({ type: "enum", enum: PayerType })
+  @IsEnum(PayerType)
   payerType!: PayerType;
 
-  @Column({ type: "float", nullable: false })
+  @Column({ type: "decimal", precision: 10, scale: 2 })
+  @IsNumber()
+  @Min(0)
   amountPaid!: number;
 
   @Column({
@@ -49,13 +70,31 @@ export class VenueBookingPayment {
     enum: VenueBookingPaymentStatus,
     default: VenueBookingPaymentStatus.PENDING,
   })
+  @IsEnum(VenueBookingPaymentStatus)
   paymentStatus!: VenueBookingPaymentStatus;
 
-  @Column({ type: "varchar", length: 50, nullable: true })
-  paymentMethod?: string; // e.g., card, bank, cash
+  @Column({ type: "enum", enum: PaymentMethod })
+  @IsEnum(PaymentMethod)
+  paymentMethod!: PaymentMethod;
 
   @Column({ type: "text", nullable: true })
+  @IsOptional()
+  @IsString()
   paymentReference?: string; // transaction id, etc.
+
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  remainingAmount?: number;
+
+  @Column({ type: "boolean", default: false })
+  isFullPayment!: boolean;
+
+  @Column({ type: "text", nullable: true })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @CreateDateColumn()
   paymentDate!: Date;

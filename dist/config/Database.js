@@ -34,6 +34,9 @@ const VenueVariable_1 = require("../models/Venue Tables/VenueVariable");
 const VenueAvailabilitySlot_1 = require("../models/Venue Tables/VenueAvailabilitySlot");
 const VenueReview_1 = require("../models/Venue Tables/VenueReview");
 const Resources_1 = require("../models/Resources");
+const EventVenue_1 = require("../models/Event Tables/EventVenue");
+const EventGuest_1 = require("../models/Event Tables/EventGuest");
+const VenueBookingPayment_1 = require("../models/VenueBookingPayment");
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -59,12 +62,15 @@ exports.AppDataSource = new typeorm_1.DataSource({
         InstallmentPlan_1.InstallmentPlan,
         Budget_1.Budget,
         VenueBooking_1.VenueBooking,
+        VenueBookingPayment_1.VenueBookingPayment,
         VenueInvoice_1.VenueInvoice,
         BookingCondition_1.BookingCondition,
         VenueVariable_1.VenueVariable,
         VenueAvailabilitySlot_1.VenueAvailabilitySlot,
         VenueReview_1.VenueReview,
         Resources_1.Resources,
+        EventVenue_1.EventVenue,
+        EventGuest_1.EventGuest,
     ],
     migrations: [
         isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

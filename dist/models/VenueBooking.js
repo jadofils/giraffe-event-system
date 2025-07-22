@@ -14,6 +14,8 @@ const typeorm_1 = require("typeorm");
 const Venue_1 = require("./Venue Tables/Venue");
 const EventTypeEnum_1 = require("../interfaces/Enums/EventTypeEnum");
 const User_1 = require("./User");
+const class_validator_1 = require("class-validator");
+const Event_1 = require("./Event Tables/Event");
 var VenueStatus;
 (function (VenueStatus) {
     VenueStatus["AVAILABLE"] = "AVAILABLE";
@@ -25,16 +27,19 @@ var BookingStatus;
     BookingStatus["APPROVED_PAID"] = "APPROVED_PAID";
     BookingStatus["APPROVED_NOT_PAID"] = "APPROVED_NOT_PAID";
     BookingStatus["PENDING"] = "PENDING";
+    BookingStatus["CANCELLED"] = "CANCELLED";
 })(BookingStatus || (exports.BookingStatus = BookingStatus = {}));
 let VenueBooking = class VenueBooking {
 };
 exports.VenueBooking = VenueBooking;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "bookingId", void 0);
 __decorate([
     (0, typeorm_1.Column)("uuid"),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "venueId", void 0);
 __decorate([
@@ -44,6 +49,7 @@ __decorate([
 ], VenueBooking.prototype, "venue", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "enum", enum: EventTypeEnum_1.EventType }),
+    (0, class_validator_1.IsEnum)(EventTypeEnum_1.EventType),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "bookingReason", void 0);
 __decorate([
@@ -52,10 +58,18 @@ __decorate([
 ], VenueBooking.prototype, "otherReason", void 0);
 __decorate([
     (0, typeorm_1.Column)("uuid", { nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "eventId", void 0);
 __decorate([
+    (0, typeorm_1.ManyToOne)("Event", "venueBookings"),
+    (0, typeorm_1.JoinColumn)({ name: "eventId" }),
+    __metadata("design:type", Event_1.Event)
+], VenueBooking.prototype, "event", void 0);
+__decorate([
     (0, typeorm_1.Column)("uuid"),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "createdBy", void 0);
 __decorate([
@@ -64,23 +78,13 @@ __decorate([
     __metadata("design:type", User_1.User)
 ], VenueBooking.prototype, "user", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "date" }),
-    __metadata("design:type", String)
-], VenueBooking.prototype, "eventStartDate", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: "date" }),
-    __metadata("design:type", String)
-], VenueBooking.prototype, "eventEndDate", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: "time", nullable: true }),
-    __metadata("design:type", String)
-], VenueBooking.prototype, "startTime", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: "time", nullable: true }),
-    __metadata("design:type", String)
-], VenueBooking.prototype, "endTime", void 0);
+    (0, typeorm_1.Column)("json"),
+    (0, class_validator_1.IsArray)(),
+    __metadata("design:type", Array)
+], VenueBooking.prototype, "bookingDates", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "enum", enum: VenueStatus, nullable: true }),
+    (0, class_validator_1.IsEnum)(VenueStatus),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "venueStatus", void 0);
 __decorate([
@@ -93,6 +97,7 @@ __decorate([
 ], VenueBooking.prototype, "timezone", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "enum", enum: BookingStatus, default: BookingStatus.PENDING }),
+    (0, class_validator_1.IsEnum)(BookingStatus),
     __metadata("design:type", String)
 ], VenueBooking.prototype, "bookingStatus", void 0);
 __decorate([
@@ -103,6 +108,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: "boolean", default: false }),
     __metadata("design:type", Boolean)
 ], VenueBooking.prototype, "isPaid", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "text", nullable: true }),
+    __metadata("design:type", String)
+], VenueBooking.prototype, "cancellationReason", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

@@ -15,6 +15,7 @@ import { EventVenue } from "../models/Event Tables/EventVenue";
 import { EventGuest } from "../models/Event Tables/EventGuest";
 import { BookingDateDTO } from "../interfaces/BookingDateInterface";
 import { BookingValidationService } from "../services/bookings/BookingValidationService";
+import { v4 as uuidv4 } from "uuid";
 
 export class EventRepository {
   private static readonly CACHE_PREFIX = "event:";
@@ -22,9 +23,8 @@ export class EventRepository {
 
   static async createEventWithRelations(
     eventData: any,
-    venue: Venue,
+    venues: Venue[],
     guests: any[],
-    venueAmount: number,
     dates: BookingDateDTO[]
   ) {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -32,59 +32,75 @@ export class EventRepository {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Create Event
-      const event = queryRunner.manager.create(Event, {
-        ...eventData,
-        bookingDates: dates, // Add bookingDates to event
-      });
-      await queryRunner.manager.save(event);
+      const createdEvents = [];
+      // Generate a groupId for all related events
+      const groupId =
+        dates.length > 1 || venues.length > 1 ? uuidv4() : undefined;
 
-      // 2. Create EventVenue with multiple dates
-      const eventVenue = queryRunner.manager.create(EventVenue, {
-        eventId: event.eventId,
-        venueId: venue.venueId,
-        bookingDates: dates,
-        timezone: "UTC",
-      });
-      await queryRunner.manager.save(eventVenue);
+      // Create separate events for each date and venue combination
+      for (const bookingDate of dates) {
+        for (const venue of venues) {
+          // 1. Create Event for this specific date and venue
+          const singleDateEvent = queryRunner.manager.create(Event, {
+            ...eventData,
+            bookingDates: [bookingDate], // Only use this single date
+            groupId: groupId, // Set the groupId for related events
+          });
+          await queryRunner.manager.save(singleDateEvent);
 
-      // 3. Create VenueBooking
-      const venueBooking = queryRunner.manager.create(VenueBooking, {
-        eventId: event.eventId,
-        venueId: venue.venueId,
-        venue: venue,
-        bookingReason: event.eventType,
-        bookingDates: dates,
-        bookingStatus: BookingStatus.PENDING,
-        isPaid: false,
-        timezone: "UTC",
-        createdBy: event.eventOrganizerId,
-        amountToBePaid: venueAmount,
-      });
-      await queryRunner.manager.save(venueBooking);
+          // 2. Create EventVenue for this date and venue
+          const eventVenue = queryRunner.manager.create(EventVenue, {
+            eventId: singleDateEvent.eventId,
+            venueId: venue.venueId,
+            bookingDates: [bookingDate], // Only use this single date
+            timezone: "UTC",
+          });
+          await queryRunner.manager.save(eventVenue);
 
-      // 4. Create EventGuests if public
-      let eventGuests: EventGuest[] = [];
-      if (guests && guests.length > 0) {
-        eventGuests = await Promise.all(
-          guests.map(async (guest: any) => {
-            const eventGuest = queryRunner.manager.create(EventGuest, {
-              eventId: event.eventId,
-              guestName: guest.guestName,
-              guestPhoto: guest.guestPhoto,
-            });
-            return await queryRunner.manager.save(eventGuest);
-          })
-        );
+          // 3. Create VenueBooking for this date and venue
+          const venueBooking = queryRunner.manager.create(VenueBooking, {
+            eventId: singleDateEvent.eventId,
+            venueId: venue.venueId,
+            venue: venue,
+            bookingReason: eventData.eventType,
+            bookingDates: [bookingDate], // Only use this single date
+            bookingStatus: BookingStatus.PENDING,
+            isPaid: false,
+            timezone: "UTC",
+            createdBy: eventData.eventOrganizerId,
+            amountToBePaid: venue.venueVariables[0].venueAmount,
+          });
+          await queryRunner.manager.save(venueBooking);
+
+          // 4. Create EventGuests if public (copy guests to each event)
+          let eventGuests: EventGuest[] = [];
+          if (guests && guests.length > 0) {
+            eventGuests = await Promise.all(
+              guests.map(async (guest: any) => {
+                const eventGuest = queryRunner.manager.create(EventGuest, {
+                  eventId: singleDateEvent.eventId,
+                  guestName: guest.guestName,
+                  guestPhoto: guest.guestPhoto,
+                });
+                return await queryRunner.manager.save(eventGuest);
+              })
+            );
+          }
+
+          // Add this event's data to our results
+          createdEvents.push({
+            event: singleDateEvent,
+            eventVenue,
+            venueBooking,
+            eventGuests,
+          });
+        }
       }
-
-      // 5. Create availability slots
-      await BookingValidationService.createAvailabilitySlots(venue, dates);
 
       await queryRunner.commitTransaction();
       return {
         success: true,
-        data: { event, eventVenue, venueBooking, eventGuests },
+        data: createdEvents, // Return array of all created events and their related records
       };
     } catch (error) {
       const message =

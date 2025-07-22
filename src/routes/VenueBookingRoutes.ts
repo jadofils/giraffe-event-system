@@ -13,19 +13,15 @@ router.get(
 );
 router.get("/:bookingId", VenueBookingController.getBookingById);
 router.patch("/:bookingId/approve", VenueBookingController.approveBooking);
-router.post("/:bookingId/payments", VenueBookingController.addPaymentToBooking);
+router.post("/:bookingId/payments", VenueBookingController.processPayment);
+router.get("/:bookingId/payments", VenueBookingController.getPaymentHistory);
 router.get(
   "/payments/manager/:managerId",
   VenueBookingController.getPaymentsByManagerId
 );
-router.get(
-  "/:bookingId/payments",
-  VenueBookingController.getPaymentsForBooking
-);
-router.get(
-  "/user/:userId/payments",
+router.get("/user/:userId/payments",
   VenueBookingController.getPaymentsForUserBookings
 );
-// ...other routes can remain commented or be enabled as needed
+router.get("/user/:userId/bookings", VenueBookingController.getUserBookings);
 
 export default router;

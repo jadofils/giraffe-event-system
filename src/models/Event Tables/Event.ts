@@ -41,6 +41,11 @@ export class Event {
   @IsUUID("4", { message: "eventId must be a valid UUID" })
   eventId!: string;
 
+  @Column({ type: "uuid", nullable: true })
+  @IsOptional()
+  @IsUUID("4", { message: "groupId must be a valid UUID" })
+  groupId?: string;
+
   @Column({ length: 255 })
   @IsNotEmpty({ message: "Event title is required" })
   @Length(3, 100, {
@@ -184,6 +189,9 @@ export class Event {
 
   @OneToMany(() => EventGuest, (guest) => guest.event, { cascade: true })
   eventGuests!: EventGuest[];
+
+  @OneToMany(() => VenueBooking, (booking) => booking.event)
+  venueBookings!: VenueBooking[];
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

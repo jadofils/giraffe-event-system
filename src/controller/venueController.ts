@@ -20,6 +20,10 @@ import { In, Not } from "typeorm";
 import { Organization } from "../models/Organization";
 import { User } from "../models/User";
 import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
+import {
+  VenueAvailabilitySlot,
+  SlotStatus,
+} from "../models/Venue Tables/VenueAvailabilitySlot";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -1404,9 +1408,8 @@ export class VenueController {
         availabilitySlots: venue.availabilitySlots?.map((slot) => ({
           id: slot.id,
           date: slot.Date,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          isAvailable: slot.isAvailable,
+          bookedHours: slot.bookedHours,
+          isAvailable: slot.status === SlotStatus.AVAILABLE,
         })),
 
         bookingConditions: venue.bookingConditions?.map((condition) => ({
@@ -1528,9 +1531,8 @@ export class VenueController {
           availabilitySlots: venue.availabilitySlots?.map((slot) => ({
             id: slot.id,
             date: slot.Date,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            isAvailable: slot.isAvailable,
+            bookedHours: slot.bookedHours,
+            isAvailable: slot.status === SlotStatus.AVAILABLE,
           })),
 
           bookingConditions: venue.bookingConditions?.map((condition) => ({

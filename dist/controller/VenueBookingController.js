@@ -1,481 +1,515 @@
 "use strict";
-// import { Request, Response, Router } from "express";
-// // import { VenueBookingRepository } from "../repositories/VenueBookingRepository";
-// import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
-// import { ApprovalStatus } from "../models/VenueBooking";
-// import { validate } from "class-validator";
-// import { AppDataSource } from "../config/Database"; // adjust path as needed
-// import { Venue } from "../models/Venue Tables/Venue";
-// export class VenueBookingController {
-//   // Create a single booking
-//   static async createBooking(req: Request, res: Response): Promise<void> {
-//     try {
-//       // Extract fields one by one from req.body
-//       const bookingData: Partial<VenueBookingInterface> = {
-//         eventId: req.body.eventId,
-//         venueId: req.body.venueId,
-//         venueInvoiceId: req.body.venueInvoiceId,
-//         approvalStatus: req.body.approvalStatus,
-//         notes: req.body.notes,
-//         totalAmountDue: req.body.totalAmountDue,
-//         event: req.body.event,
-//       };
-//       // Set fields from token
-//       if (!req.user) {
-//         res.status(401).json({
-//           success: false,
-//           message: "Unauthorized: User token required.",
-//         });
-//         return;
-//       }
-//       bookingData.userId = req.user.id;
-//       bookingData.organizerId = req.user.id;
-//       bookingData.organizationId = req.user.organizationId;
-//       // Create and validate instance
-//       const bookingInstance = new VenueBookingInterface(bookingData);
-//       const errors = await validate(bookingInstance, {
-//         forbidUnknownValues: true,
-//       });
-//       if (errors.length > 0) {
-//         res.status(400).json({
-//           success: false,
-//           message: `Validation errors: ${errors
-//             .map((e) => Object.values(e.constraints || {}))
-//             .join(", ")}`,
-//         });
-//         return;
-//       }
-//       // Validate custom logic
-//       const validationErrors = VenueBookingInterface.validate(bookingData);
-//       if (validationErrors.length > 0) {
-//         res.status(400).json({
-//           success: false,
-//           message: `Validation errors: ${validationErrors.join(", ")}`,
-//         });
-//         return;
-//       }
-//       // Create booking
-//       const result = await VenueBookingRepository.createBooking(
-//         bookingInstance
-//       );
-//       if (!result.success) {
-//         res.status(400).json({ success: false, message: result.message });
-//         return;
-//       }
-//       res.status(201).json({
-//         success: true,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error creating booking:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to create booking: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Create multiple bookings
-//   static async createMultipleBookings(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const bookingsData: VenueBookingInterface[] = req.body;
-//       // Validate each booking and build a list of venueIds
-//       const venueIds = [];
-//       for (let i = 0; i < bookingsData.length; i++) {
-//         bookingsData[i].organizerId = req.user?.id;
-//         const bookingInstance = new VenueBookingInterface(bookingsData[i]);
-//         const errors = await validate(bookingInstance);
-//         if (errors.length > 0) {
-//           res.status(400).json({
-//             success: false,
-//             message: `Validation errors in booking at index ${i} (eventId: ${
-//               bookingsData[i].eventId
-//             }, venueId: ${bookingsData[i].venueId}): ${errors
-//               .map((e) => Object.values(e.constraints || {}))
-//               .join(", ")}`,
-//           });
-//           return;
-//         }
-//         bookingsData[i] = bookingInstance;
-//         venueIds.push(bookingInstance.venueId);
-//       }
-//       // Fetch all venues in one query
-//       const venueRepo = AppDataSource.getRepository(Venue);
-//       const venues = await venueRepo.findByIds(venueIds);
-//       if (venues.length !== bookingsData.length) {
-//         res.status(400).json({
-//           success: false,
-//           message: "One or more venues do not exist.",
-//         });
-//         return;
-//       }
-//       // Check all venues have the same organizationId and location
-//       const firstOrgId = venues[0].organizationId;
-//       const firstLocation = venues[0].venueLocation;
-//       const invalidVenue = venues.find(
-//         (v) =>
-//           v.organizationId !== firstOrgId || v.venueLocation !== firstLocation
-//       );
-//       if (invalidVenue) {
-//         res.status(400).json({
-//           success: false,
-//           message: `All venues must belong to the same organization and have the same location. Venue ${invalidVenue.venueId} does not match.`,
-//         });
-//         return;
-//       }
-//       const result = await VenueBookingRepository.createMultipleBookings(
-//         bookingsData
-//       );
-//       res.status(result.success ? 201 : 400).json({
-//         success: result.success,
-//         message: result.success
-//           ? "Bookings created successfully."
-//           : "Some bookings failed to create.",
-//         data: { bookings: result.bookings, errors: result.errors },
-//       });
-//     } catch (error) {
-//       console.error("Error creating multiple bookings:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to create multiple bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get all bookings
-//   static async getAllBookings(req: Request, res: Response): Promise<void> {
-//     try {
-//       const result = await VenueBookingRepository.getAllBookings();
-//       res.status(200).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching all bookings:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get booking by ID
-//   static async getBookingById(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const result = await VenueBookingRepository.getBookingById(id);
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching booking by ID:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch booking: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Update a booking
-//   static async updateBooking(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const bookingData: Partial<VenueBookingInterface> = req.body;
-//       // Validate request body
-//       const errors = await validate(bookingData);
-//       if (errors.length > 0) {
-//         res.status(400).json({
-//           success: false,
-//           message: `Validation errors: ${errors
-//             .map((e) => Object.values(e.constraints || {}))
-//             .join(", ")}`,
-//         });
-//         return;
-//       }
-//       const result = await VenueBookingRepository.updateBooking(
-//         id,
-//         bookingData
-//       );
-//       res.status(result.success ? 200 : 400).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error updating booking:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to update booking: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Delete a booking
-//   static async deleteBooking(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const result = await VenueBookingRepository.deleteBooking(id);
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//       });
-//     } catch (error) {
-//       console.error("Error deleting booking:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to delete booking: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Update booking status
-//   static async updateBookingStatus(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const { status } = req.body;
-//       const normalizedStatus =
-//         typeof status === "string" ? status.toLowerCase() : status;
-//       console.log(
-//         `[updateBookingStatus] PATCH /venue-bookings/${id}/status with status:`,
-//         status,
-//         `(normalized: ${normalizedStatus})`
-//       );
-//       if (!Object.values(ApprovalStatus).includes(normalizedStatus)) {
-//         console.error(
-//           `[updateBookingStatus] Invalid approval status received:`,
-//           status
-//         );
-//         res.status(400).json({
-//           success: false,
-//           message: "Invalid approval status.",
-//         });
-//         return;
-//       }
-//       const result = await VenueBookingRepository.updateBookingStatus(
-//         id,
-//         normalizedStatus
-//       );
-//       if (!result.success) {
-//         console.error(
-//           `[updateBookingStatus] Failed to update booking status for ID ${id}:`,
-//           result.message
-//         );
-//       }
-//       res.status(result.success ? 200 : 400).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error updating booking status:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to update booking status: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by event ID
-//   static async getBookingsByEventId(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { eventId } = req.params;
-//       const result = await VenueBookingRepository.getBookingsByEventId(eventId);
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by event ID:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by venue ID
-//   static async getBookingsByVenueId(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { venueId } = req.params;
-//       const result = await VenueBookingRepository.getBookingsByVenueId(venueId);
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by venue ID:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by organizer ID
-//   static async getBookingsByOrganizerId(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { organizerId } = req.params;
-//       const result = await VenueBookingRepository.getBookingsByOrganizerId(
-//         organizerId
-//       );
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by organizer ID:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by organization ID
-//   static async getBookingsByOrganizationId(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { organizationId } = req.params;
-//       const result = await VenueBookingRepository.getBookingsByOrganizationId(
-//         organizationId
-//       );
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by organization ID:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by status
-//   static async getBookingsByStatus(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { status } = req.params;
-//       if (!Object.values(ApprovalStatus).includes(status as ApprovalStatus)) {
-//         res.status(400).json({
-//           success: false,
-//           message: "Invalid approval status.",
-//         });
-//         return;
-//       }
-//       const result = await VenueBookingRepository.getBookingsByStatus(
-//         status as ApprovalStatus
-//       );
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by status:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get bookings by date range
-//   static async getBookingsByDateRange(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { startDate, endDate } = req.params;
-//       const filterOptions = ((req.query.filterOptions as string)?.split(
-//         ","
-//       ) as ("min" | "hours" | "days" | "all")[]) || ["all"];
-//       const start = new Date(startDate);
-//       const end = new Date(endDate);
-//       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-//         res.status(400).json({
-//           success: false,
-//           message: "Invalid date format.",
-//         });
-//         return;
-//       }
-//       const result = await VenueBookingRepository.getBookingsByDateRange(
-//         start,
-//         end,
-//         filterOptions
-//       );
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: result.data,
-//       });
-//     } catch (error) {
-//       console.error("Error fetching bookings by date range:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch bookings: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-//   // Get total booking amount for an event
-//   static async getTotalBookingAmountForEvent(
-//     req: Request,
-//     res: Response
-//   ): Promise<void> {
-//     try {
-//       const { eventId } = req.params;
-//       const result = await VenueBookingRepository.getTotalBookingAmountForEvent(
-//         eventId
-//       );
-//       res.status(result.success ? 200 : 404).json({
-//         success: result.success,
-//         message: result.message,
-//         data: { totalAmount: result.totalAmount },
-//       });
-//     } catch (error) {
-//       console.error("Error fetching total booking amount:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: `Failed to fetch total amount: ${
-//           error instanceof Error ? error.message : "Unknown error"
-//         }`,
-//       });
-//     }
-//   }
-// }
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VenueBookingController = void 0;
+const VenueBookingRepository_1 = require("../repositories/VenueBookingRepository");
+const Database_1 = require("../config/Database");
+const typeorm_1 = require("typeorm");
+const VenueBooking_1 = require("../models/VenueBooking");
+const VenueVariable_1 = require("../models/Venue Tables/VenueVariable");
+const User_1 = require("../models/User");
+const VenueBookingPaymentService_1 = require("../services/payments/VenueBookingPaymentService");
+class VenueBookingController {
+    static getAllBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.getAllBookings();
+                res.status(200).json({
+                    success: result.success,
+                    message: result.message,
+                    data: result.data,
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: `Failed to fetch bookings: ${error instanceof Error ? error.message : "Unknown error"}`,
+                });
+            }
+        });
+    }
+    static getBookingsByManagerId(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { managerId } = req.params;
+                // First, get all venues managed by this manager
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const managedVenues = yield venueVariableRepo.find({
+                    where: { manager: { userId: managerId } },
+                    relations: ["venue", "venue.bookingConditions"],
+                });
+                if (!managedVenues.length) {
+                    res.status(200).json({
+                        success: true,
+                        data: {
+                            bookings: [],
+                            summary: {
+                                totalVenues: 0,
+                                totalBookings: 0,
+                                totalAmount: 0,
+                                pendingBookings: 0,
+                                approvedBookings: 0,
+                                cancelledBookings: 0,
+                            },
+                        },
+                        message: "No venues found for this manager",
+                    });
+                    return;
+                }
+                const venueIds = managedVenues.map((vv) => vv.venue.venueId);
+                // Get all bookings for these venues with necessary relations
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const bookings = yield bookingRepo.find({
+                    where: { venueId: (0, typeorm_1.In)(venueIds) },
+                    relations: [
+                        "venue",
+                        "venue.bookingConditions",
+                        "venue.venueVariables",
+                        "event",
+                        "user", // Get user who made the booking
+                    ],
+                    order: {
+                        createdAt: "DESC", // Most recent first
+                    },
+                });
+                // Get user details for each booking
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                const enrichedBookings = yield Promise.all(bookings.map((booking) => __awaiter(this, void 0, void 0, function* () {
+                    var _a;
+                    const venue = booking.venue;
+                    const event = booking.event;
+                    const bookingCondition = venue.bookingConditions[0];
+                    const venueAmount = ((_a = venue.venueVariables[0]) === null || _a === void 0 ? void 0 : _a.venueAmount) || 0;
+                    // Get user who made the booking
+                    const user = yield userRepo.findOne({
+                        where: { userId: booking.createdBy },
+                    });
+                    // Calculate deposit amount
+                    const depositAmount = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent)
+                        ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
+                        : venueAmount;
+                    // Get earliest booking date
+                    const earliestDate = new Date(Math.min(...booking.bookingDates.map((d) => new Date(d.date).getTime())));
+                    const paymentDeadline = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent)
+                        ? new Date(earliestDate.getTime() -
+                            bookingCondition.paymentComplementTimeBeforeEvent *
+                                24 *
+                                60 *
+                                60 *
+                                1000)
+                        : earliestDate;
+                    return {
+                        bookingId: booking.bookingId,
+                        eventDetails: {
+                            eventId: event === null || event === void 0 ? void 0 : event.eventId,
+                            eventName: event === null || event === void 0 ? void 0 : event.eventName,
+                            eventType: event === null || event === void 0 ? void 0 : event.eventType,
+                            eventDescription: event === null || event === void 0 ? void 0 : event.eventDescription,
+                        },
+                        venue: {
+                            venueId: venue.venueId,
+                            venueName: venue.venueName,
+                            location: venue.venueLocation,
+                            totalAmount: venueAmount,
+                            depositRequired: {
+                                percentage: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent) || 100,
+                                amount: depositAmount,
+                            },
+                            paymentCompletionRequired: {
+                                daysBeforeEvent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0,
+                                amount: venueAmount - depositAmount,
+                                deadline: paymentDeadline,
+                            },
+                        },
+                        bookingDates: booking.bookingDates,
+                        bookingStatus: booking.bookingStatus,
+                        isPaid: booking.isPaid,
+                        createdAt: booking.createdAt,
+                        requester: user
+                            ? {
+                                userId: user.userId,
+                                firstName: user.firstName,
+                                lastName: user.lastName,
+                                email: user.email,
+                                phoneNumber: user.phoneNumber,
+                            }
+                            : null,
+                        paymentSummary: {
+                            totalAmount: venueAmount,
+                            depositAmount: depositAmount,
+                            remainingAmount: venueAmount - depositAmount,
+                            paymentStatus: booking.isPaid ? "PAID" : "PENDING",
+                        },
+                    };
+                })));
+                // Calculate summary statistics
+                const summary = {
+                    totalVenues: venueIds.length,
+                    totalBookings: bookings.length,
+                    totalAmount: enrichedBookings.reduce((sum, b) => sum + b.paymentSummary.totalAmount, 0),
+                    pendingBookings: enrichedBookings.filter((b) => b.bookingStatus === "PENDING").length,
+                    approvedBookings: enrichedBookings.filter((b) => ["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(b.bookingStatus)).length,
+                    cancelledBookings: enrichedBookings.filter((b) => b.bookingStatus === "CANCELLED").length,
+                    bookingsByVenue: venueIds.map((venueId) => {
+                        var _a;
+                        return ({
+                            venueId,
+                            venueName: (_a = managedVenues.find((v) => v.venue.venueId === venueId)) === null || _a === void 0 ? void 0 : _a.venue.venueName,
+                            totalBookings: enrichedBookings.filter((b) => b.venue.venueId === venueId).length,
+                        });
+                    }),
+                    paymentSummary: {
+                        totalExpectedAmount: enrichedBookings.reduce((sum, b) => sum + b.paymentSummary.totalAmount, 0),
+                        totalPaidAmount: enrichedBookings
+                            .filter((b) => b.isPaid)
+                            .reduce((sum, b) => sum + b.paymentSummary.totalAmount, 0),
+                        totalPendingAmount: enrichedBookings
+                            .filter((b) => !b.isPaid)
+                            .reduce((sum, b) => sum + b.paymentSummary.totalAmount, 0),
+                    },
+                };
+                res.status(200).json({
+                    success: true,
+                    data: {
+                        bookings: enrichedBookings,
+                        summary,
+                    },
+                    message: "Venue bookings fetched successfully",
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to fetch bookings",
+                });
+            }
+        });
+    }
+    static getBookingById(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.getBookingById(bookingId);
+                if (!result.success) {
+                    res.status(404).json({ success: false, message: result.message });
+                    return;
+                }
+                res.status(200).json({ success: true, data: result.data });
+            }
+            catch (error) {
+                res.status(500).json({ success: false, message: "Server error." });
+            }
+        });
+    }
+    static approveBooking(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.approveBooking(bookingId);
+                if (!result.success) {
+                    res.status(400).json({ success: false, message: result.message });
+                    return;
+                }
+                res.status(200).json({ success: true, message: result.message });
+            }
+            catch (error) {
+                res.status(500).json({ success: false, message: "Server error." });
+            }
+        });
+    }
+    static getPaymentsByManagerId(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { managerId } = req.params;
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.getPaymentsByManagerId(managerId);
+                res.status(200).json(result);
+            }
+            catch (error) {
+                res.status(500).json({ success: false, message: "Server error." });
+            }
+        });
+    }
+    static addPaymentToBooking(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const paymentData = Object.assign(Object.assign({}, req.body), { bookingId });
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.createVenueBookingPaymentWithDepositValidation(paymentData);
+                res.status(201).json(result);
+            }
+            catch (error) {
+                res.status(400).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to add payment.",
+                });
+            }
+        });
+    }
+    static getPaymentsForBooking(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const paymentRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBookingPayment").VenueBookingPayment);
+                const bookingRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBooking").VenueBooking);
+                const conditionRepo = Database_1.AppDataSource.getRepository(require("../models/Venue Tables/BookingCondition").BookingCondition);
+                const userRepo = Database_1.AppDataSource.getRepository(require("../models/User").User);
+                const orgRepo = Database_1.AppDataSource.getRepository(require("../models/Organization").Organization);
+                const payments = yield paymentRepo.find({ where: { bookingId } });
+                const booking = yield bookingRepo.findOne({ where: { bookingId } });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found" });
+                    return;
+                }
+                const condition = yield conditionRepo.findOne({
+                    where: { venue: { venueId: booking.venueId } },
+                });
+                const totalPaid = payments.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+                const requiredDeposit = ((booking.amountToBePaid || 0) *
+                    ((condition === null || condition === void 0 ? void 0 : condition.depositRequiredPercent) || 0)) /
+                    100;
+                let depositPaidAt = null;
+                let runningTotal = 0;
+                for (const p of payments.sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime())) {
+                    runningTotal += p.amountPaid || 0;
+                    if (runningTotal >= requiredDeposit) {
+                        depositPaidAt = p.paymentDate;
+                        break;
+                    }
+                }
+                const hoursSinceBooking = depositPaidAt
+                    ? (depositPaidAt.getTime() - booking.createdAt.getTime()) /
+                        (1000 * 60 * 60)
+                    : null;
+                const depositFulfilled = totalPaid >= requiredDeposit &&
+                    hoursSinceBooking !== null &&
+                    hoursSinceBooking <= ((condition === null || condition === void 0 ? void 0 : condition.depositRequiredTime) || 0);
+                // Enrich payments with payer info
+                const enrichedPayments = yield Promise.all(payments.map((payment) => __awaiter(this, void 0, void 0, function* () {
+                    let payer = null;
+                    if (payment.payerType === "USER") {
+                        payer = yield userRepo.findOne({
+                            where: { userId: payment.payerId },
+                        });
+                    }
+                    else if (payment.payerType === "ORGANIZATION") {
+                        payer = yield orgRepo.findOne({
+                            where: { organizationId: payment.payerId },
+                        });
+                    }
+                    return Object.assign(Object.assign({}, payment), { payer });
+                })));
+                res.status(200).json({
+                    success: true,
+                    payments: enrichedPayments,
+                    totalPaid,
+                    requiredDeposit,
+                    depositFulfilled,
+                    booking,
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to fetch payments for booking.",
+                });
+            }
+        });
+    }
+    static getPaymentsForUserBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { userId } = req.params;
+                const paymentRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBookingPayment").VenueBookingPayment);
+                const bookingRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBooking").VenueBooking);
+                const venueRepo = Database_1.AppDataSource.getRepository(require("../models/Venue Tables/Venue").Venue);
+                // Find all bookings by this user
+                const bookings = yield bookingRepo.find({ where: { createdBy: userId } });
+                const bookingIds = bookings.map((b) => b.bookingId);
+                if (bookingIds.length === 0) {
+                    res.status(200).json({ success: true, payments: [] });
+                    return;
+                }
+                // Find all payments for these bookings
+                const payments = yield paymentRepo.find({
+                    where: { bookingId: (0, typeorm_1.In)(bookingIds) },
+                });
+                // Enrich with booking and venue info
+                const enrichedPayments = yield Promise.all(payments.map((payment) => __awaiter(this, void 0, void 0, function* () {
+                    const booking = bookings.find((b) => b.bookingId === payment.bookingId);
+                    let venue = null;
+                    if (booking) {
+                        venue = yield venueRepo.findOne({
+                            where: { venueId: booking.venueId },
+                        });
+                    }
+                    return Object.assign(Object.assign({}, payment), { booking, venue });
+                })));
+                res.status(200).json({ success: true, payments: enrichedPayments });
+            }
+            catch (error) {
+                res
+                    .status(500)
+                    .json({ success: false, message: "Failed to fetch user payments." });
+            }
+        });
+    }
+    static getUserBookings(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { userId } = req.params;
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const bookings = yield bookingRepo.find({
+                    where: { createdBy: userId },
+                    relations: [
+                        "venue",
+                        "venue.bookingConditions",
+                        "venue.venueVariables",
+                        "event",
+                    ],
+                    order: {
+                        createdAt: "DESC", // Most recent bookings first
+                    },
+                });
+                // Enrich booking data with event details and payment info
+                const enrichedBookings = yield Promise.all(bookings.map((booking) => __awaiter(this, void 0, void 0, function* () {
+                    var _a;
+                    const venue = booking.venue;
+                    const event = booking.event;
+                    const bookingCondition = venue.bookingConditions[0];
+                    const venueAmount = ((_a = venue.venueVariables[0]) === null || _a === void 0 ? void 0 : _a.venueAmount) || 0;
+                    // Calculate deposit amount
+                    const depositAmount = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent)
+                        ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
+                        : venueAmount;
+                    // Get earliest booking date
+                    const earliestDate = new Date(Math.min(...booking.bookingDates.map((d) => new Date(d.date).getTime())));
+                    const paymentDeadline = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent)
+                        ? new Date(earliestDate.getTime() -
+                            bookingCondition.paymentComplementTimeBeforeEvent *
+                                24 *
+                                60 *
+                                60 *
+                                1000)
+                        : earliestDate;
+                    return {
+                        bookingId: booking.bookingId,
+                        eventId: event === null || event === void 0 ? void 0 : event.eventId,
+                        eventName: event === null || event === void 0 ? void 0 : event.eventName,
+                        eventType: event === null || event === void 0 ? void 0 : event.eventType,
+                        eventStatus: event === null || event === void 0 ? void 0 : event.eventStatus,
+                        venue: {
+                            venueId: venue.venueId,
+                            venueName: venue.venueName,
+                            location: venue.venueLocation,
+                            totalAmount: venueAmount,
+                            depositRequired: {
+                                percentage: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent) || 100,
+                                amount: depositAmount,
+                                description: "Initial deposit required to secure the booking",
+                            },
+                            paymentCompletionRequired: {
+                                daysBeforeEvent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0,
+                                amount: venueAmount - depositAmount,
+                                deadline: paymentDeadline,
+                                description: `Remaining payment must be completed ${(bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0} days before the event`,
+                            },
+                        },
+                        bookingDates: booking.bookingDates,
+                        bookingStatus: booking.bookingStatus,
+                        isPaid: booking.isPaid,
+                        createdAt: booking.createdAt,
+                        paymentSummary: {
+                            totalAmount: venueAmount,
+                            depositAmount: depositAmount,
+                            remainingAmount: venueAmount - depositAmount,
+                        },
+                    };
+                })));
+                // Calculate totals across all bookings
+                const totals = enrichedBookings.reduce((acc, booking) => {
+                    acc.totalBookings += 1;
+                    acc.totalAmount += booking.paymentSummary.totalAmount;
+                    acc.totalDepositRequired += booking.paymentSummary.depositAmount;
+                    acc.totalRemainingAmount += booking.paymentSummary.remainingAmount;
+                    acc.pendingBookings += booking.bookingStatus === "PENDING" ? 1 : 0;
+                    acc.paidBookings += booking.isPaid ? 1 : 0;
+                    return acc;
+                }, {
+                    totalBookings: 0,
+                    totalAmount: 0,
+                    totalDepositRequired: 0,
+                    totalRemainingAmount: 0,
+                    pendingBookings: 0,
+                    paidBookings: 0,
+                });
+                res.status(200).json({
+                    success: true,
+                    data: {
+                        bookings: enrichedBookings,
+                        summary: Object.assign(Object.assign({}, totals), { unpaidBookings: totals.totalBookings - totals.paidBookings }),
+                    },
+                    message: "User bookings fetched successfully",
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to fetch user bookings",
+                });
+            }
+        });
+    }
+    static processPayment(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const paymentData = Object.assign(Object.assign({}, req.body), { bookingId });
+                const result = yield VenueBookingPaymentService_1.VenueBookingPaymentService.processPayment(paymentData);
+                res.status(200).json({
+                    success: true,
+                    data: result.data,
+                    message: result.message,
+                });
+            }
+            catch (error) {
+                const errorResponse = {
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to process payment",
+                };
+                res.status(400).json(errorResponse);
+            }
+        });
+    }
+    static getPaymentHistory(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { bookingId } = req.params;
+                const result = yield VenueBookingPaymentService_1.VenueBookingPaymentService.getPaymentHistory(bookingId);
+                res.status(200).json({
+                    success: true,
+                    data: result,
+                    message: "Payment history fetched successfully",
+                });
+            }
+            catch (error) {
+                res.status(400).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to fetch payment history",
+                });
+            }
+        });
+    }
+}
+exports.VenueBookingController = VenueBookingController;

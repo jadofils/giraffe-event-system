@@ -10,6 +10,7 @@ import { Venue } from "./Venue Tables/Venue";
 import { EventType } from "../interfaces/Enums/EventTypeEnum";
 import { User } from "./User";
 import { IsArray, IsEnum, IsOptional, IsUUID } from "class-validator";
+import { Event } from "./Event Tables/Event";
 
 export enum VenueStatus {
   AVAILABLE = "AVAILABLE",
@@ -49,6 +50,10 @@ export class VenueBooking {
   @IsOptional()
   @IsUUID("4")
   eventId?: string;
+
+  @ManyToOne("Event", "venueBookings")
+  @JoinColumn({ name: "eventId" })
+  event?: Event;
 
   @Column("uuid")
   @IsUUID("4")

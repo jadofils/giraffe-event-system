@@ -11,8 +11,7 @@ import { Between, Raw } from "typeorm";
  * @param bookingType - 'DAILY' or 'HOURLY'
  * @param startDate - 'YYYY-MM-DD'
  * @param endDate - 'YYYY-MM-DD'
- * @param startTime - 'HH:mm' (optional, for HOURLY)
- * @param endTime - 'HH:mm' (optional, for HOURLY)
+ * @param hours - number[] (for HOURLY)
  * @returns {Promise<{available: boolean, unavailableDates?: string[]}>}
  */
 export async function checkVenueAvailability({
@@ -20,15 +19,13 @@ export async function checkVenueAvailability({
   bookingType,
   startDate,
   endDate,
-  startTime,
-  endTime,
+  hours,
 }: {
   venueId: string;
   bookingType: string;
   startDate: string;
   endDate: string;
-  startTime?: string;
-  endTime?: string;
+  hours?: number[];
 }): Promise<{ available: boolean; unavailableDates?: string[] }> {
   // Convert date strings to Date objects for typeorm query
   const start = new Date(startDate);
@@ -59,8 +56,12 @@ export async function checkVenueAvailability({
       return { available: false, unavailableDates };
     }
     return { available: true };
-  } else if (bookingType === "HOURLY") {
-    // Query for any slot that overlaps with the requested time on any day
+  } else if (
+    bookingType === "HOURLY" &&
+    Array.isArray(hours) &&
+    hours.length > 0
+  ) {
+    // Query for any slot that overlaps with the requested hours on any day
     const slots = await AppDataSource.getRepository(VenueAvailabilitySlot).find(
       {
         where: {
@@ -69,24 +70,18 @@ export async function checkVenueAvailability({
         },
       }
     );
-    // Filter in JS for time overlap
+    // Filter in JS for hour overlap
     const unavailableDates: string[] = [];
     for (const slot of slots) {
-      // slot.startTime and slot.endTime are Date objects (time only)
-      // Convert to string 'HH:mm:ss' for comparison
-      const slotStart = slot.startTime
-        ? slot.startTime.toTimeString().slice(0, 5)
-        : null;
-      const slotEnd = slot.endTime
-        ? slot.endTime.toTimeString().slice(0, 5)
-        : null;
-      if (
-        slotStart &&
-        slotEnd &&
-        slotStart < (endTime || "23:59") &&
-        slotEnd > (startTime || "00:00")
-      ) {
-        unavailableDates.push(slot.Date.toISOString().slice(0, 10));
+      if (Array.isArray(slot.bookedHours) && slot.bookedHours.length > 0) {
+        const overlap = hours.some((h) => (slot.bookedHours ?? []).includes(h));
+        if (overlap) {
+          unavailableDates.push(
+            slot.Date instanceof Date
+              ? slot.Date.toISOString().slice(0, 10)
+              : String(slot.Date).slice(0, 10)
+          );
+        }
       }
     }
     if (unavailableDates.length > 0) {
@@ -96,4 +91,15 @@ export async function checkVenueAvailability({
   }
   // Unknown booking type
   return { available: false };
+}
+
+// Instead of using slot.startTime and slot.endTime, use slot.bookedHours
+// Example: to get a string of booked hours
+export function getSlotHoursString(slot: any): string {
+  if (Array.isArray(slot.bookedHours) && slot.bookedHours.length > 0) {
+    return slot.bookedHours
+      .map((h: number) => `${h.toString().padStart(2, "0")}:00`)
+      .join(", ");
+  }
+  return "";
 }
