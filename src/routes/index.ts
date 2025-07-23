@@ -12,8 +12,7 @@ import resourceRoutes from "./ResourceRoutes"; // Ensure resourceRoutes is expor
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 // import VenueBookingRoutes from "./VenueBookingRoutes";
 import InvoiceRoutes from "./InvoiceRoutes";
-import PaymentRoutes from "./PaymentRoutes";
-import InstallmentPlanRoutes from "./InstallmentPlanRoutes";
+
 import EventRoute from "./EventRoutes";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./VenueRoutes";
@@ -46,10 +45,7 @@ router.use("/venue-bookings", VenueBookingRoutes);
 router.use("/invoices", InvoiceRoutes);
 
 //endpoints of the payments
-router.use("/payments", PaymentRoutes);
 
-//installements planning
-router.use("/installments", InstallmentPlanRoutes);
 
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes);

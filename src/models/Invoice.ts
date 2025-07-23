@@ -1,130 +1,73 @@
 // src/models/Invoice.ts
 import {
   Entity,
-  PrimaryColumn,
+  PrimaryGeneratedColumn,
   Column,
+  CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
-  OneToMany,
   OneToOne,
   JoinColumn,
-  PrimaryGeneratedColumn,
 } from "typeorm";
-import {
-  IsUUID,
-  IsDateString,
-  IsNumber,
-  IsEnum,
-  IsString,
-  IsNotEmpty,
-  Min,
-  IsOptional,
-} from "class-validator";
-import { Type } from "class-transformer";
-
-// --- Enums for better type safety ---
-import { InvoiceStatus } from "../interfaces/Enums/InvoiceStatus";
-
-// Assuming these exist and are properly defined
+import { Venue } from "./Venue Tables/Venue";
 import { User } from "./User";
 import { Event } from "./Event Tables/Event";
-import { Payment } from "./Payment";
 import { Registration } from "./Registration";
-import { InstallmentPlan } from "./InstallmentPlan";
-import { Venue } from "./Venue Tables/Venue";
-import { VenueBooking } from "./VenueBooking";
-
-export enum PayerType {
-  USER = "USER",
-  ORGANIZATION = "ORGANIZATION",
-}
 
 @Entity("invoices")
 export class Invoice {
-  @PrimaryGeneratedColumn("uuid") // <--- CHANGE THIS LINE
-  @IsUUID()
+  @PrimaryGeneratedColumn("uuid")
   invoiceId!: string;
 
-  @Column({ type: "uuid" })
-  @IsUUID()
-  @IsNotEmpty()
+  @Column("uuid")
+  venueId!: string;
+
+  @ManyToOne(() => Venue)
+  @JoinColumn({ name: "venueId" })
+  venue!: Venue;
+
+  @Column("uuid")
+  userId!: string;
+
+  @ManyToOne(() => User, (user) => user.invoices)
+  @JoinColumn({ name: "userId" })
+  user!: User;
+
+  @Column("uuid")
   eventId!: string;
 
-  @Column({ type: "uuid", nullable: true })
-  @IsUUID()
-  @IsOptional()
-  userId?: string; // User who is responsible for or is the recipient of the invoice
+  @ManyToOne(() => Event, (event) => event.invoices)
+  @JoinColumn({ name: "eventId" })
+  event!: Event;
 
-  @Column({ type: "timestamp" })
-  @IsDateString() // Validates if it's a valid date string (e.g., ISO 8601)
-  @IsNotEmpty()
-  invoiceDate!: Date; // Use Date object internally
+  @Column("uuid", { nullable: true })
+  registrationId?: string;
 
-  @Column({ type: "timestamp" })
-  @IsDateString() // Validates if it's a valid date string (e.g., ISO 8601)
-  @IsNotEmpty()
-  dueDate!: Date; // Use Date object internally
-
-  @Column({ type: "decimal", precision: 10, scale: 2 })
-  @IsNumber()
-  @Min(0)
-  @IsNotEmpty()
-  totalAmount!: number;
-
-  @Column({ type: "enum", enum: InvoiceStatus, default: InvoiceStatus.PENDING })
-  @IsEnum(InvoiceStatus)
-  @IsNotEmpty()
-  status!: InvoiceStatus; // Use enum for status
-
-  @Column({ type: "uuid", nullable: true })
-  @IsOptional()
-  @IsUUID()
-  registrationId?: string; // Foreign key to Registration
+  @OneToOne(() => Registration, (registration) => registration.invoice)
+  @JoinColumn({ name: "registrationId" })
+  registration?: Registration;
 
   @Column("uuid")
   payerId!: string;
 
-  @Column({ type: "enum", enum: PayerType })
-  payerType!: PayerType;
+  @Column()
+  payerType!: string;
 
-  // Relationships
-  @ManyToOne(() => Event, (event) => event.invoices) // Assuming 'invoices' property exists on Event entity
-  @JoinColumn({ name: "eventId" })
-  event?: Event;
+  @Column({ type: "decimal", precision: 10, scale: 2 })
+  totalAmount!: number;
 
-  @ManyToOne(() => User, (user) => user.invoices) // Assuming 'invoices' property exists on User entity
-  @JoinColumn({ name: "userId" })
-  user?: User;
+  @Column()
+  status!: string;
 
-  @Column({ type: "uuid", nullable: true })
-  @IsOptional()
-  @IsUUID()
-  venueId?: string | null;
+  @Column({ type: "timestamp" })
+  invoiceDate!: Date;
 
-  @ManyToOne(() => Venue, (venue) => venue.invoices, { nullable: true })
-  @JoinColumn({ name: "venueId" })
-  venue?: Venue;
+  @Column({ type: "timestamp" })
+  dueDate!: Date;
 
-  @OneToMany(() => Payment, (payment) => payment.invoice)
-  payments?: Payment[];
-
-  @OneToMany(() => InstallmentPlan, (plan) => plan.invoice)
-  installmentPlans!: InstallmentPlan[];
-  @OneToOne(() => Registration, (registration) => registration.invoice, {
-    nullable: true,
-  })
-  @JoinColumn({ name: "registrationId" })
-  registration?: Registration;
-
-  @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
+  @CreateDateColumn()
   createdAt!: Date;
 
-  @Column({
-    type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
-    onUpdate: "CURRENT_TIMESTAMP",
-  })
+  @UpdateDateColumn()
   updatedAt!: Date;
-
-  @Column({ type: "timestamp", nullable: true })
-  deletedAt?: Date;
 }

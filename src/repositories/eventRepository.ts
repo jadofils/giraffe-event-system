@@ -57,7 +57,15 @@ export class EventRepository {
           });
           await queryRunner.manager.save(eventVenue);
 
-          // 3. Create VenueBooking for this date and venue
+          // Calculate total hours and amount for hourly venues
+          const totalHours = bookingDate.hours?.length || 1;
+          const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
+          const totalAmount =
+            venue.bookingType === "HOURLY"
+              ? baseVenueAmount * totalHours
+              : baseVenueAmount;
+
+          // Create VenueBooking for this date and venue
           const venueBooking = queryRunner.manager.create(VenueBooking, {
             eventId: singleDateEvent.eventId,
             venueId: venue.venueId,
@@ -68,7 +76,7 @@ export class EventRepository {
             isPaid: false,
             timezone: "UTC",
             createdBy: eventData.eventOrganizerId,
-            amountToBePaid: venue.venueVariables[0].venueAmount,
+            amountToBePaid: totalAmount, // Use calculated total amount
           });
           await queryRunner.manager.save(venueBooking);
 

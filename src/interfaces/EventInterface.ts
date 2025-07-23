@@ -5,7 +5,7 @@ import { OrganizationInterface } from "./OrganizationInterface";
 import { VenueInterface } from "./VenueInterface";
 import { VenueBookingInterface } from "./VenueBookingInterface";
 import { RegistrationInterface } from "./RegistrationInterface";
-import { PaymentInterface } from "./PaymentInterface";
+// import { PaymentInterface } from "./PaymentInterface";
 import { InvoiceInterface } from "./InvoiceInterface";
 import { BookingDateDTO } from "./BookingDateInterface";
 
@@ -27,7 +27,7 @@ export class EventInterface {
   venues?: VenueInterface[];
   venueBookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
-  payments?: PaymentInterface[];
+  // payments?: PaymentInterface[];
   invoices?: InvoiceInterface[];
   createdAt!: string;
   updatedAt!: string;
@@ -52,7 +52,7 @@ export class EventInterface {
       venues: data.venues || [],
       venueBookings: data.venueBookings || [],
       registrations: data.registrations || [],
-      payments: data.payments || [],
+      // payments: data.payments || [],
       invoices: data.invoices || [],
       createdAt: data.createdAt || "",
       updatedAt: data.updatedAt || "",
@@ -140,7 +140,7 @@ export class EventInterface {
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,
-      payments: data.payments,
+      // payments: data.payments,
       invoices: data.invoices,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -212,7 +212,7 @@ export class EventResponseInterface {
   venue?: VenueInterface;
   venueBookings?: VenueBookingInterface[];
   registrations?: RegistrationInterface[];
-  payments?: PaymentInterface[];
+  // payments?: PaymentInterface[];
   invoices?: InvoiceInterface[];
   createdAt!: string;
   updatedAt!: string;
@@ -234,7 +234,7 @@ export class EventResponseInterface {
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,
-      payments: data.payments,
+      // payments: data.payments,
       invoices: data.invoices,
       createdAt: data.createdAt || "",
       updatedAt: data.updatedAt || "",
@@ -257,7 +257,7 @@ export class EventResponseInterface {
       venue: data.venue,
       venueBookings: data.venueBookings,
       registrations: data.registrations,
-      payments: data.payments,
+      // payments: data.payments,
       invoices: data.invoices,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,

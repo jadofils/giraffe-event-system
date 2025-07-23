@@ -89,10 +89,6 @@ __decorate([
     __metadata("design:type", String)
 ], Registration.prototype, "ticketTypeId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.registrations, {
-        nullable: false,
-        eager: true,
-    }),
     (0, typeorm_1.JoinColumn)({ name: "venueId" }),
     __metadata("design:type", Venue_1.Venue)
 ], Registration.prototype, "venue", void 0);

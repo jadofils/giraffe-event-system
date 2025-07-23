@@ -13,7 +13,6 @@ exports.Payment = void 0;
 const typeorm_1 = require("typeorm");
 const Invoice_1 = require("./Invoice");
 const Registration_1 = require("./Registration");
-const InstallmentPlan_1 = require("./InstallmentPlan");
 const Event_1 = require("./Event Tables/Event");
 const PaymentStatusEnum_1 = require("../interfaces/Enums/PaymentStatusEnum");
 const Venue_1 = require("./Venue Tables/Venue");
@@ -108,10 +107,6 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Payment.prototype, "installmentPlanId", void 0);
-__decorate([
-    (0, typeorm_1.ManyToOne)(() => InstallmentPlan_1.InstallmentPlan, (installmentPlan) => installmentPlan.payments, { eager: true }),
-    __metadata("design:type", InstallmentPlan_1.InstallmentPlan)
-], Payment.prototype, "installmentPlan", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)

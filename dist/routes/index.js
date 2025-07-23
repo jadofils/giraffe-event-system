@@ -50,8 +50,6 @@ const ResourceRoutes_1 = __importDefault(require("./ResourceRoutes")); // Ensure
 // import RegistrationRoutes from "./RegistrationRoutes"; // Ensure RegistrationRoutes is exported from RegistrationRoutes
 // import VenueBookingRoutes from "./VenueBookingRoutes";
 const InvoiceRoutes_1 = __importDefault(require("./InvoiceRoutes"));
-const PaymentRoutes_1 = __importDefault(require("./PaymentRoutes"));
-const InstallmentPlanRoutes_1 = __importDefault(require("./InstallmentPlanRoutes"));
 const EventRoutes_1 = __importDefault(require("./EventRoutes"));
 const PermissionRoutes_1 = __importDefault(require("./PermissionRoutes"));
 const VenueRoutes_1 = require("./VenueRoutes");
@@ -76,9 +74,6 @@ router.use("/venue-bookings", VenueBookingRoutes_1.default);
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes_1.default);
 //endpoints of the payments
-router.use("/payments", PaymentRoutes_1.default);
-//installements planning
-router.use("/installments", InstallmentPlanRoutes_1.default);
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes_1.default);
 const swaggerDocument = yamljs_1.default.load(path_1.default.join(__dirname, "../config/Swagger.yaml"));

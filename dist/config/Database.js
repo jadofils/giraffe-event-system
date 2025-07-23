@@ -25,7 +25,6 @@ const Organization_1 = require("../models/Organization");
 const Registration_1 = require("../models/Registration");
 const Payment_1 = require("../models/Payment");
 const Invoice_1 = require("../models/Invoice");
-const InstallmentPlan_1 = require("../models/InstallmentPlan");
 const Budget_1 = require("../models/Budget");
 const VenueBooking_1 = require("../models/VenueBooking");
 const VenueInvoice_1 = require("../models/VenueInvoice");
@@ -59,7 +58,6 @@ exports.AppDataSource = new typeorm_1.DataSource({
         Registration_1.Registration,
         Payment_1.Payment,
         Invoice_1.Invoice,
-        InstallmentPlan_1.InstallmentPlan,
         Budget_1.Budget,
         VenueBooking_1.VenueBooking,
         VenueBookingPayment_1.VenueBookingPayment,

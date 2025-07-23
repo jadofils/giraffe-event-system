@@ -19,7 +19,8 @@ router.get(
   "/payments/manager/:managerId",
   VenueBookingController.getPaymentsByManagerId
 );
-router.get("/user/:userId/payments",
+router.get(
+  "/user/:userId/payments",
   VenueBookingController.getPaymentsForUserBookings
 );
 router.get("/user/:userId/bookings", VenueBookingController.getUserBookings);

@@ -31,7 +31,7 @@ export class BookingValidationService {
       for (const bookingDate of bookingDates) {
         const eventDate = new Date(bookingDate.date);
 
-        // Check event date availability first - this is mandatory
+        // Check event date availability based on venue booking type
         const existingEventSlot = await slotRepo.findOne({
           where: {
             venueId: venue.venueId,
@@ -39,18 +39,45 @@ export class BookingValidationService {
           },
         });
 
-        if (
-          existingEventSlot &&
-          existingEventSlot.status !== SlotStatus.AVAILABLE
-        ) {
-          unavailableDates.push({
-            date: bookingDate.date,
-            hours: existingEventSlot.bookedHours,
-            reason: `Event date ${bookingDate.date} is already booked`,
-            warningType: "ERROR",
-            isTransitionWarning: false,
-          });
-          continue;
+        if (venue.bookingType === "HOURLY") {
+          // For hourly bookings, check if requested hours conflict with existing bookings
+          if (existingEventSlot) {
+            const existingHours = existingEventSlot.bookedHours || [];
+            const requestedHours = bookingDate.hours || [];
+
+            // Check for hour conflicts
+            const conflictingHours = requestedHours.filter((hour) =>
+              existingHours.includes(hour)
+            );
+
+            if (conflictingHours.length > 0) {
+              unavailableDates.push({
+                date: bookingDate.date,
+                hours: conflictingHours,
+                reason: `Hours ${conflictingHours.join(
+                  ", "
+                )} are already booked on ${bookingDate.date}`,
+                warningType: "ERROR",
+                isTransitionWarning: false,
+              });
+              continue;
+            }
+          }
+        } else {
+          // For daily bookings, the entire date must be available
+          if (
+            existingEventSlot &&
+            existingEventSlot.status !== SlotStatus.AVAILABLE
+          ) {
+            unavailableDates.push({
+              date: bookingDate.date,
+              hours: existingEventSlot.bookedHours,
+              reason: `Date ${bookingDate.date} is already booked`,
+              warningType: "ERROR",
+              isTransitionWarning: false,
+            });
+            continue;
+          }
         }
 
         // Check transition time availability - this is optional
@@ -69,17 +96,45 @@ export class BookingValidationService {
             transitionSlot &&
             transitionSlot.status !== SlotStatus.AVAILABLE
           ) {
-            unavailableDates.push({
-              date: transitionDate.toISOString().split("T")[0],
-              hours: transitionSlot.bookedHours,
-              reason: `Transition time not available on ${
-                transitionDate.toISOString().split("T")[0]
-              } (day before event on ${
-                bookingDate.date
-              }). Event can still be booked but without transition time.`,
-              warningType: "WARNING",
-              isTransitionWarning: true,
-            });
+            if (venue.bookingType === "HOURLY" && bookingDate.hours) {
+              // For hourly bookings, check transition hours before the first booked hour
+              const firstHour = Math.min(...bookingDate.hours);
+              const transitionHours = Array.from(
+                { length: transitionTime },
+                (_, i) => firstHour - (i + 1)
+              ).filter((h) => h >= 0); // Only include valid hours
+
+              const existingTransitionHours = transitionSlot.bookedHours || [];
+              const conflictingTransitionHours = transitionHours.filter(
+                (hour) => existingTransitionHours.includes(hour)
+              );
+
+              if (conflictingTransitionHours.length > 0) {
+                unavailableDates.push({
+                  date: transitionDate.toISOString().split("T")[0],
+                  hours: conflictingTransitionHours,
+                  reason: `Transition hours ${conflictingTransitionHours.join(
+                    ", "
+                  )} not available before event on ${
+                    bookingDate.date
+                  }. Event can still be booked but without transition time.`,
+                  warningType: "WARNING",
+                  isTransitionWarning: true,
+                });
+              }
+            } else {
+              unavailableDates.push({
+                date: transitionDate.toISOString().split("T")[0],
+                hours: transitionSlot.bookedHours,
+                reason: `Transition time not available on ${
+                  transitionDate.toISOString().split("T")[0]
+                } (day before event on ${
+                  bookingDate.date
+                }). Event can still be booked but without transition time.`,
+                warningType: "WARNING",
+                isTransitionWarning: true,
+              });
+            }
           }
         }
       }

@@ -94,10 +94,10 @@ export class Registration {
   @Column({ type: "uuid" })
   ticketTypeId!: string;
 
-  @ManyToOne(() => Venue, (venue) => venue.registrations, {
-    nullable: false,
-    eager: true,
-  })
+  // @ManyToOne(() => Venue, (venue) => venue.registrations, {
+  //   nullable: false,
+  //   eager: true,
+  // })
   @JoinColumn({ name: "venueId" })
   venue!: Venue;
 

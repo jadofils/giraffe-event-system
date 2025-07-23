@@ -1,4 +1,4 @@
-import { PaymentInterface } from './PaymentInterface';
+// import { PaymentInterface } from './PaymentInterface';
 import { RegistrationInterface } from './RegistrationInterface';
 
 export class InvoiceInterface {
@@ -9,7 +9,7 @@ export class InvoiceInterface {
   dueDate!: string;
   totalAmount!: number;
   status!: string;
-  payments?: PaymentInterface[];
+  // payments?: PaymentInterface[];
   registration?: RegistrationInterface;
   createdAt!: Date;
   updatedAt!: Date;
@@ -24,7 +24,7 @@ export class InvoiceInterface {
       dueDate: data.dueDate || new Date().toISOString(),
       totalAmount: data.totalAmount || 0,
       status: data.status || 'pending',
-      payments: data.payments,
+      // payments: data.payments,
       registration: data.registration,
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),

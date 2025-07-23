@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { PaymentRepository } from '../../repositories/PaymentRepository';
 import { PaymentStatus } from '../../interfaces/Index';
 import * as dotenv from 'dotenv';
 dotenv.config(); // Load environment variables
@@ -54,8 +53,6 @@ export class FlutterwavePaymentService {
           isSuccessful: true,
           paymentResponse: JSON.stringify(data),
         };
-
-        await PaymentRepository.createPayment(paymentRecord);
       }
 
       return { isSuccessful, paymentData: data };

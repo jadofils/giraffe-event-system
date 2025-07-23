@@ -13,7 +13,6 @@ import { Organization } from "../models/Organization";
 import { Registration } from "../models/Registration";
 import { Payment } from "../models/Payment";
 import { Invoice } from "../models/Invoice";
-import { InstallmentPlan } from "../models/InstallmentPlan";
 import { Budget } from "../models/Budget";
 import { VenueBooking } from "../models/VenueBooking";
 import { VenueInvoice } from "../models/VenueInvoice";
@@ -49,7 +48,6 @@ export const AppDataSource = new DataSource({
     Registration,
     Payment,
     Invoice,
-    InstallmentPlan,
     Budget,
     VenueBooking,
     VenueBookingPayment,

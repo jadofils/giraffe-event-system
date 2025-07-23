@@ -19,6 +19,7 @@ const uuid_1 = require("uuid");
 class EventRepository {
     static createEventWithRelations(eventData, venues, guests, dates) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
             const queryRunner = Database_1.AppDataSource.createQueryRunner();
             yield queryRunner.connect();
             yield queryRunner.startTransaction();
@@ -40,7 +41,13 @@ class EventRepository {
                             timezone: "UTC",
                         });
                         yield queryRunner.manager.save(eventVenue);
-                        // 3. Create VenueBooking for this date and venue
+                        // Calculate total hours and amount for hourly venues
+                        const totalHours = ((_a = bookingDate.hours) === null || _a === void 0 ? void 0 : _a.length) || 1;
+                        const baseVenueAmount = ((_b = venue.venueVariables[0]) === null || _b === void 0 ? void 0 : _b.venueAmount) || 0;
+                        const totalAmount = venue.bookingType === "HOURLY"
+                            ? baseVenueAmount * totalHours
+                            : baseVenueAmount;
+                        // Create VenueBooking for this date and venue
                         const venueBooking = queryRunner.manager.create(VenueBooking_1.VenueBooking, {
                             eventId: singleDateEvent.eventId,
                             venueId: venue.venueId,
@@ -51,7 +58,7 @@ class EventRepository {
                             isPaid: false,
                             timezone: "UTC",
                             createdBy: eventData.eventOrganizerId,
-                            amountToBePaid: venue.venueVariables[0].venueAmount,
+                            amountToBePaid: totalAmount, // Use calculated total amount
                         });
                         yield queryRunner.manager.save(venueBooking);
                         // 4. Create EventGuests if public (copy guests to each event)

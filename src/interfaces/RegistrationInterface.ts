@@ -3,7 +3,7 @@ import { EventInterface } from './EventInterface';
 import { UserInterface } from './UserInterface';
 import { TicketTypeInterface } from './TicketTypeInterface';
 import { VenueInterface } from './VenueInterface';
-import { PaymentInterface } from './PaymentInterface';
+// import { PaymentInterface } from './PaymentInterface';
 import { InvoiceInterface } from './InvoiceInterface';
 
 export class RegistrationInterface {
@@ -29,7 +29,7 @@ export class RegistrationInterface {
   buyer?: UserInterface;
   ticketType?: TicketTypeInterface;
   venue?: VenueInterface;
-  payment?: PaymentInterface;
+  // payment?: PaymentInterface;
   invoice?: InvoiceInterface;
   createdAt!: Date;
   updatedAt!: Date;
@@ -59,7 +59,7 @@ export class RegistrationInterface {
       buyer: data.buyer,
       ticketType: data.ticketType,
       venue: data.venue,
-      payment: data.payment,
+      // payment: data.payment,
       invoice: data.invoice,
       createdAt: data.createdAt || new Date(),
       updatedAt: data.updatedAt || new Date(),
@@ -119,7 +119,7 @@ export class RegistrationInterface {
       attended: data.attended,
       totalCost: data.totalCost,
       registrationStatus: data.registrationStatus,
-      payment: data.payment,
+      // payment: data.payment,
       invoice: data.invoice,
       paymentId: data.paymentId,
       invoiceId: data.invoiceId,
@@ -210,7 +210,7 @@ export class RegistrationResponseInterface {
   attended!: boolean;
   totalCost!: number;
   registrationStatus!: string;
-  payment?: PaymentInterface;
+  // payment?: PaymentInterface;
   invoice?: InvoiceInterface;
   paymentId?: string;
   invoiceId?: string;
@@ -235,7 +235,7 @@ export class RegistrationResponseInterface {
       attended: data.attended ?? false,
       totalCost: data.totalCost || 0,
       registrationStatus: data.registrationStatus || 'active',
-      payment: data.payment,
+      // payment: data.payment,
       invoice: data.invoice,
       paymentId: data.paymentId,
       invoiceId: data.invoiceId,
@@ -262,7 +262,7 @@ export class RegistrationResponseInterface {
       attended: data.attended,
       totalCost: data.totalCost,
       registrationStatus: data.registrationStatus,
-      payment: data.payment,
+      // payment: data.payment,
       invoice: data.invoice,
       paymentId: data.paymentId,
       invoiceId: data.invoiceId,

@@ -10,7 +10,7 @@ import {
 } from "typeorm";
 import { Invoice } from "./Invoice";
 import { Registration } from "./Registration";
-import { InstallmentPlan } from "./InstallmentPlan";
+
 import { Event } from "./Event Tables/Event";
 import { PaymentStatus } from "../interfaces/Enums/PaymentStatusEnum";
 import { Venue } from "./Venue Tables/Venue";
@@ -83,13 +83,6 @@ export class Payment {
 
   @Column({ nullable: true })
   installmentPlanId?: string;
-
-  @ManyToOne(
-    () => InstallmentPlan,
-    (installmentPlan) => installmentPlan.payments,
-    { eager: true }
-  )
-  installmentPlan!: InstallmentPlan;
 
   @Column({ nullable: true })
   paidBy?: string;

@@ -1,5 +1,4 @@
-export * from './PaymentInterface';
-export * from './InstallmentPlanInterface';
+
 export * from './UserInterface';
 export * from './RoleInterface';
 export * from './OrganizationInterface';

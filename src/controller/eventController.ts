@@ -855,7 +855,19 @@ export class EventController {
         for (const booking of event.venueBookings) {
           const venue = booking.venue;
           const bookingCondition = venue.bookingConditions[0];
-          const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+          const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
+
+          // Calculate total hours across all booking dates
+          const totalHours = booking.bookingDates.reduce((sum, date) => {
+            return sum + (date.hours?.length || 1); // If no hours specified, count as 1 day
+          }, 0);
+
+          // Calculate amounts based on venue booking type
+          const venueAmount =
+            venue.bookingType === "HOURLY"
+              ? baseVenueAmount * totalHours
+              : baseVenueAmount;
+
           const depositAmount = bookingCondition?.depositRequiredPercent
             ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
             : venueAmount;
@@ -888,11 +900,17 @@ export class EventController {
             venue: {
               venueId: venue.venueId,
               venueName: venue.venueName,
+              bookingType: venue.bookingType,
+              baseAmount: baseVenueAmount,
+              totalHours: totalHours,
               totalAmount: venueAmount,
               depositRequired: {
                 percentage: bookingCondition?.depositRequiredPercent || 100,
                 amount: depositAmount,
-                description: "Initial deposit required to secure the booking",
+                description:
+                  venue.bookingType === "HOURLY"
+                    ? `Initial deposit required to secure the booking (${bookingCondition?.depositRequiredPercent}% of total amount for ${totalHours} hours)`
+                    : "Initial deposit required to secure the booking",
               },
               paymentCompletionRequired: {
                 daysBeforeEvent:
@@ -920,6 +938,9 @@ export class EventController {
               remainingAmount: venueAmount - depositAmount,
               bookingStatus: booking.bookingStatus,
               isPaid: booking.isPaid,
+              pricePerHour:
+                venue.bookingType === "HOURLY" ? baseVenueAmount : null,
+              totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
             },
           });
         }
@@ -1022,8 +1043,19 @@ export class EventController {
       }
 
       const venue = booking.venue;
-      const bookingCondition = venue.bookingConditions[0]; // Get first booking condition
-      const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+      const bookingCondition = venue.bookingConditions[0];
+      const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
+
+      // Calculate total hours across all booking dates
+      const totalHours = booking.bookingDates.reduce((sum, date) => {
+        return sum + (date.hours?.length || 1); // If no hours specified, count as 1 day
+      }, 0);
+
+      // Calculate amounts based on venue booking type
+      const venueAmount =
+        venue.bookingType === "HOURLY"
+          ? baseVenueAmount * totalHours
+          : baseVenueAmount;
 
       // Calculate required deposit
       const depositAmount = bookingCondition?.depositRequiredPercent
@@ -1057,11 +1089,17 @@ export class EventController {
           venue: {
             venueId: venue.venueId,
             venueName: venue.venueName,
+            bookingType: venue.bookingType,
+            baseAmount: baseVenueAmount,
+            totalHours: totalHours,
             totalAmount: venueAmount,
             depositRequired: {
               percentage: bookingCondition?.depositRequiredPercent || 100,
               amount: depositAmount,
-              description: "Initial deposit required to secure the booking",
+              description:
+                venue.bookingType === "HOURLY"
+                  ? `Initial deposit required to secure the booking (${bookingCondition?.depositRequiredPercent}% of total amount for ${totalHours} hours)`
+                  : "Initial deposit required to secure the booking",
             },
             paymentCompletionRequired: {
               daysBeforeEvent:
@@ -1089,6 +1127,9 @@ export class EventController {
             remainingAmount: venueAmount - depositAmount,
             bookingStatus: booking.bookingStatus,
             isPaid: booking.isPaid,
+            pricePerHour:
+              venue.bookingType === "HOURLY" ? baseVenueAmount : null,
+            totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
             paymentHistory: [], // You can add payment history here if needed
           },
         },
@@ -1180,7 +1221,19 @@ export class EventController {
       for (const booking of bookings) {
         const venue = booking.venue;
         const bookingCondition = venue.bookingConditions[0];
-        const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
+        const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
+
+        // Calculate total hours across all booking dates
+        const totalHours = booking.bookingDates.reduce((sum, date) => {
+          return sum + (date.hours?.length || 1); // If no hours specified, count as 1 day
+        }, 0);
+
+        // Calculate amounts based on venue booking type
+        const venueAmount =
+          venue.bookingType === "HOURLY"
+            ? baseVenueAmount * totalHours
+            : baseVenueAmount;
+
         const depositAmount = bookingCondition?.depositRequiredPercent
           ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
           : venueAmount;
@@ -1213,11 +1266,17 @@ export class EventController {
           venue: {
             venueId: venue.venueId,
             venueName: venue.venueName,
+            bookingType: venue.bookingType,
+            baseAmount: baseVenueAmount,
+            totalHours: totalHours,
             totalAmount: venueAmount,
             depositRequired: {
               percentage: bookingCondition?.depositRequiredPercent || 100,
               amount: depositAmount,
-              description: "Initial deposit required to secure the booking",
+              description:
+                venue.bookingType === "HOURLY"
+                  ? `Initial deposit required to secure the booking (${bookingCondition?.depositRequiredPercent}% of total amount for ${totalHours} hours)`
+                  : "Initial deposit required to secure the booking",
             },
             paymentCompletionRequired: {
               daysBeforeEvent:
@@ -1245,6 +1304,9 @@ export class EventController {
             remainingAmount: venueAmount - depositAmount,
             bookingStatus: booking.bookingStatus,
             isPaid: booking.isPaid,
+            pricePerHour:
+              venue.bookingType === "HOURLY" ? baseVenueAmount : null,
+            totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
           },
         });
       }
