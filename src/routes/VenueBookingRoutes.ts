@@ -37,5 +37,17 @@ router.get(
   VenueBookingController.getPaymentsForUserBookings
 );
 router.get("/user/:userId/bookings", VenueBookingController.getUserBookings);
+router.patch(
+  "/:bookingId/refund-all-payments",
+  asyncHandler(VenueBookingController.refundAllPaymentsByManager)
+);
+router.get(
+  "/user/:userId/all-accessible-payments",
+  asyncHandler(VenueBookingController.getAllAccessiblePaymentsForUser)
+);
+router.get(
+  "/venue/:venueId/bookings",
+  asyncHandler(VenueBookingController.getBookingsByVenueId)
+);
 
 export default router;

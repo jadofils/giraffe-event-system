@@ -12,7 +12,11 @@ import {
   PaymentServiceError,
 } from "../interfaces/PaymentServiceInterface";
 import { Venue } from "../models/Venue Tables/Venue";
-import { VenueBookingPayment } from "../models/VenueBookingPayment";
+import {
+  VenueBookingPayment,
+  VenueBookingPaymentStatus,
+  PayerType,
+} from "../models/VenueBookingPayment";
 import { SimpleNotificationService } from "../services/notifications/SimpleNotificationService";
 import EmailService from "../services/emails/EmailService";
 import { BookingStatus } from "../models/VenueBooking";
@@ -353,6 +357,20 @@ export class VenueBookingController {
   static async addPaymentToBooking(req: Request, res: Response): Promise<void> {
     try {
       const { bookingId } = req.params;
+      // Check if booking is canceled
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({ where: { bookingId } });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+      if (booking.bookingStatus === "CANCELLED") {
+        res.status(400).json({
+          success: false,
+          message: "Cannot create payment for a canceled booking.",
+        });
+        return;
+      }
       const paymentData = {
         ...req.body,
         bookingId,
@@ -644,6 +662,20 @@ export class VenueBookingController {
   static async processPayment(req: Request, res: Response): Promise<void> {
     try {
       const { bookingId } = req.params;
+      // Check if booking is canceled
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({ where: { bookingId } });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+      if (booking.bookingStatus === "CANCELLED") {
+        res.status(400).json({
+          success: false,
+          message: "Cannot create payment for a canceled booking.",
+        });
+        return;
+      }
       const paymentData = {
         ...req.body,
         bookingId,
@@ -847,6 +879,14 @@ export class VenueBookingController {
       booking.cancellationReason = reason;
       await bookingRepo.save(booking);
 
+      // Set all payments for this booking to REFUND_IN_PROGRESS
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+      const payments = await paymentRepo.find({ where: { bookingId } });
+      for (const payment of payments) {
+        payment.paymentStatus = VenueBookingPaymentStatus.REFUND_IN_PROGRESS;
+        await paymentRepo.save(payment);
+      }
+
       // Cancel event
       if (booking.event) {
         booking.event.eventStatus = EventStatus.CANCELLED;
@@ -909,6 +949,7 @@ export class VenueBookingController {
         message: "Booking and related event cancelled.",
         booking,
         event: booking.event,
+        payments, // Return updated payments for user visibility
       });
     } catch (error) {
       res.status(500).json({
@@ -997,5 +1038,189 @@ export class VenueBookingController {
       booking.isFullyPaid = booking.remainingAmount <= 0;
     }
     res.json({ success: true, data: Object.values(bookingsMap) });
+  }
+
+  static async refundAllPaymentsByManager(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      // Fetch booking with venue
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["venue"],
+      });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+
+      // Check if user is the manager of the venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await venueVariableRepo.findOne({
+        where: { venue: { venueId: booking.venue.venueId } },
+        relations: ["manager"],
+      });
+      if (!venueVariable || venueVariable.manager.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          message: "You are not the manager of this venue.",
+        });
+        return;
+      }
+
+      // Set all payments for this booking to REFUNDED
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+      const payments = await paymentRepo.find({ where: { bookingId } });
+      for (const payment of payments) {
+        payment.paymentStatus = VenueBookingPaymentStatus.REFUNDED;
+        await paymentRepo.save(payment);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "All payments for this booking have been marked as refunded.",
+        payments,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to refund payments.",
+      });
+    }
+  }
+
+  static async getAllAccessiblePaymentsForUser(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { userId } = req.params;
+      // Get all organizations for user
+      const orgRepo = require("../repositories/OrganizationRepository");
+      const orgsResult =
+        await orgRepo.OrganizationRepository.getOrganizationsByUserId(userId);
+      if (!orgsResult.success || !orgsResult.data) {
+        console.log(`[DEBUG] No organizations found for userId: ${userId}`);
+        res.status(404).json({
+          success: false,
+          message: "Could not fetch organizations for user.",
+        });
+        return;
+      }
+      // Filter out 'Independent' organizations
+      const organizations = orgsResult.data.filter(
+        (org: any) => org.organizationName?.toLowerCase() !== "independent"
+      );
+
+      // Always get userPayments, even if organizations is empty
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+      const userPayments = await paymentRepo.find({
+        where: { payerId: userId, payerType: PayerType.USER },
+        order: { paymentDate: "DESC" },
+      });
+
+      // Only get organizationPayments if there are non-Independent organizations
+      const organizationPayments: Record<string, any[]> = {};
+      for (const org of organizations) {
+        const orgPayments = await paymentRepo.find({
+          where: {
+            payerId: org.organizationId,
+            payerType: PayerType.ORGANIZATION,
+          },
+          order: { paymentDate: "DESC" },
+        });
+        organizationPayments[org.organizationId] = orgPayments;
+      }
+
+      res
+        .status(200)
+        .json({ success: true, organizationPayments, userPayments });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to fetch payments.",
+      });
+    }
+  }
+
+  static async getBookingsByVenueId(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { venueId } = req.params;
+      if (!venueId) {
+        res
+          .status(400)
+          .json({ success: false, message: "venueId is required" });
+        return;
+      }
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const bookings = await bookingRepo.find({
+        where: { venueId },
+        order: { createdAt: "DESC" },
+      });
+      // Fetch venue summary
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId } });
+      // Enhanced venue summary with payment stats
+      let venueSummary = null;
+      if (venue) {
+        // Calculate payment stats
+        let fullPaidCount = 0;
+        let partialPaidCount = 0; // Not available without payment history
+        let unpaidCount = 0;
+        let totalRevenue = 0;
+        let totalExpectedRevenue = 0;
+        let totalPaidBookings = 0;
+        let totalUnpaidAmount = 0;
+        for (const booking of bookings) {
+          totalExpectedRevenue += Number(booking.amountToBePaid || 0);
+          if (booking.isPaid) {
+            fullPaidCount++;
+            totalRevenue += Number(booking.amountToBePaid || 0);
+            totalPaidBookings++;
+          } else {
+            unpaidCount++;
+            totalUnpaidAmount += Number(booking.amountToBePaid || 0);
+          }
+          // To support partialPaidCount, you would need to sum payments for each booking
+        }
+        venueSummary = {
+          venueId: venue.venueId,
+          venueName: venue.venueName,
+          capacity: venue.capacity,
+          location: venue.venueLocation,
+          totalBookings: bookings.length,
+          fullPaidCount,
+          partialPaidCount, // Always 0 unless payment history is added
+          unpaidCount,
+          totalRevenue,
+          totalExpectedRevenue,
+          totalPaidBookings,
+          totalUnpaidAmount,
+          occupancyRate: venue.capacity
+            ? ((bookings.length / venue.capacity) * 100).toFixed(2) + "%"
+            : null,
+        };
+      }
+      res.status(200).json({ success: true, venueSummary, bookings });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch bookings by venueId.",
+      });
+    }
   }
 }
