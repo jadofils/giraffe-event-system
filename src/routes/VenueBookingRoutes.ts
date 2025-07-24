@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/AuthMiddleware";
 import { VenueBookingController } from "../controller/VenueBookingController";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 
@@ -11,13 +12,25 @@ router.get(
   "/manager/:managerId",
   VenueBookingController.getBookingsByManagerId
 );
+router.get(
+  "/manager/:managerId/pending",
+  asyncHandler(VenueBookingController.getPendingBookingsByManager)
+);
 router.get("/:bookingId", VenueBookingController.getBookingById);
 router.patch("/:bookingId/approve", VenueBookingController.approveBooking);
+router.patch(
+  "/:bookingId/cancel-by-manager",
+  VenueBookingController.cancelByManager
+);
 router.post("/:bookingId/payments", VenueBookingController.processPayment);
 router.get("/:bookingId/payments", VenueBookingController.getPaymentHistory);
 router.get(
   "/payments/manager/:managerId",
   VenueBookingController.getPaymentsByManagerId
+);
+router.get(
+  "/payments/manager/:managerId/formatted",
+  asyncHandler(VenueBookingController.getFormattedPaymentsByManager)
 );
 router.get(
   "/user/:userId/payments",

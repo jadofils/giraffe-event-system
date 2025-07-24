@@ -8,6 +8,10 @@ const router = Router();
 // Public endpoints
 
 router.get("/public", OrganizationController.getAllPublicOrganizations);
+router.get(
+  "/:organizationId/venues/public",
+  OrganizationController.getApprovedVenuesByOrganizationId
+);
 
 // Protected endpoints
 router.get("/all", authenticate, OrganizationController.getAll);
@@ -49,6 +53,7 @@ router.get(
   authenticate,
   OrganizationController.getOrganizationVenues
 );
+
 
 router.patch("/:id/approve", authenticate, OrganizationController.approve);
 router.patch("/:id/reject", authenticate, OrganizationController.reject);

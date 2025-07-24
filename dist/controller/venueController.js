@@ -1574,7 +1574,7 @@ class VenueController {
                 }
                 // Delete old photo from Cloudinary
                 if (venue.mainPhotoUrl)
-                    yield VenueController.deleteFromCloudinary(venue.mainPhotoUrl, "image");
+                    yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(venue.mainPhotoUrl, "image");
                 // Upload new photo
                 const file = req.file;
                 if (!file) {
@@ -1647,7 +1647,7 @@ class VenueController {
                     return;
                 }
                 venue.photoGallery = (venue.photoGallery || []).filter((url) => url !== photoUrl);
-                yield VenueController.deleteFromCloudinary(photoUrl, "image");
+                yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(photoUrl, "image");
                 yield venueRepo.save(venue);
                 res.status(200).json({ success: true, data: venue });
             }
@@ -1673,7 +1673,7 @@ class VenueController {
                 }
                 // Delete old video from Cloudinary
                 if (venue.virtualTourUrl)
-                    yield VenueController.deleteFromCloudinary(venue.virtualTourUrl, "video");
+                    yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(venue.virtualTourUrl, "video");
                 // Upload new video
                 const file = req.file;
                 if (!file) {

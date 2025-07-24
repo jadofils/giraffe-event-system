@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from "typeorm";
 import { Venue } from "./Venue Tables/Venue";
+import { User } from "./User";
 import {
   IsUUID,
   IsNotEmpty,
@@ -26,19 +27,11 @@ export class Notification {
   @IsUUID("4", { message: "userId must be a valid UUID" })
   userId!: string;
 
-  @Column({ type: "uuid", nullable: true })
-  @IsOptional()
-  @IsUUID("4", { message: "eventId must be a valid UUID" })
-  eventId!: string | null;
-  // Venue relationship
-  @Column({ type: "uuid", nullable: true })
-  @IsOptional()
-  @IsUUID("4", { message: "venueId must be a valid UUID" })
-  venueId?: string | null;
+  @ManyToOne(() => User, { nullable: false })
+  @JoinColumn({ name: "userId" })
+  user!: User;
 
-  @ManyToOne(() => Venue, (venue) => venue.notifications, { nullable: true })
-  @JoinColumn({ name: "venueId" })
-  venue?: Venue;
+  // Remove eventId, venueId, and venue relations
   @Column()
   @IsNotEmpty({ message: "message is required" })
   @Length(1, 1000, {

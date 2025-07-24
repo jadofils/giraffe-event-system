@@ -249,6 +249,61 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
             }
         });
     }
+    /**
+     * Send a simple notification email
+     */
+    static sendEmail(_a) {
+        return __awaiter(this, arguments, void 0, function* ({ to, subject, text, html, }) {
+            try {
+                const transporter = this.getTransporter();
+                const mailOptions = {
+                    from: process.env.GMAIL_USER,
+                    to,
+                    subject,
+                    text,
+                    html,
+                };
+                yield transporter.sendMail(mailOptions);
+                this.log("info", `Notification email sent to ${to}`);
+                return true;
+            }
+            catch (error) {
+                this.log("error", `Failed to send notification email to ${to}:`, error);
+                return false;
+            }
+        });
+    }
+    /**
+     * Send a booking cancellation email to a user
+     */
+    static sendBookingCancellationEmail(_a) {
+        return __awaiter(this, arguments, void 0, function* ({ to, userName, venueName, eventName, reason, refundInfo, managerPhone, }) {
+            const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #eee; padding: 32px;">
+        <h2 style="color: #d32f2f;">Booking Cancelled</h2>
+        <p>Dear <b>${userName}</b>,</p>
+        <p>We regret to inform you that your booking for the venue <b>${venueName}</b> (event: <b>${eventName}</b>) has been <span style="color: #d32f2f; font-weight: bold;">cancelled</span> by the venue manager.</p>
+        <p><b>Reason:</b> <span style="color: #333;">${reason}</span></p>
+        ${refundInfo
+                ? `<p style=\"color: #388e3c;\"><b>Refund Info:</b> ${refundInfo}</p>`
+                : ""}
+        ${managerPhone
+                ? `<p><b>For more information, contact the venue manager at:</b> <a href='tel:${managerPhone}'>${managerPhone}</a></p>`
+                : ""}
+        <p>If you have any questions or need further assistance, please contact our support team.</p>
+        <div style="margin-top: 32px; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px;">
+          Thank you for using our platform.<br/>
+          <b>Giraffe Event System Team</b>
+        </div>
+      </div>
+    `;
+            return yield this.sendEmail({
+                to,
+                subject: `Your Booking for ${venueName} Has Been Cancelled`,
+                html,
+            });
+        });
+    }
 }
 PasswordService.PASSWORD_LENGTH = 12;
 PasswordService.EXPIRY_HOURS = 24;

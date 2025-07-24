@@ -497,6 +497,10 @@ export class OrganizationController {
           console.log("ℹ️  No old logo to delete");
         }
 
+        // Invalidate cache for org:all and org:id
+        const { CacheService } = await import("../services/CacheService");
+        await CacheService.invalidateMultiple(["org:all", `org:id:${id}`]);
+
         console.log("=== END UPDATE LOGO DEBUG ===");
         res.status(200).json({
           success: true,
@@ -601,6 +605,9 @@ export class OrganizationController {
         res.status(400).json(result);
         return;
       }
+      // Invalidate cache for org:all and org:id
+      const { CacheService } = await import("../services/CacheService");
+      await CacheService.invalidateMultiple(["org:all", `org:id:${id}`]);
       res.status(200).json({
         success: true,
         data: result.data,
@@ -1323,6 +1330,56 @@ export class OrganizationController {
         success: false,
         message:
           "Internal server error occurred while fetching venues for organization.",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get only approved venues for an organization
+   * @route GET /organizations/:organizationId/venues/approved
+   * @access Protected
+   */
+  static async getApprovedVenuesByOrganizationId(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { organizationId } = req.params;
+    if (
+      !organizationId ||
+      !OrganizationRepository.UUID_REGEX.test(organizationId)
+    ) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: "Valid organization ID is required.",
+        });
+      return;
+    }
+    try {
+      const orgResult = await OrganizationRepository.getById(organizationId);
+      if (!orgResult.success || !orgResult.data) {
+        res
+          .status(404)
+          .json({ success: false, message: "Organization not found" });
+        return;
+      }
+      const approvedVenues = (orgResult.data.venues || []).filter(
+        (venue: any) => venue.status === "APPROVED"
+      );
+      res.status(200).json({
+        success: true,
+        data: approvedVenues,
+        message:
+          approvedVenues.length > 0
+            ? "Approved venues retrieved successfully"
+            : "No approved venues found for this organization",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }

@@ -508,5 +508,23 @@ class VenueBookingRepository {
             };
         });
     }
+    static getPendingBookingsByManager(managerId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const venueVariableRepo = Database_1.AppDataSource.getRepository(require("../models/Venue Tables/VenueVariable").VenueVariable);
+            const managedVenues = yield venueVariableRepo.find({
+                where: { manager: { userId: managerId } },
+                relations: ["venue"],
+            });
+            const venueIds = managedVenues.map((vv) => vv.venue.venueId);
+            if (!venueIds.length)
+                return [];
+            const bookingRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBooking").VenueBooking);
+            return yield bookingRepo.find({
+                where: { venueId: (0, typeorm_1.In)(venueIds), bookingStatus: "PENDING" },
+                relations: ["venue", "user", "event"],
+                order: { createdAt: "DESC" },
+            });
+        });
+    }
 }
 exports.VenueBookingRepository = VenueBookingRepository;

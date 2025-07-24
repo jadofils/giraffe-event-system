@@ -51,6 +51,7 @@ const redis_1 = __importDefault(require("./config/redis"));
 // ------------------------------------------
 const AppConfig_1 = require("./config/AppConfig");
 const routes_1 = __importDefault(require("./routes"));
+const NotificationRoutes_1 = __importDefault(require("./routes/NotificationRoutes"));
 // Initialize express app
 const app = (0, express_1.default)();
 // Apply standard Express middlewares
@@ -71,7 +72,7 @@ app.use((0, cors_1.default)({
         }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 app.use(express_1.default.json());
@@ -102,6 +103,7 @@ if (!AppConfig_1.AppConfig.isTest()) {
 }
 // API routes
 app.use(AppConfig_1.AppConfig.API_PREFIX, routes_1.default);
+app.use("/api/v1/notifications", NotificationRoutes_1.default);
 // Health check endpoint
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "UP" });

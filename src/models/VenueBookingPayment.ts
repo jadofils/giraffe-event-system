@@ -24,6 +24,8 @@ export enum VenueBookingPaymentStatus {
   FAILED = "FAILED",
   CANCELLED = "CANCELLED",
   REFUNDED = "REFUNDED",
+  REFUND_IN_PROGRESS = "REFUND_IN_PROGRESS",
+
 }
 
 export enum PayerType {

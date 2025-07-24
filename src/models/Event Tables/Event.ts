@@ -165,6 +165,9 @@ export class Event {
   })
   publishStatus!: "DRAFT" | "PUBLISHED";
 
+  @Column({ type: "text", nullable: true })
+  cancellationReason?: string;
+
   // Relationships
   @ManyToOne(() => User, (user) => user.createdEvents)
   @JoinColumn({ name: "createdByUserId" })

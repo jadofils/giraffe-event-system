@@ -17,6 +17,7 @@ import redisClient from "./config/redis";
 
 import { AppConfig } from "./config/AppConfig";
 import routes from "./routes";
+import notificationRoutes from "./routes/NotificationRoutes";
 
 // Initialize express app
 const app = express();
@@ -77,6 +78,7 @@ if (!AppConfig.isTest()) {
 
 // API routes
 app.use(AppConfig.API_PREFIX, routes);
+app.use("/api/v1/notifications", notificationRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

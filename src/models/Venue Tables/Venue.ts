@@ -161,8 +161,6 @@ export class Venue {
   @OneToMany(() => Feedback, (feedback) => feedback.venue)
   feedbacks!: Feedback[];
 
-  @OneToMany(() => Notification, (notification) => notification.venue)
-  notifications!: Notification[];
 
   @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
   eventVenueBookings!: VenueBooking[];

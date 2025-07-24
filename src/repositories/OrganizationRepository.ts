@@ -21,23 +21,90 @@ export class OrganizationRepository {
    */
   static async getAll(): Promise<{
     success: boolean;
-    data?: Organization[];
+    data?: any[];
     message?: string;
   }> {
     try {
-      const cacheKey = "org:all";
-      const organizations = await CacheService.getOrSetMultiple(
-        cacheKey,
-        AppDataSource.getRepository(Organization),
-        async () => {
-          return await AppDataSource.getRepository(Organization).find({
-            relations: ["users", "users.role"],
-          });
-        },
-        CACHE_TTL
+      // Fetch all organizations with users, roles, and venues
+      const organizations = await AppDataSource.getRepository(Organization)
+        .createQueryBuilder("organization")
+        .leftJoinAndSelect("organization.users", "user")
+        .leftJoinAndSelect("user.role", "role")
+        .leftJoinAndSelect("organization.venues", "venue")
+        .where("organization.deletedAt IS NULL")
+        .andWhere("LOWER(organization.organizationType) != :independent", {
+          independent: "independent",
+        })
+        .orderBy("organization.organizationName", "ASC")
+        .getMany();
+
+      // For each organization, fetch all events linked to any of its venues
+      const eventVenueRepo = AppDataSource.getRepository("event_venues");
+      const eventRepo = AppDataSource.getRepository("events");
+
+      const data = await Promise.all(
+        organizations.map(async (org) => {
+          // Get all venueIds for this org
+          const venueIds = (org.venues || []).map((v) => v.venueId);
+          let events: any[] = [];
+          if (venueIds.length > 0) {
+            // Find all eventIds linked to these venues
+            let eventVenueLinks: any[] = [];
+            if (venueIds.length === 1) {
+              eventVenueLinks = await eventVenueRepo.find({
+                where: { venueId: venueIds[0] },
+                select: ["eventId"],
+              });
+            } else {
+              eventVenueLinks = await eventVenueRepo
+                .createQueryBuilder("ev")
+                .select(["ev.eventId"])
+                .where("ev.venueId IN (:...venueIds)", { venueIds })
+                .getMany();
+            }
+            const eventIds = [
+              ...new Set(eventVenueLinks.map((ev: any) => ev.eventId)),
+            ];
+            if (eventIds.length > 0) {
+              events = await eventRepo.findByIds(eventIds);
+            }
+          }
+          return {
+            ...org,
+            users: org.users?.map((u) => ({
+              userId: u.userId,
+              username: u.username,
+              firstName: u.firstName,
+              lastName: u.lastName,
+              email: u.email,
+              phoneNumber: u.phoneNumber,
+              role: u.role
+                ? { roleId: u.role.roleId, roleName: u.role.roleName }
+                : null,
+              profilePictureURL: u.profilePictureURL,
+              preferredLanguage: u.preferredLanguage,
+              timezone: u.timezone,
+              emailNotificationsEnabled: u.emailNotificationsEnabled,
+              smsNotificationsEnabled: u.smsNotificationsEnabled,
+              socialMediaLinks: u.socialMediaLinks,
+              dateOfBirth: u.dateOfBirth,
+              gender: u.gender,
+              addressLine1: u.addressLine1,
+              addressLine2: u.addressLine2,
+              city: u.city,
+              stateProvince: u.stateProvince,
+              postalCode: u.postalCode,
+              country: u.country,
+              createdAt: u.createdAt,
+              updatedAt: u.updatedAt,
+            })),
+            venues: org.venues,
+            events,
+          };
+        })
       );
 
-      return { success: true, data: organizations };
+      return { success: true, data };
     } catch (error) {
       console.error("[Organization Fetch Error]:", error);
       return { success: false, message: "Failed to fetch organizations" };
@@ -1117,6 +1184,12 @@ export class OrganizationRepository {
       }
       organization.status = OrganizationStatusEnum.APPROVED;
       const updated = await repo.save(organization);
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${id}`,
+        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
+      ]);
       return {
         success: true,
         data: updated,
@@ -1147,6 +1220,12 @@ export class OrganizationRepository {
         organization.cancellationReason = reason;
       }
       const updated = await repo.save(organization);
+      // Invalidate cache
+      await CacheService.invalidateMultiple([
+        "org:all",
+        `org:id:${id}`,
+        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
+      ]);
       return {
         success: true,
         data: updated,

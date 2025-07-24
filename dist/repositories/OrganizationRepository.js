@@ -908,6 +908,7 @@ class OrganizationRepository {
     }
     static approveOrganization(id) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             if (!id || !this.UUID_REGEX.test(id)) {
                 return { success: false, message: "Valid organization ID is required" };
             }
@@ -921,6 +922,12 @@ class OrganizationRepository {
                 }
                 organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.APPROVED;
                 const updated = yield repo.save(organization);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${id}`,
+                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
+                ]);
                 return {
                     success: true,
                     data: updated,
@@ -934,6 +941,7 @@ class OrganizationRepository {
     }
     static rejectOrganization(id, reason) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             if (!id || !this.UUID_REGEX.test(id)) {
                 return { success: false, message: "Valid organization ID is required" };
             }
@@ -950,6 +958,12 @@ class OrganizationRepository {
                     organization.cancellationReason = reason;
                 }
                 const updated = yield repo.save(organization);
+                // Invalidate cache
+                yield CacheService_1.CacheService.invalidateMultiple([
+                    "org:all",
+                    `org:id:${id}`,
+                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
+                ]);
                 return {
                     success: true,
                     data: updated,

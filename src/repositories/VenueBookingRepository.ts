@@ -574,4 +574,24 @@ export class VenueBookingRepository {
         : "Payment recorded. Deposit not yet fully paid or not within allowed time.",
     };
   }
+
+  static async getPendingBookingsByManager(managerId: string) {
+    const venueVariableRepo = AppDataSource.getRepository(
+      require("../models/Venue Tables/VenueVariable").VenueVariable
+    );
+    const managedVenues = await venueVariableRepo.find({
+      where: { manager: { userId: managerId } },
+      relations: ["venue"],
+    });
+    const venueIds = managedVenues.map((vv: any) => vv.venue.venueId);
+    if (!venueIds.length) return [];
+    const bookingRepo = AppDataSource.getRepository(
+      require("../models/VenueBooking").VenueBooking
+    );
+    return await bookingRepo.find({
+      where: { venueId: In(venueIds), bookingStatus: "PENDING" },
+      relations: ["venue", "user", "event"],
+      order: { createdAt: "DESC" },
+    });
+  }
 }

@@ -8,16 +8,25 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueBookingController = void 0;
 const VenueBookingRepository_1 = require("../repositories/VenueBookingRepository");
 const Database_1 = require("../config/Database");
 const typeorm_1 = require("typeorm");
 const VenueBooking_1 = require("../models/VenueBooking");
+const Event_1 = require("../models/Event Tables/Event");
 const VenueVariable_1 = require("../models/Venue Tables/VenueVariable");
+const User_1 = require("../models/User");
 const VenueBookingPaymentService_1 = require("../services/payments/VenueBookingPaymentService");
 const Venue_1 = require("../models/Venue Tables/Venue");
 const VenueBookingPayment_1 = require("../models/VenueBookingPayment");
+const SimpleNotificationService_1 = require("../services/notifications/SimpleNotificationService");
+const EmailService_1 = __importDefault(require("../services/emails/EmailService"));
+const VenueBooking_2 = require("../models/VenueBooking");
+const EventStatusEnum_1 = require("../interfaces/Enums/EventStatusEnum");
 class VenueBookingController {
     static getAllBookings(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -631,6 +640,206 @@ class VenueBookingController {
                     message: error instanceof Error ? error.message : "Failed to update booking",
                 });
             }
+        });
+    }
+    static cancelByManager(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            try {
+                const { bookingId } = req.params;
+                const { reason } = req.body;
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                if (!reason) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Cancellation reason is required.",
+                    });
+                    return;
+                }
+                // Fetch booking with venue, event, and user
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["venue", "event", "user"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                // Check if user is the manager of the venue
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const venueVariable = yield venueVariableRepo.findOne({
+                    where: { venue: { venueId: booking.venue.venueId } },
+                    relations: ["manager"],
+                });
+                if (!venueVariable || venueVariable.manager.userId !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        message: "You are not the manager of this venue.",
+                    });
+                    return;
+                }
+                // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+                if (!["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Only approved bookings can be cancelled by manager.",
+                    });
+                    return;
+                }
+                // Cancel booking
+                booking.bookingStatus = VenueBooking_2.BookingStatus.CANCELLED;
+                booking.cancellationReason = reason;
+                yield bookingRepo.save(booking);
+                // Cancel event
+                if (booking.event) {
+                    booking.event.eventStatus = EventStatusEnum_1.EventStatus.CANCELLED;
+                    booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+                    yield Database_1.AppDataSource.getRepository(Event_1.Event).save(booking.event);
+                }
+                // Debug: log booking.user
+                console.log("booking.user before notification:", booking.user);
+                if (!booking.user) {
+                    // Try to load the user manually using createdBy
+                    if (booking.createdBy) {
+                        const foundUser = yield Database_1.AppDataSource.getRepository(User_1.User).findOne({
+                            where: { userId: booking.createdBy },
+                        });
+                        if (foundUser) {
+                            booking.user = foundUser;
+                            console.log("booking.user after manual load:", booking.user);
+                        }
+                        else {
+                            console.log("User not found for createdBy:", booking.createdBy);
+                        }
+                    }
+                    else {
+                        console.log("No user relation and no createdBy on booking.");
+                    }
+                }
+                // System notification
+                try {
+                    if (booking.user && booking.user.userId) {
+                        yield SimpleNotificationService_1.SimpleNotificationService.notifyUser(booking.user, `Your booking for venue '${booking.venue.venueName}' has been cancelled by the manager. Reason: ${reason}`);
+                    }
+                }
+                catch (e) {
+                    // Log but do not block
+                    console.error("Failed to send system notification:", e);
+                }
+                // Email notification
+                try {
+                    if (booking.user && booking.user.email) {
+                        yield EmailService_1.default.sendBookingCancellationEmail({
+                            to: booking.user.email,
+                            userName: booking.user.firstName || booking.user.username || "User",
+                            venueName: booking.venue.venueName,
+                            eventName: ((_b = booking.event) === null || _b === void 0 ? void 0 : _b.eventName) || "Event",
+                            reason,
+                            refundInfo: booking.isPaid
+                                ? "Your payment will be refunded as soon as possible."
+                                : undefined,
+                            managerPhone: (_c = venueVariable === null || venueVariable === void 0 ? void 0 : venueVariable.manager) === null || _c === void 0 ? void 0 : _c.phoneNumber,
+                        });
+                    }
+                }
+                catch (e) {
+                    // Log but do not block
+                    console.error("Failed to send email notification:", e);
+                }
+                res.status(200).json({
+                    success: true,
+                    message: "Booking and related event cancelled.",
+                    booking,
+                    event: booking.event,
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to cancel booking.",
+                });
+            }
+        });
+    }
+    static getPendingBookingsByManager(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { managerId } = req.params;
+            if (!managerId) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "managerId is required" });
+            }
+            const bookings = yield VenueBookingRepository_1.VenueBookingRepository.getPendingBookingsByManager(managerId);
+            res.json({ success: true, data: bookings });
+        });
+    }
+    static getFormattedPaymentsByManager(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const { managerId } = req.params;
+            if (!managerId) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "managerId is required" });
+            }
+            // Get all payments for this manager (reuse existing logic)
+            const result = yield VenueBookingRepository_1.VenueBookingRepository.getPaymentsByManagerId(managerId);
+            if (!result.success) {
+                return res.status(500).json({ success: false, message: result.message });
+            }
+            // Group payments by bookingId
+            const bookingsMap = {};
+            const payments = Array.isArray(result.data) ? result.data : [];
+            for (const payment of payments) {
+                const b = payment.booking;
+                if (!b)
+                    continue;
+                if (!bookingsMap[b.bookingId]) {
+                    bookingsMap[b.bookingId] = {
+                        bookingId: b.bookingId,
+                        bookingReason: b.bookingReason,
+                        bookingDate: ((_b = (_a = b.bookingDates) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.date) || null,
+                        amountToBePaid: b.amountToBePaid,
+                        totalAmountPaid: 0,
+                        remainingAmount: b.amountToBePaid,
+                        isFullyPaid: false,
+                        payments: [],
+                        payer: payment.payer
+                            ? {
+                                userId: payment.payer.userId,
+                                username: payment.payer.username,
+                                fullName: `${payment.payer.firstName} ${payment.payer.lastName}`.trim(),
+                                email: payment.payer.email,
+                                phoneNumber: payment.payer.phoneNumber,
+                                role: payment.payer.roleId || undefined,
+                                location: {
+                                    city: payment.payer.city || undefined,
+                                    country: payment.payer.country || undefined,
+                                },
+                            }
+                            : undefined,
+                    };
+                }
+                bookingsMap[b.bookingId].payments.push({
+                    paymentId: payment.paymentId,
+                    amountPaid: Number(payment.amountPaid),
+                    paymentMethod: payment.paymentMethod,
+                    paymentStatus: payment.paymentStatus,
+                    paymentReference: payment.paymentReference,
+                    paymentDate: payment.paymentDate,
+                    notes: payment.notes,
+                });
+                bookingsMap[b.bookingId].totalAmountPaid += Number(payment.amountPaid);
+            }
+            // Finalize remainingAmount and isFullyPaid
+            for (const booking of Object.values(bookingsMap)) {
+                booking.remainingAmount =
+                    booking.amountToBePaid - booking.totalAmountPaid;
+                booking.isFullyPaid = booking.remainingAmount <= 0;
+            }
+            res.json({ success: true, data: Object.values(bookingsMap) });
         });
     }
 }

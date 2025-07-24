@@ -13,6 +13,10 @@ import {
 } from "../interfaces/PaymentServiceInterface";
 import { Venue } from "../models/Venue Tables/Venue";
 import { VenueBookingPayment } from "../models/VenueBookingPayment";
+import { SimpleNotificationService } from "../services/notifications/SimpleNotificationService";
+import EmailService from "../services/emails/EmailService";
+import { BookingStatus } from "../models/VenueBooking";
+import { EventStatus } from "../interfaces/Enums/EventStatusEnum";
 
 export class VenueBookingController {
   static async getAllBookings(req: Request, res: Response): Promise<void> {
@@ -785,5 +789,213 @@ export class VenueBookingController {
           error instanceof Error ? error.message : "Failed to update booking",
       });
     }
+  }
+
+  static async cancelByManager(req: Request, res: Response): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const { reason } = req.body;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      if (!reason) {
+        res.status(400).json({
+          success: false,
+          message: "Cancellation reason is required.",
+        });
+        return;
+      }
+
+      // Fetch booking with venue, event, and user
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["venue", "event", "user"],
+      });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+
+      // Check if user is the manager of the venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await venueVariableRepo.findOne({
+        where: { venue: { venueId: booking.venue.venueId } },
+        relations: ["manager"],
+      });
+      if (!venueVariable || venueVariable.manager.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          message: "You are not the manager of this venue.",
+        });
+        return;
+      }
+
+      // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+      if (
+        !["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Only approved bookings can be cancelled by manager.",
+        });
+        return;
+      }
+
+      // Cancel booking
+      booking.bookingStatus = BookingStatus.CANCELLED;
+      booking.cancellationReason = reason;
+      await bookingRepo.save(booking);
+
+      // Cancel event
+      if (booking.event) {
+        booking.event.eventStatus = EventStatus.CANCELLED;
+        booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+        await AppDataSource.getRepository(Event).save(booking.event);
+      }
+
+      // Debug: log booking.user
+      console.log("booking.user before notification:", booking.user);
+      if (!booking.user) {
+        // Try to load the user manually using createdBy
+        if (booking.createdBy) {
+          const foundUser = await AppDataSource.getRepository(User).findOne({
+            where: { userId: booking.createdBy },
+          });
+          if (foundUser) {
+            booking.user = foundUser;
+            console.log("booking.user after manual load:", booking.user);
+          } else {
+            console.log("User not found for createdBy:", booking.createdBy);
+          }
+        } else {
+          console.log("No user relation and no createdBy on booking.");
+        }
+      }
+      // System notification
+      try {
+        if (booking.user && booking.user.userId) {
+          await SimpleNotificationService.notifyUser(
+            booking.user,
+            `Your booking for venue '${booking.venue.venueName}' has been cancelled by the manager. Reason: ${reason}`
+          );
+        }
+      } catch (e) {
+        // Log but do not block
+        console.error("Failed to send system notification:", e);
+      }
+      // Email notification
+      try {
+        if (booking.user && booking.user.email) {
+          await EmailService.sendBookingCancellationEmail({
+            to: booking.user.email,
+            userName: booking.user.firstName || booking.user.username || "User",
+            venueName: booking.venue.venueName,
+            eventName: booking.event?.eventName || "Event",
+            reason,
+            refundInfo: booking.isPaid
+              ? "Your payment will be refunded as soon as possible."
+              : undefined,
+            managerPhone: venueVariable?.manager?.phoneNumber,
+          });
+        }
+      } catch (e) {
+        // Log but do not block
+        console.error("Failed to send email notification:", e);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Booking and related event cancelled.",
+        booking,
+        event: booking.event,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to cancel booking.",
+      });
+    }
+  }
+
+  static async getPendingBookingsByManager(req: Request, res: Response) {
+    const { managerId } = req.params;
+    if (!managerId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "managerId is required" });
+    }
+    const bookings = await VenueBookingRepository.getPendingBookingsByManager(
+      managerId
+    );
+    res.json({ success: true, data: bookings });
+  }
+
+  static async getFormattedPaymentsByManager(req: Request, res: Response) {
+    const { managerId } = req.params;
+    if (!managerId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "managerId is required" });
+    }
+    // Get all payments for this manager (reuse existing logic)
+    const result = await VenueBookingRepository.getPaymentsByManagerId(
+      managerId
+    );
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.message });
+    }
+    // Group payments by bookingId
+    const bookingsMap: Record<string, any> = {};
+    const payments: any[] = Array.isArray(result.data) ? result.data : [];
+    for (const payment of payments) {
+      const b = payment.booking;
+      if (!b) continue;
+      if (!bookingsMap[b.bookingId]) {
+        bookingsMap[b.bookingId] = {
+          bookingId: b.bookingId,
+          bookingReason: b.bookingReason,
+          bookingDate: b.bookingDates?.[0]?.date || null,
+          amountToBePaid: b.amountToBePaid,
+          totalAmountPaid: 0,
+          remainingAmount: b.amountToBePaid,
+          isFullyPaid: false,
+          payments: [],
+          payer: payment.payer
+            ? {
+                userId: payment.payer.userId,
+                username: payment.payer.username,
+                fullName:
+                  `${payment.payer.firstName} ${payment.payer.lastName}`.trim(),
+                email: payment.payer.email,
+                phoneNumber: payment.payer.phoneNumber,
+                role: payment.payer.roleId || undefined,
+                location: {
+                  city: payment.payer.city || undefined,
+                  country: payment.payer.country || undefined,
+                },
+              }
+            : undefined,
+        };
+      }
+      bookingsMap[b.bookingId].payments.push({
+        paymentId: payment.paymentId,
+        amountPaid: Number(payment.amountPaid),
+        paymentMethod: payment.paymentMethod,
+        paymentStatus: payment.paymentStatus,
+        paymentReference: payment.paymentReference,
+        paymentDate: payment.paymentDate,
+        notes: payment.notes,
+      });
+      bookingsMap[b.bookingId].totalAmountPaid += Number(payment.amountPaid);
+    }
+    // Finalize remainingAmount and isFullyPaid
+    for (const booking of Object.values(bookingsMap)) {
+      booking.remainingAmount =
+        booking.amountToBePaid - booking.totalAmountPaid;
+      booking.isFullyPaid = booking.remainingAmount <= 0;
+    }
+    res.json({ success: true, data: Object.values(bookingsMap) });
   }
 }
