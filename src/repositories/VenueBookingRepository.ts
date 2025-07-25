@@ -180,8 +180,13 @@ export class VenueBookingRepository {
           });
         }
       }
-      // Attach organizer to booking data
-      const bookingWithOrganizer = { ...booking, organizer };
+      // Attach organizer and event details to booking data
+      const bookingWithOrganizer = {
+        ...booking,
+        organizer,
+        eventTitle: event?.eventName || null,
+        eventDescription: event?.eventDescription || null,
+      };
       return {
         success: true,
         message: "Booking fetched successfully.",

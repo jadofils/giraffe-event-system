@@ -41,10 +41,19 @@ export class EventRepository {
       for (const bookingDate of dates) {
         for (const venue of venues) {
           // 1. Create Event for this specific date and venue
+          let createdByUserId = eventData.eventOrganizerId;
+          let createdBy = undefined;
+          if (createdByUserId) {
+            createdBy = await queryRunner.manager
+              .getRepository(User)
+              .findOne({ where: { userId: createdByUserId } });
+          }
           const singleDateEvent = queryRunner.manager.create(Event, {
             ...eventData,
             bookingDates: [bookingDate], // Only use this single date
             groupId: groupId, // Set the groupId for related events
+            createdByUserId,
+            createdBy,
           });
           await queryRunner.manager.save(singleDateEvent);
 
@@ -151,7 +160,20 @@ export class EventRepository {
       if (!event) {
         return { success: false, message: "Event not found" };
       }
-      return { success: true, data: event };
+      // Fetch venue details for each eventVenue
+      const venueRepo = AppDataSource.getRepository(
+        require("../models/Venue Tables/Venue").Venue
+      );
+      const venues = [];
+      for (const ev of event.eventVenues || []) {
+        if (ev.venueId) {
+          const venue = await venueRepo.findOne({
+            where: { venueId: ev.venueId },
+          });
+          if (venue) venues.push(venue);
+        }
+      }
+      return { success: true, data: { ...event, venues } };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to fetch event.";

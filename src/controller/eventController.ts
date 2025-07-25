@@ -17,6 +17,7 @@ import { In } from "typeorm";
 import { VenueBooking } from "../models/VenueBooking";
 import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { Event } from "../models/Event Tables/Event";
+import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -26,7 +27,13 @@ export class EventController {
     res: Response,
     next: NextFunction
   ): Promise<void> {
+    const uploadedCloudinaryUrls: string[] = [];
     try {
+      if (!req.body) {
+        res.status(400).json({ success: false, message: "No body provided" });
+        return;
+      }
+      // Defensive destructuring
       const {
         eventTitle,
         eventType,
@@ -39,7 +46,6 @@ export class EventController {
         eventOrganizerId,
         // Public event fields
         maxAttendees,
-        imageURL,
         socialMediaLinks,
         isEntryPaid,
         expectedGuests,
@@ -48,8 +54,92 @@ export class EventController {
         ignoreTransitionWarnings = false, // New parameter to allow proceeding despite warnings
       } = req.body;
 
-      // Handle both venues and venueId fields
-      const venueIds = venues || venueId;
+      // Parse guests and dates if sent as JSON strings (from form-data)
+      let parsedGuests = guests;
+      if (typeof guests === "string") {
+        try {
+          parsedGuests = JSON.parse(guests);
+        } catch (e) {
+          parsedGuests = [];
+        }
+      }
+      let parsedDates = dates;
+      if (typeof dates === "string") {
+        try {
+          parsedDates = JSON.parse(dates);
+        } catch (e) {
+          parsedDates = [];
+        }
+      }
+
+      // Handle Cloudinary upload for public event photo
+      let finalEventPhoto = eventPhoto;
+      if (visibilityScope === "PUBLIC") {
+        const file =
+          (req as any).file ||
+          ((req as any).files && (req as any).files.eventPhoto);
+        if (file && file.buffer) {
+          const uploadResult = await CloudinaryUploadService.uploadBuffer(
+            file.buffer,
+            "events/photos"
+          );
+          finalEventPhoto = uploadResult.url;
+          uploadedCloudinaryUrls.push(finalEventPhoto);
+        } else if (Array.isArray(file) && file[0] && file[0].buffer) {
+          const uploadResult = await CloudinaryUploadService.uploadBuffer(
+            file[0].buffer,
+            "events/photos"
+          );
+          finalEventPhoto = uploadResult.url;
+          uploadedCloudinaryUrls.push(finalEventPhoto);
+        }
+      }
+
+      // Handle Cloudinary upload for guest photos (public events only)
+      let finalGuests = parsedGuests;
+      if (visibilityScope === "PUBLIC" && Array.isArray(parsedGuests)) {
+        finalGuests = await Promise.all(
+          parsedGuests.map(async (guest, idx) => {
+            let guestPhoto = guest.guestPhoto;
+            const guestFiles =
+              (req as any).files && (req as any).files.guestPhotos;
+            if (
+              guestFiles &&
+              Array.isArray(guestFiles) &&
+              guestFiles[idx] &&
+              guestFiles[idx].buffer
+            ) {
+              const uploadResult = await CloudinaryUploadService.uploadBuffer(
+                guestFiles[idx].buffer,
+                "events/guests"
+              );
+              guestPhoto = uploadResult.url;
+              uploadedCloudinaryUrls.push(guestPhoto);
+            } else if (guestPhoto && guestPhoto.buffer) {
+              const uploadResult = await CloudinaryUploadService.uploadBuffer(
+                guestPhoto.buffer,
+                "events/guests"
+              );
+              guestPhoto = uploadResult.url;
+              uploadedCloudinaryUrls.push(guestPhoto);
+            }
+            return { ...guest, guestPhoto };
+          })
+        );
+      }
+
+      // Robustly parse venueId to support both single and multiple venues
+      let venueIds = venues || venueId;
+      if (typeof venueIds === "string") {
+        try {
+          const parsed = JSON.parse(venueIds);
+          if (Array.isArray(parsed)) {
+            venueIds = parsed;
+          }
+        } catch {
+          // Not a JSON array, leave as is
+        }
+      }
       const venueIdsArray = Array.isArray(venueIds) ? venueIds : [venueIds];
 
       // Basic validation for required fields
@@ -59,7 +149,7 @@ export class EventController {
         !venueIdsArray ||
         venueIdsArray.length === 0 ||
         !eventOrganizerId ||
-        !dates ||
+        !parsedDates ||
         !description
       ) {
         res.status(400).json({
@@ -107,8 +197,8 @@ export class EventController {
       if (hasHourlyVenue) {
         // If any venue is hourly, require hours for all dates
         if (
-          !Array.isArray(dates) ||
-          !dates.every((d) => d.date && Array.isArray(d.hours))
+          !Array.isArray(parsedDates) ||
+          !parsedDates.every((d) => d.date && Array.isArray(d.hours))
         ) {
           res.status(400).json({
             success: false,
@@ -117,12 +207,12 @@ export class EventController {
           });
           return;
         }
-        bookingDates = dates;
+        bookingDates = parsedDates;
       } else {
         // For daily bookings, accept simple date strings
         if (
-          !Array.isArray(dates) ||
-          !dates.every(
+          !Array.isArray(parsedDates) ||
+          !parsedDates.every(
             (d) => typeof d === "string" || typeof d.date === "string"
           )
         ) {
@@ -133,7 +223,7 @@ export class EventController {
           });
           return;
         }
-        bookingDates = dates.map((d) => ({
+        bookingDates = parsedDates.map((d) => ({
           date: typeof d === "string" ? d : d.date,
         }));
       }
@@ -246,12 +336,11 @@ export class EventController {
       if (visibilityScope === "PUBLIC") {
         Object.assign(eventData, {
           maxAttendees,
-          imageURL,
           socialMediaLinks,
           isEntryPaid,
           expectedGuests,
           specialNotes,
-          eventPhoto,
+          eventPhoto: finalEventPhoto,
         });
       }
 
@@ -259,7 +348,9 @@ export class EventController {
       const result = await EventRepository.createEventWithRelations(
         eventData,
         selectedVenues,
-        visibilityScope === "PUBLIC" && Array.isArray(guests) ? guests : [],
+        visibilityScope === "PUBLIC" && Array.isArray(finalGuests)
+          ? finalGuests
+          : [],
         bookingDates
       );
 
@@ -291,6 +382,15 @@ export class EventController {
       });
       return;
     } catch (error) {
+      // Cleanup uploaded images if event creation fails
+      for (const url of uploadedCloudinaryUrls) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(url, "image");
+        } catch (e) {
+          // Log and continue
+          console.error("Failed to delete Cloudinary image:", url, e);
+        }
+      }
       next(error);
     }
   }
@@ -306,7 +406,31 @@ export class EventController {
         res.status(500).json({ success: false, message: result.message });
         return;
       }
-      res.status(200).json({ success: true, data: result.data });
+      // Filter out events with eventStatus 'DRAFTED'
+      const filteredEvents = (result.data || []).filter(
+        (event: any) => event.eventStatus !== "DRAFTED"
+      );
+      res.status(200).json({ success: true, data: filteredEvents });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getAllApprovedEvents(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      // Fetch events with venue details
+      const eventRepo = AppDataSource.getRepository(Event);
+      const events = await eventRepo.find({
+        where: { eventStatus: EventStatus.APPROVED },
+        relations: ["eventVenues", "eventVenues.venue"],
+        order: { createdAt: "DESC" },
+      });
+      res.status(200).json({ success: true, data: events });
       return;
     } catch (error) {
       next(error);
@@ -333,28 +457,116 @@ export class EventController {
     }
   }
 
-  static async requestPublish(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    try {
-      const { id } = req.params;
-      const updateResult = await EventRepository.updateEventStatus(id, {
-        eventStatus: EventStatus.REQUESTED,
-      });
-      if (!updateResult.success) {
-        res.status(400).json({ success: false, message: updateResult.message });
-        return;
-      }
-      res.status(200).json({
-        success: true,
-        data: updateResult.data,
-        message: "Event submitted for publishing/approval.",
-      });
-    } catch (error) {
-      next(error);
+  static async requestPublish(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({
+      where: { eventId: id },
+      relations: ["venueBookings"],
+    });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
     }
+    if (event.eventStatus === EventStatus.REJECTED) {
+      res.status(400).json({
+        success: false,
+        message: "Event has been rejected and cannot be requested again.",
+      });
+      return;
+    }
+    // Check all venue bookings
+    const allApproved = event.venueBookings.every(
+      (b) =>
+        b.bookingStatus === "APPROVED_NOT_PAID" ||
+        b.bookingStatus === "APPROVED_PAID"
+    );
+    if (!allApproved) {
+      res.status(400).json({
+        success: false,
+        message: "All venue bookings must be approved to request publish.",
+      });
+      return;
+    }
+    event.eventStatus = EventStatus.REQUESTED;
+    event.visibilityScope = "PUBLIC";
+    event.cancellationReason = undefined;
+    await eventRepo.save(event);
+    res.status(200).json({
+      success: true,
+      data: event,
+      message: "Event submitted for publishing/approval.",
+    });
+    return;
+  }
+
+  static async queryEvent(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const { cancellationReason } = req.body;
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({ where: { eventId: id } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+    event.eventStatus = EventStatus.QUERIED;
+    event.cancellationReason = cancellationReason || "No reason provided";
+    await eventRepo.save(event);
+    res.status(200).json({
+      success: true,
+      data: event,
+      message: "Event queried for more information.",
+    });
+    return;
+  }
+
+  static async rejectEvent(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const { cancellationReason } = req.body;
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({ where: { eventId: id } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+    event.eventStatus = EventStatus.REJECTED;
+    event.cancellationReason = cancellationReason || "No reason provided";
+    await eventRepo.save(event);
+    res.status(200).json({
+      success: true,
+      data: event,
+      message: "Event has been rejected.",
+    });
+    return;
+  }
+
+  static async approveEvent(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({ where: { eventId: id } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+    if (
+      event.eventStatus !== EventStatus.REQUESTED &&
+      event.eventStatus !== EventStatus.QUERIED
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Only events in REQUESTED or QUERIED status can be approved.",
+      });
+      return;
+    }
+    event.eventStatus = EventStatus.APPROVED;
+    event.cancellationReason = undefined;
+    await eventRepo.save(event);
+    res.status(200).json({
+      success: true,
+      data: event,
+      message: "Event has been approved.",
+    });
+    return;
   }
 
   //   static async approveEvent(
@@ -1340,6 +1552,301 @@ export class EventController {
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  static async updateEventTextFields(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { id } = req.params;
+    const updateFields = req.body;
+    try {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({ where: { eventId: id } });
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found" });
+        return;
+      }
+      // Only update allowed text fields (not guests, eventPhoto, guestPhotos, dates)
+      const forbiddenFields = [
+        "guests",
+        "eventPhoto",
+        "guestPhotos",
+        "dates",
+        "bookingDates",
+      ];
+      for (const key of Object.keys(updateFields)) {
+        if (!forbiddenFields.includes(key)) {
+          (event as any)[key] = updateFields[key];
+        }
+      }
+      await eventRepo.save(event);
+      res.status(200).json({ success: true, data: event });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to update event.",
+      });
+    }
+  }
+
+  static async updateEventDates(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    let { dates } = req.body;
+    if (typeof dates === "string") {
+      try {
+        dates = JSON.parse(dates);
+      } catch {
+        dates = [];
+      }
+    }
+    if (!Array.isArray(dates) || dates.length === 0) {
+      res.status(400).json({ success: false, message: "No dates provided" });
+      return;
+    }
+
+    // Find event and booking
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({
+      where: { eventId: id },
+      relations: ["venueBookings", "eventVenues"],
+    });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+
+    // Assume one booking per event for simplicity
+    const booking = event.venueBookings?.[0];
+    if (!booking) {
+      res.status(404).json({ success: false, message: "Booking not found" });
+      return;
+    }
+    if (booking.bookingStatus !== "PENDING") {
+      res.status(400).json({
+        success: false,
+        message: "Booking must be in PENDING status to update dates",
+      });
+      return;
+    }
+
+    // Validate new dates for the venue
+    const venueId = booking.venueId;
+    const venueRepo = AppDataSource.getRepository(Venue);
+    const venue = await venueRepo.findOne({ where: { venueId } });
+    if (!venue) {
+      res.status(404).json({ success: false, message: "Venue not found" });
+      return;
+    }
+
+    // Use BookingValidationService to check date availability
+    const validation = await BookingValidationService.validateBookingDates(
+      venue,
+      dates
+    );
+    if (!validation.isAvailable) {
+      res.status(400).json({
+        success: false,
+        message: "Selected dates are not available for this venue",
+        unavailableDates: validation.unavailableDates,
+      });
+      return;
+    }
+
+    // Update event and booking dates
+    event.bookingDates = dates;
+    booking.bookingDates = dates;
+    await eventRepo.save(event);
+    await AppDataSource.getRepository(VenueBooking).save(booking);
+
+    res.status(200).json({ success: true, data: { event, booking } });
+    return;
+  }
+
+  static async addEventGuest(req: Request, res: Response): Promise<void> {
+    const { eventId } = req.params;
+    const { guestName } = req.body;
+    try {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId },
+        relations: ["eventGuests"],
+      });
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found" });
+        return;
+      }
+      if ((event.eventGuests?.length || 0) >= 5) {
+        res.status(400).json({
+          success: false,
+          message: "Maximum of 5 guests allowed per event.",
+        });
+        return;
+      }
+      let guestPhotoUrl = undefined;
+      const file = (req as any).file;
+      if (file && file.buffer) {
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          file.buffer,
+          "events/guests"
+        );
+        guestPhotoUrl = uploadResult.url;
+      }
+      const guestRepo = AppDataSource.getRepository(EventGuest);
+      const newGuest = guestRepo.create({
+        eventId,
+        guestName,
+        guestPhoto: guestPhotoUrl,
+      });
+      await guestRepo.save(newGuest);
+      res.status(201).json({ success: true, data: newGuest });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to add guest.",
+      });
+    }
+  }
+
+  static async updateEventGuestName(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { eventId, guestId } = req.params;
+    const { guestName } = req.body;
+    try {
+      const guestRepo = AppDataSource.getRepository(EventGuest);
+      const guest = await guestRepo.findOne({
+        where: { id: guestId, eventId },
+      });
+      if (!guest) {
+        res.status(404).json({ success: false, message: "Guest not found" });
+        return;
+      }
+      guest.guestName = guestName;
+      await guestRepo.save(guest);
+      res.status(200).json({ success: true, data: guest });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update guest name.",
+      });
+    }
+  }
+
+  static async deleteEventGuest(req: Request, res: Response): Promise<void> {
+    const { eventId, guestId } = req.params;
+    try {
+      const guestRepo = AppDataSource.getRepository(EventGuest);
+      const guest = await guestRepo.findOne({
+        where: { id: guestId, eventId },
+      });
+      if (!guest) {
+        res.status(404).json({ success: false, message: "Guest not found" });
+        return;
+      }
+      // Delete guest photo from Cloudinary if exists
+      if (guest.guestPhoto) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            guest.guestPhoto,
+            "image"
+          );
+        } catch (e) {
+          // Log and continue
+          console.error(
+            "Failed to delete guest photo from Cloudinary:",
+            guest.guestPhoto,
+            e
+          );
+        }
+      }
+      await guestRepo.remove(guest);
+      res.status(200).json({ success: true, message: "Guest deleted." });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to delete guest.",
+      });
+    }
+  }
+
+  static async updateEventGuestPhoto(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { eventId, guestId } = req.params;
+    try {
+      const guestRepo = AppDataSource.getRepository(EventGuest);
+      const guest = await guestRepo.findOne({
+        where: { id: guestId, eventId },
+      });
+      if (!guest) {
+        res.status(404).json({ success: false, message: "Guest not found" });
+        return;
+      }
+      // Delete old photo from Cloudinary if exists
+      if (guest.guestPhoto) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            guest.guestPhoto,
+            "image"
+          );
+        } catch (e) {
+          console.error(
+            "Failed to delete old guest photo from Cloudinary:",
+            guest.guestPhoto,
+            e
+          );
+        }
+      }
+      // Upload new photo
+      const file = (req as any).file;
+      if (file && file.buffer) {
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          file.buffer,
+          "events/guests"
+        );
+        guest.guestPhoto = uploadResult.url;
+      }
+      await guestRepo.save(guest);
+      res.status(200).json({ success: true, data: guest });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update guest photo.",
+      });
+    }
+  }
+
+  static async getEventsByUserId(req: Request, res: Response): Promise<void> {
+    const { userId } = req.params;
+    try {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const events = await eventRepo.find({
+        where: { eventOrganizerId: userId },
+        relations: ["venueBookings", "venueBookings.venue"],
+        order: { createdAt: "DESC" },
+      });
+      res.status(200).json({ success: true, data: events });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch events by user.",
+      });
     }
   }
 }

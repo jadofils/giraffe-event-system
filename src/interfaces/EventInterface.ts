@@ -18,8 +18,6 @@ export class EventInterface {
   bookingDates!: BookingDateDTO[];
   maxAttendees?: number | undefined;
   status!: EventStatus;
-  qrCode?: string;
-  imageURL?: string;
   eventOrganizer!: UserInterface | OrganizationInterface;
   venueId!: string;
   organizer?: UserInterface;
@@ -43,8 +41,6 @@ export class EventInterface {
       bookingDates: data.bookingDates || [],
       maxAttendees: data.maxAttendees,
       status: data.status || EventStatus.REQUESTED,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venueId: data.venueId || "",
       organizer: data.organizer,
@@ -96,12 +92,7 @@ export class EventInterface {
         )}`
       );
     }
-    if (data.qrCode && data.qrCode.length > 255) {
-      errors.push("QR Code must be at most 255 characters long");
-    }
-    if (data.imageURL && data.imageURL.length > 255) {
-      errors.push("Image URL must be at most 255 characters long");
-    }
+   
     if (!data.eventOrganizer) errors.push("Event organizer is required");
     if (!data.venueId) errors.push("Venue ID is required");
     return errors;
@@ -117,8 +108,6 @@ export class EventInterface {
       bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venueId: data.venueId,
     });
@@ -134,8 +123,6 @@ export class EventInterface {
       bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,
@@ -189,8 +176,6 @@ export class EventRequestInterface {
       bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venueId: data.venueId,
     });
@@ -228,8 +213,6 @@ export class EventResponseInterface {
       bookingDates: data.bookingDates || [],
       maxAttendees: data.maxAttendees,
       status: data.status || EventStatus.REQUESTED,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,
@@ -251,8 +234,6 @@ export class EventResponseInterface {
       bookingDates: data.bookingDates,
       maxAttendees: data.maxAttendees,
       status: data.status,
-      qrCode: data.qrCode,
-      imageURL: data.imageURL,
       eventOrganizer: data.eventOrganizer,
       venue: data.venue,
       venueBookings: data.venueBookings,

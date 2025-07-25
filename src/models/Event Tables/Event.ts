@@ -96,22 +96,6 @@ export class Event {
   @IsBoolean({ message: "isFeatured must be a boolean" })
   isFeatured!: boolean;
 
-  @Column({ nullable: true })
-  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
-  @IsOptional()
-  @Length(0, 255, {
-    message: "QR Code must be at most $constraint2 characters long",
-  })
-  qrCode?: string;
-
-  @Column({ nullable: true })
-  @ValidateIf((o) => o.visibilityScope === "PUBLIC")
-  @IsOptional()
-  @Length(0, 255, {
-    message: "Image URL must be at most $constraint2 characters long",
-  })
-  imageURL?: string;
-
   @Column({ type: "uuid" })
   @IsNotEmpty({ message: "Event organizer ID is required" })
   @IsUUID("4", { message: "Event organizer ID must be a valid UUID" })
@@ -159,11 +143,6 @@ export class Event {
   })
   visibilityScope!: "PUBLIC" | "PRIVATE";
 
-  @Column({ type: "enum", enum: ["DRAFT", "PUBLISHED"], default: "DRAFT" })
-  @IsEnum(["DRAFT", "PUBLISHED"], {
-    message: "Publish status must be one of: DRAFT, PUBLISHED",
-  })
-  publishStatus!: "DRAFT" | "PUBLISHED";
 
   @Column({ type: "text", nullable: true })
   cancellationReason?: string;

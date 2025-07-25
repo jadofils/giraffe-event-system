@@ -533,6 +533,7 @@ export class VenueBookingController {
       const { userId } = req.params;
 
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
       const bookings = await bookingRepo.find({
         where: { createdBy: userId },
         relations: [
@@ -577,6 +578,32 @@ export class VenueBookingController {
                 )
               : earliestDate;
 
+          // Fetch all payments for this booking
+          const payments = await paymentRepo.find({
+            where: { bookingId: booking.bookingId },
+            order: { paymentDate: "ASC" },
+          });
+          const totalPaid = payments.reduce(
+            (sum, p) => sum + Number(p.amountPaid || 0),
+            0
+          );
+          const remainingAmount = venueAmount - totalPaid;
+
+          // Determine refund status if cancelled
+          let refundStatus = null;
+          if (booking.bookingStatus === "CANCELLED") {
+            // If any payment is in refund process, show that
+            if (
+              payments.some((p) => p.paymentStatus === "REFUND_IN_PROGRESS")
+            ) {
+              refundStatus = "REFUND_IN_PROGRESS";
+            } else if (payments.every((p) => p.paymentStatus === "REFUNDED")) {
+              refundStatus = "REFUNDED";
+            } else if (payments.length > 0) {
+              refundStatus = "PENDING_REFUND";
+            }
+          }
+
           return {
             bookingId: booking.bookingId,
             eventId: event?.eventId,
@@ -607,10 +634,24 @@ export class VenueBookingController {
             bookingStatus: booking.bookingStatus,
             isPaid: booking.isPaid,
             createdAt: booking.createdAt,
+            payments: payments.map((p) => ({
+              paymentId: p.paymentId,
+              amountPaid: Number(p.amountPaid),
+              paymentDate: p.paymentDate,
+              paymentMethod: p.paymentMethod,
+              paymentStatus: p.paymentStatus,
+              paymentReference: p.paymentReference,
+              notes: p.notes,
+            })),
+            totalPaid,
+            remainingAmount,
+            refundStatus,
             paymentSummary: {
               totalAmount: venueAmount,
               depositAmount: depositAmount,
-              remainingAmount: venueAmount - depositAmount,
+              totalPaid,
+              remainingAmount,
+              refundStatus,
             },
           };
         })
