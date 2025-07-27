@@ -101,10 +101,9 @@ export class Organization {
   })
   stateProvince?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: "json", nullable: true })
   @IsOptional()
-  @IsString({ message: "supportingDocument must be a string (URL)" })
-  supportingDocument?: string;
+  supportingDocuments?: string[];
 
   @Column({ nullable: true })
   @IsOptional()

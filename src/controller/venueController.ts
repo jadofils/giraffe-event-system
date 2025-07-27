@@ -150,9 +150,15 @@ export class VenueController {
       withDeleted: true,
     });
     if ((isAdmin || !!organizationIdFromUser) && existingVenue) {
-      // If rejected, allow update and set to pending (non-admin) or approved (admin)
       if (existingVenue.status === VenueStatus.REJECTED) {
-        // Update fields
+        res.status(409).json({
+          success: false,
+          message:
+            "Venue with the same name and location already exists for this organization and was rejected. Cannot request again.",
+        });
+        return;
+      } else if (existingVenue.status === VenueStatus.QUERY) {
+        // Allow request again
         existingVenue.capacity = data.capacity;
         existingVenue.latitude = data.latitude;
         existingVenue.longitude = data.longitude;
@@ -306,9 +312,11 @@ export class VenueController {
             where: { userId: venueVariable.venueManagerId },
           });
           if (!manager) throw new Error("Manager user not found");
-          const { venueManagerId, ...restVenueVariable } = venueVariable;
+          const { venueManagerId, isFree, ...restVenueVariable } =
+            venueVariable;
           const venueVariableEntity = vvRepo.create({
             ...restVenueVariable,
+            isFree: !!isFree,
             venue,
             manager,
           });
@@ -1003,7 +1011,7 @@ export class VenueController {
     res: Response
   ): Promise<void> {
     const { venueId, variableId } = req.params;
-    const { venueAmount, amount, venueManagerId, managerId } = req.body;
+    const { venueAmount, amount, venueManagerId, managerId, isFree } = req.body;
 
     if (!venueId || !variableId) {
       res.status(400).json({
@@ -1026,10 +1034,16 @@ export class VenueController {
         return;
       }
 
-      // Update amount/venueAmount
-      if (venueAmount !== undefined)
-        venueVariable.venueAmount = Number(venueAmount);
-      if (amount !== undefined) venueVariable.venueAmount = Number(amount);
+      // Update isFree if provided
+      if (typeof isFree === "boolean") venueVariable.isFree = isFree;
+      // Update amount/venueAmount only if not free
+      if (venueVariable.isFree === false) {
+        if (venueAmount !== undefined)
+          venueVariable.venueAmount = Number(venueAmount);
+        if (amount !== undefined) venueVariable.venueAmount = Number(amount);
+      } else {
+        venueVariable.venueAmount = 0;
+      }
 
       // Update manager if provided
       const newManagerId = venueManagerId || managerId;
@@ -1388,7 +1402,7 @@ export class VenueController {
               address: venue.organization.address,
               organizationType: venue.organization.organizationType,
               logo: venue.organization.logo,
-              supportingDocument: venue.organization.supportingDocument,
+              supportingDocument: venue.organization.supportingDocuments,
               cancellationReason: venue.organization.cancellationReason,
               status: venue.organization.status,
               isEnabled: venue.organization.isEnabled,
@@ -1520,7 +1534,7 @@ export class VenueController {
             address: venue.organization?.address,
             organizationType: venue.organization?.organizationType,
             logo: venue.organization?.logo,
-            supportingDocument: venue.organization?.supportingDocument,
+            supportingDocument: venue.organization?.supportingDocuments,
             cancellationReason: venue.organization?.cancellationReason,
             status: venue.organization?.status,
             isEnabled: venue.organization?.isEnabled,
@@ -1774,6 +1788,95 @@ export class VenueController {
       res.status(500).json({
         success: false,
         message: "Failed to update virtual tour",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // PATCH /venues/:id/query - admin queries a venue
+  static async queryVenue(req: Request, res: Response): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    if (!isAdmin) {
+      res
+        .status(403)
+        .json({ success: false, message: "Only ADMIN can query venues." });
+      return;
+    }
+    const { id } = req.params;
+    const { queryReason } = req.body;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      // Only allow query if not REJECTED
+      if (venue.status === VenueStatus.REJECTED) {
+        res
+          .status(400)
+          .json({ success: false, message: "Cannot query a rejected venue." });
+        return;
+      }
+      venue.status = VenueStatus.QUERY;
+      venue.cancellationReason = queryReason ?? "";
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to query venue",
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  // PATCH /venues/:id/request-again - user requests again if status is QUERY
+  static async requestVenueAgain(req: Request, res: Response): Promise<void> {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const userRoles = authenticatedReq.user?.roles || [];
+    const isAdmin = userRoles.some((r: any) => (r.roleName || r) === "ADMIN");
+    const { id } = req.params;
+    if (!id) {
+      res
+        .status(400)
+        .json({ success: false, message: "Venue ID is required." });
+      return;
+    }
+    try {
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const venue = await venueRepo.findOne({ where: { venueId: id } });
+      if (!venue) {
+        res.status(404).json({ success: false, message: "Venue not found." });
+        return;
+      }
+      if (venue.status !== VenueStatus.QUERY) {
+        res
+          .status(400)
+          .json({ success: false, message: "Venue is not in QUERY status." });
+        return;
+      }
+      if (isAdmin) {
+        venue.status = VenueStatus.APPROVED;
+        venue.cancellationReason = undefined;
+      } else {
+        venue.status = VenueStatus.PENDING_QUERY;
+        // Do not clear cancellationReason so user can still see the reason
+      }
+      await venueRepo.save(venue);
+      res.status(200).json({ success: true, data: venue });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to request again for venue",
         error: err instanceof Error ? err.message : err,
       });
     }

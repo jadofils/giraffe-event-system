@@ -768,7 +768,9 @@ export class VenueBookingController {
     venue: Venue,
     bookingDates: any[]
   ): number {
-    const baseAmount = venue.venueVariables?.[0]?.venueAmount || 0;
+    const variable = venue.venueVariables?.[0];
+    if (variable?.isFree) return 0;
+    const baseAmount = variable?.venueAmount || 0;
 
     if (venue.bookingType === "HOURLY") {
       // Calculate total hours across all booking dates

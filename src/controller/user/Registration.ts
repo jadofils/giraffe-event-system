@@ -433,7 +433,7 @@ export class UserController {
               address: org.address,
               organizationType: org.organizationType,
               logo: org.logo,
-              supportingDocument: org.supportingDocument,
+              supportingDocument: org.supportingDocuments,
               cancellationReason: org.cancellationReason,
               status: org.status,
               isEnabled: org.isEnabled,

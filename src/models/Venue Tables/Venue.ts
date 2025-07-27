@@ -40,6 +40,8 @@ export enum VenueStatus {
   CANCELLED = "CANCELLED",
   REJECTED = "REJECTED",
   APPROVE_PUBLIC = "APPROVE_PUBLIC", // Added for public approval
+  QUERY = "QUERY", // Added for admin query status
+  PENDING_QUERY = "PENDING_QUERY", // Pending after query, user has resubmitted but admin has not reviewed
 }
 
 export enum BookingType {
@@ -160,7 +162,6 @@ export class Venue {
 
   @OneToMany(() => Feedback, (feedback) => feedback.venue)
   feedbacks!: Feedback[];
-
 
   @OneToMany(() => VenueBooking, (venueBooking) => venueBooking.venue)
   eventVenueBookings!: VenueBooking[];

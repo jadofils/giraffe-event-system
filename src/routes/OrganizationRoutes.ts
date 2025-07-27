@@ -26,7 +26,7 @@ router.post(
   "/",
   authenticate,
   upload.fields([
-    { name: "supportingDocument", maxCount: 1 },
+    { name: "supportingDocument", maxCount: 3},
     { name: "logo", maxCount: 1 },
   ]),
   OrganizationController.create
@@ -54,7 +54,6 @@ router.get(
   OrganizationController.getOrganizationVenues
 );
 
-
 router.patch("/:id/approve", authenticate, OrganizationController.approve);
 router.patch("/:id/reject", authenticate, OrganizationController.reject);
 // Add PATCH /organizations/:id/logo for updating only the logo
@@ -81,5 +80,15 @@ router.patch(
   "/:id/disable-status",
   authenticate,
   OrganizationController.disableStatus
+);
+router.patch(
+  "/:id/query",
+  authenticate,
+  OrganizationController.queryOrganization
+);
+router.patch(
+  "/:id/request-again",
+  authenticate,
+  OrganizationController.requestOrganizationAgain
 );
 export const organizationRoutes = router;

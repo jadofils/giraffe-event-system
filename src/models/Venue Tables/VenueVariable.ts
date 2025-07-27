@@ -10,6 +10,9 @@ export class VenueVariable {
   @Column({ type: "float" })
   venueAmount!: number;
 
+  @Column({ type: "boolean", default: false })
+  isFree!: boolean; // true = free, false = paid
+
   @ManyToOne(() => Venue, (venue) => venue.venueVariables, {
     onDelete: "CASCADE",
   })

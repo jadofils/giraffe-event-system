@@ -101,16 +101,16 @@ export class OrganizationController {
       const membersCount = members ? parseInt(members) : 0;
 
       // Handle supportingDocument upload if present
-      let supportingDocumentUrl: string | undefined = undefined;
+      let supportingDocuments: string[] = [];
       if (req.files && (req.files as any)["supportingDocument"]) {
-        console.log("Processing supporting document...");
-        const docFile = (req.files as any)["supportingDocument"][0];
-        console.log("Supporting document file:", {
-          filename: docFile.originalname,
-          mimetype: docFile.mimetype,
-          size: docFile.size,
-        });
-
+        const docFiles = (req.files as any)["supportingDocument"];
+        if (docFiles.length > 3) {
+          res.status(400).json({
+            success: false,
+            message: "You can upload up to 3 supporting documents only.",
+          });
+          return;
+        }
         const allowedTypes = [
           "application/pdf",
           "image/jpeg",
@@ -119,36 +119,37 @@ export class OrganizationController {
           "image/gif",
           "image/webp",
         ];
-        if (!allowedTypes.includes(docFile.mimetype)) {
-          res.status(400).json({
-            success: false,
-            message:
-              "Only PDF and image files are allowed as supporting documents.",
-          });
-          return;
-        }
-        try {
-          const uploadResult = await CloudinaryUploadService.uploadBuffer(
-            docFile.buffer,
-            "uploads/organization-supporting-document"
-          );
-          console.log("Supporting document upload result:", uploadResult);
-          supportingDocumentUrl = uploadResult.url;
-          uploadedFiles.push({
-            url: uploadResult.url,
-            type: docFile.mimetype.startsWith("image/") ? "image" : "raw",
-          });
-        } catch (uploadError) {
-          console.error("Supporting document upload error:", uploadError);
-          res.status(500).json({
-            success: false,
-            message: "Failed to upload supporting document",
-            error:
-              uploadError instanceof Error
-                ? uploadError.message
-                : "Unknown error",
-          });
-          return;
+        for (const docFile of docFiles) {
+          if (!allowedTypes.includes(docFile.mimetype)) {
+            res.status(400).json({
+              success: false,
+              message:
+                "Only PDF and image files are allowed as supporting documents.",
+            });
+            return;
+          }
+          try {
+            const uploadResult = await CloudinaryUploadService.uploadBuffer(
+              docFile.buffer,
+              "uploads/organization-supporting-document"
+            );
+            supportingDocuments.push(uploadResult.url);
+            uploadedFiles.push({
+              url: uploadResult.url,
+              type: docFile.mimetype.startsWith("image/") ? "image" : "raw",
+            });
+          } catch (uploadError) {
+            console.error("Supporting document upload error:", uploadError);
+            res.status(500).json({
+              success: false,
+              message: "Failed to upload supporting document",
+              error:
+                uploadError instanceof Error
+                  ? uploadError.message
+                  : "Unknown error",
+            });
+            return;
+          }
         }
       }
 
@@ -191,10 +192,10 @@ export class OrganizationController {
         } catch (uploadError) {
           console.error("Logo upload error:", uploadError);
           // If logo upload fails, clean up any previously uploaded supporting document
-          if (supportingDocumentUrl) {
+          if (supportingDocuments.length > 0) {
             try {
               await CloudinaryUploadService.deleteFromCloudinary(
-                supportingDocumentUrl,
+                supportingDocuments[0],
                 uploadedFiles[0].type
               );
             } catch (cleanupError) {
@@ -217,7 +218,7 @@ export class OrganizationController {
       }
 
       console.log("Building organization data with URLs:", {
-        supportingDocumentUrl,
+        supportingDocuments,
         logoUrl,
       });
 
@@ -234,7 +235,7 @@ export class OrganizationController {
         postalCode,
         stateProvince,
         members: membersCount,
-        supportingDocument: supportingDocumentUrl,
+        supportingDocuments,
         logo: logoUrl,
         status: isAdmin
           ? OrganizationStatusEnum.APPROVED
@@ -570,7 +571,7 @@ export class OrganizationController {
     try {
       // Fetch the current organization to get the old document URL
       const orgResult = await OrganizationRepository.getById(id);
-      const oldDocUrl = orgResult.data?.supportingDocument;
+      const oldDocUrl = orgResult.data?.supportingDocuments?.[0]; // Assuming only one supporting document for now
       if (!orgResult.success || !orgResult.data) {
         res
           .status(404)
@@ -599,7 +600,7 @@ export class OrganizationController {
         "uploads/organization-supporting-document"
       );
       const result = await OrganizationRepository.update(id, {
-        supportingDocument: uploadResult.url,
+        supportingDocuments: [uploadResult.url],
       });
       if (!result.success) {
         res.status(400).json(result);
@@ -1349,12 +1350,10 @@ export class OrganizationController {
       !organizationId ||
       !OrganizationRepository.UUID_REGEX.test(organizationId)
     ) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "Valid organization ID is required.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "Valid organization ID is required.",
+      });
       return;
     }
     try {
@@ -1570,5 +1569,39 @@ export class OrganizationController {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  }
+
+  /**
+   * Admin queries an organization (set to QUERY with reason)
+   * @route PATCH /organizations/:id/query
+   * @access Admin Only
+   */
+  static async queryOrganization(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const isAdmin = req.user?.isAdmin;
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only administrators can query organizations",
+      });
+      return;
+    }
+    const result = await OrganizationRepository.queryOrganization(id, reason);
+    res.status(result.success ? 200 : 400).json(result);
+  }
+
+  /**
+   * User requests again after query (set to PENDING_QUERY)
+   * @route PATCH /organizations/:id/request-again
+   * @access Protected
+   */
+  static async requestOrganizationAgain(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { id } = req.params;
+    const result = await OrganizationRepository.requestOrganizationAgain(id);
+    res.status(result.success ? 200 : 400).json(result);
   }
 }

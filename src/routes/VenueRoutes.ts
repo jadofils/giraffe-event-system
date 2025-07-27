@@ -113,6 +113,12 @@ router.patch(
   VenueController.approveVenuePublic
 );
 router.patch("/:id/reject", authenticate, VenueController.rejectVenue);
+router.patch("/:id/query", authenticate, VenueController.queryVenue);
+router.patch(
+  "/:id/request-again",
+  authenticate,
+  VenueController.requestVenueAgain
+);
 
 // General venue update
 router.patch("/:id", authenticate, VenueController.updateGeneralFields);

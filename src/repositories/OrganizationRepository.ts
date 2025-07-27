@@ -197,6 +197,21 @@ export class OrganizationRepository {
   }
 
   /**
+   * Helper to invalidate all cache keys for an organization
+   */
+  static async invalidateOrgCacheKeys(orgId: string, userIds: string[] = []) {
+    const keys = [
+      "org:all",
+      `org:id:${orgId}`,
+      `org:id:${orgId}:withVenuesAndUsers`,
+      `org:users:${orgId}`,
+      ...userIds.map((id) => `org:user:${id}`),
+      ...userIds.map((id) => `user:id:${id}`),
+    ];
+    await CacheService.invalidateMultiple(keys);
+  }
+
+  /**
    * Create multiple organizations
    * @param data Array of organization data
    * @returns Created organizations
@@ -254,7 +269,7 @@ export class OrganizationRepository {
           organizationType: item.organizationType,
           createdAt: new Date(),
           updatedAt: new Date(),
-          supportingDocument: item.supportingDocument,
+          supportingDocuments: item.supportingDocuments,
           logo: item.logo,
           members: item.members ?? 0,
           status: item.status || OrganizationStatusEnum.PENDING,
@@ -283,10 +298,9 @@ export class OrganizationRepository {
       const savedOrganizations = await repo.save(organizations);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        ...savedOrganizations.map((org) => `org:id:${org.organizationId}`),
-      ]);
+      for (const org of savedOrganizations) {
+        await this.invalidateOrgCacheKeys(org.organizationId);
+      }
 
       return {
         success: true,
@@ -411,8 +425,8 @@ export class OrganizationRepository {
         organizationType:
           data.organizationType ?? organization.organizationType,
         logo: data.logo ?? organization.logo,
-        supportingDocument:
-          data.supportingDocument ?? organization.supportingDocument,
+        supportingDocuments:
+          data.supportingDocuments ?? organization.supportingDocuments,
         members: data.members ?? organization.members,
         updatedAt: new Date(),
       });
@@ -420,11 +434,10 @@ export class OrganizationRepository {
       const updatedOrganization = await repo.save(organization);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...organization.users.map((user) => `org:user:${user.userId}`),
-      ]);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users.map((user) => user.userId)
+      );
 
       return {
         success: true,
@@ -567,12 +580,12 @@ export class OrganizationRepository {
       }
 
       // Invalidate cache for all deleted organizations
-      const cacheKeys = ["org:all"];
-      organizations.forEach((org) => {
-        cacheKeys.push(`org:id:${org.organizationId}`);
-        org.users.forEach((user) => cacheKeys.push(`org:user:${user.userId}`));
-      });
-      await CacheService.invalidateMultiple(cacheKeys);
+      for (const org of organizations) {
+        await this.invalidateOrgCacheKeys(
+          org.organizationId,
+          org.users.map((user) => user.userId)
+        );
+      }
 
       return {
         success: true,
@@ -647,12 +660,7 @@ export class OrganizationRepository {
       const updatedOrganization = await organizationRepo.save(organization);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${organizationId}`,
-        ...userIds.map((id) => `org:user:${id}`),
-        ...userIds.map((id) => `user:id:${id}`),
-      ]);
+      await this.invalidateOrgCacheKeys(organizationId, userIds);
 
       return {
         success: true,
@@ -708,12 +716,7 @@ export class OrganizationRepository {
       const updatedOrganization = await organizationRepo.save(organization);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${organizationId}`,
-        ...userIds.map((id) => `org:user:${id}`),
-        ...userIds.map((id) => `user:id:${id}`),
-      ]);
+      await this.invalidateOrgCacheKeys(organizationId, userIds);
 
       return {
         success: true,
@@ -836,7 +839,7 @@ export class OrganizationRepository {
         country: org.country,
         postalCode: org.postalCode,
         stateProvince: org.stateProvince,
-        supportingDocument: org.supportingDocument,
+        supportingDocuments: org.supportingDocuments,
         logo: org.logo,
         cancellationReason: org.cancellationReason,
         status: org.status,
@@ -1068,7 +1071,7 @@ export class OrganizationRepository {
       });
 
       // Invalidate cache
-      await CacheService.invalidateMultiple(invalidateKeys);
+      await this.invalidateOrgCacheKeys(organizationId);
 
       return {
         success: true,
@@ -1149,7 +1152,7 @@ export class OrganizationRepository {
       });
 
       // Invalidate cache
-      await CacheService.invalidateMultiple(invalidateKeys);
+      await this.invalidateOrgCacheKeys(organizationId);
 
       return {
         success: true,
@@ -1185,11 +1188,10 @@ export class OrganizationRepository {
       organization.status = OrganizationStatusEnum.APPROVED;
       const updated = await repo.save(organization);
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
-      ]);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
       return {
         success: true,
         data: updated,
@@ -1221,11 +1223,10 @@ export class OrganizationRepository {
       }
       const updated = await repo.save(organization);
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
-      ]);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
       return {
         success: true,
         data: updated,
@@ -1261,11 +1262,10 @@ export class OrganizationRepository {
       const updated = await repo.save(organization);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
-      ]);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
 
       return {
         success: true,
@@ -1303,11 +1303,10 @@ export class OrganizationRepository {
       const updated = await repo.save(organization);
 
       // Invalidate cache
-      await CacheService.invalidateMultiple([
-        "org:all",
-        `org:id:${id}`,
-        ...(organization.users?.map((user) => `org:user:${user.userId}`) || []),
-      ]);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
 
       return {
         success: true,
@@ -1317,6 +1316,90 @@ export class OrganizationRepository {
     } catch (error) {
       console.error(`[Organization Disable Error] ID: ${id}:`, error);
       return { success: false, message: "Failed to disable organization" };
+    }
+  }
+
+  static async queryOrganization(
+    id: string,
+    reason?: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+      if (organization.status === OrganizationStatusEnum.REJECTED) {
+        return {
+          success: false,
+          message: "Cannot query a rejected organization",
+        };
+      }
+      organization.status = OrganizationStatusEnum.QUERY;
+      organization.cancellationReason = reason ?? "";
+      const updated = await repo.save(organization);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
+      return {
+        success: true,
+        data: updated,
+        message: "Organization set to QUERY.",
+      };
+    } catch (error) {
+      return { success: false, message: "Failed to query organization" };
+    }
+  }
+
+  static async requestOrganizationAgain(
+    id: string
+  ): Promise<{ success: boolean; data?: Organization; message: string }> {
+    if (!id || !this.UUID_REGEX.test(id)) {
+      return { success: false, message: "Valid organization ID is required" };
+    }
+    try {
+      const repo = AppDataSource.getRepository(Organization);
+      const organization = await repo.findOne({
+        where: { organizationId: id },
+      });
+      if (!organization) {
+        return { success: false, message: "Organization not found" };
+      }
+      if (organization.status === OrganizationStatusEnum.REJECTED) {
+        return {
+          success: false,
+          message: "Cannot request again for a rejected organization",
+        };
+      }
+      if (organization.status !== OrganizationStatusEnum.QUERY) {
+        return {
+          success: false,
+          message: "Organization is not in QUERY status",
+        };
+      }
+      organization.status = OrganizationStatusEnum.PENDING_QUERY;
+      // Do not clear cancellationReason so user can see the reason
+      const updated = await repo.save(organization);
+      await this.invalidateOrgCacheKeys(
+        id,
+        organization.users?.map((user) => user.userId) || []
+      );
+      return {
+        success: true,
+        data: updated,
+        message: "Organization set to PENDING_QUERY.",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to request again for organization",
+      };
     }
   }
 }

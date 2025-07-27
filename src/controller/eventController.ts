@@ -423,14 +423,30 @@ export class EventController {
     next: NextFunction
   ): Promise<void> {
     try {
-      // Fetch events with venue details
       const eventRepo = AppDataSource.getRepository(Event);
+      const userRepo = AppDataSource.getRepository(User);
+      const orgRepo = AppDataSource.getRepository(Organization);
       const events = await eventRepo.find({
         where: { eventStatus: EventStatus.APPROVED },
-        relations: ["eventVenues", "eventVenues.venue"],
+        relations: ["eventVenues", "eventVenues.venue", "eventGuests"],
         order: { createdAt: "DESC" },
       });
-      res.status(200).json({ success: true, data: events });
+      const eventsWithOrganizer = await Promise.all(
+        events.map(async (event) => {
+          let organizer = null;
+          if (event.eventOrganizerType === "USER") {
+            organizer = await userRepo.findOne({
+              where: { userId: event.eventOrganizerId },
+            });
+          } else if (event.eventOrganizerType === "ORGANIZATION") {
+            organizer = await orgRepo.findOne({
+              where: { organizationId: event.eventOrganizerId },
+            });
+          }
+          return { ...event, organizer };
+        })
+      );
+      res.status(200).json({ success: true, data: eventsWithOrganizer });
       return;
     } catch (error) {
       next(error);
@@ -443,14 +459,28 @@ export class EventController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const event = await EventRepository.getEventByIdWithRelations(
-        req.params.id
-      );
-      if (!event.success) {
-        res.status(404).json({ success: false, message: event.message });
+      const eventRepo = AppDataSource.getRepository(Event);
+      const userRepo = AppDataSource.getRepository(User);
+      const orgRepo = AppDataSource.getRepository(Organization);
+      const event = await eventRepo.findOne({
+        where: { eventId: req.params.id },
+        relations: ["eventVenues", "eventVenues.venue", "eventGuests"],
+      });
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found" });
         return;
       }
-      res.status(200).json({ success: true, data: event.data });
+      let organizer = null;
+      if (event.eventOrganizerType === "USER") {
+        organizer = await userRepo.findOne({
+          where: { userId: event.eventOrganizerId },
+        });
+      } else if (event.eventOrganizerType === "ORGANIZATION") {
+        organizer = await orgRepo.findOne({
+          where: { organizationId: event.eventOrganizerId },
+        });
+      }
+      res.status(200).json({ success: true, data: { ...event, organizer } });
       return;
     } catch (error) {
       next(error);

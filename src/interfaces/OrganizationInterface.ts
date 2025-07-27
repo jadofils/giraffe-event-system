@@ -9,7 +9,7 @@ export interface OrganizationInterface {
   address?: string;
   organizationType: string;
   logo?: string;
-  supportingDocument?: string;
+  supportingDocuments?: string[];
   cancellationReason?: string;
   status: OrganizationStatusEnum;
   isEnabled: boolean;

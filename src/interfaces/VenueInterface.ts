@@ -11,6 +11,7 @@ export interface BookingConditionRequest {
 export interface VenueVariableRequest {
   venueAmount: number;
   venueManagerId: string;
+  isFree: boolean;
 }
 
 export interface VenueAmenityRequest {
