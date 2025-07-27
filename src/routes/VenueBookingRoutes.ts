@@ -22,6 +22,14 @@ router.patch(
   "/:bookingId/cancel-by-manager",
   VenueBookingController.cancelByManager
 );
+router.patch(
+  "/:bookingId/cancel-and-delete-slots-by-manager",
+  VenueBookingController.cancelAndDeleteSlotsByManager
+);
+router.patch(
+  "/:bookingId/cancel-by-manager-without-slot-deletion",
+  VenueBookingController.cancelByManagerWithoutSlotDeletion
+);
 router.post("/:bookingId/payments", VenueBookingController.processPayment);
 router.get("/:bookingId/payments", VenueBookingController.getPaymentHistory);
 router.get(

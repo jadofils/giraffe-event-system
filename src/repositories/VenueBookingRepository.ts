@@ -240,6 +240,51 @@ export class VenueBookingRepository {
         where: { venue: { venueId: venue.venueId } },
       });
 
+      // Check for slot conflicts before approving
+      if (venue.bookingType === "DAILY") {
+        for (
+          let d = new Date(booking.eventStartDate);
+          d <= new Date(booking.eventEndDate);
+          d.setDate(d.getDate() + 1)
+        ) {
+          const existingSlot = await slotRepo.findOne({
+            where: {
+              venueId: venue.venueId,
+              Date: new Date(d),
+              status: "BOOKED",
+            },
+          });
+          if (existingSlot) {
+            throw new Error(
+              `Slot for date ${d.toISOString().slice(0, 10)} is already booked.`
+            );
+          }
+        }
+      } else if (venue.bookingType === "HOURLY") {
+        // For hourly, you may need to check booking.bookingDates and their hours
+        if (Array.isArray(booking.bookingDates)) {
+          for (const dateObj of booking.bookingDates) {
+            if (Array.isArray(dateObj.hours)) {
+              for (const hour of dateObj.hours) {
+                const existingSlot = await slotRepo.findOne({
+                  where: {
+                    venueId: venue.venueId,
+                    Date: new Date(dateObj.date),
+                    bookedHours: [hour],
+                    status: "BOOKED",
+                  },
+                });
+                if (existingSlot) {
+                  throw new Error(
+                    `Slot for date ${dateObj.date} hour ${hour} is already booked.`
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+
       // 2. Set booking status to APPROVED_NOT_PAID
       booking.bookingStatus = "APPROVED_NOT_PAID";
       await bookingRepo.save(booking);
@@ -345,7 +390,7 @@ export class VenueBookingRepository {
         where: {
           venueId: booking.venueId,
           eventStartDate: booking.eventStartDate,
-          bookingStatus: In(["PENDING", "APPROVED_NOT_PAID"]),
+          bookingStatus: In(["PENDING"]),
         },
       });
       for (const conflict of conflictBookings) {
@@ -380,6 +425,177 @@ export class VenueBookingRepository {
       return {
         success: true,
         message: "Booking approved and all related records created.",
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to approve booking.",
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  static async approveBookingWithTransition(bookingId: string) {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      // Fetch booking, venue, and booking condition
+      const bookingRepo = queryRunner.manager.getRepository(
+        require("../models/VenueBooking").VenueBooking
+      );
+      const venueRepo = queryRunner.manager.getRepository(
+        require("../models/Venue Tables/Venue").Venue
+      );
+      const slotRepo = queryRunner.manager.getRepository(
+        require("../models/Venue Tables/VenueAvailabilitySlot")
+          .VenueAvailabilitySlot
+      );
+      const conditionRepo = queryRunner.manager.getRepository(
+        require("../models/Venue Tables/BookingCondition").BookingCondition
+      );
+      const booking = await bookingRepo.findOne({ where: { bookingId } });
+      if (!booking) throw new Error("Booking not found");
+      const venue = await venueRepo.findOne({
+        where: { venueId: booking.venueId },
+      });
+      if (!venue) throw new Error("Venue not found");
+      const condition = await conditionRepo.findOne({
+        where: { venue: { venueId: venue.venueId } },
+      });
+      const transitionTime = condition?.transitionTime || 0;
+      // Check for slot conflicts before approving
+      if (venue.bookingType === "DAILY") {
+        for (const dateObj of booking.bookingDates) {
+          const existingSlot = await slotRepo.findOne({
+            where: {
+              venueId: venue.venueId,
+              Date: new Date(dateObj.date),
+              status: "BOOKED",
+            },
+          });
+          if (existingSlot) {
+            throw new Error(`Slot for date ${dateObj.date} is already booked.`);
+          }
+        }
+      } else if (venue.bookingType === "HOURLY") {
+        for (const dateObj of booking.bookingDates) {
+          if (Array.isArray(dateObj.hours)) {
+            for (const hour of dateObj.hours) {
+              const existingSlot = await slotRepo.findOne({
+                where: {
+                  venueId: venue.venueId,
+                  Date: new Date(dateObj.date),
+                  bookedHours: [hour],
+                  status: "BOOKED",
+                },
+              });
+              if (existingSlot) {
+                throw new Error(
+                  `Slot for date ${dateObj.date} hour ${hour} is already booked.`
+                );
+              }
+            }
+          }
+        }
+      }
+      // 1. Set booking status to APPROVED_NOT_PAID
+      booking.bookingStatus = "APPROVED_NOT_PAID";
+      await bookingRepo.save(booking);
+      // 2. Create slots for booking dates
+      const slotsToCreate = [];
+      if (venue.bookingType === "DAILY") {
+        // Assume booking.bookingDates is an array of { date: string }
+        for (const dateObj of booking.bookingDates) {
+          const slot = slotRepo.create({
+            venueId: venue.venueId,
+            Date: new Date(dateObj.date),
+            status: "BOOKED",
+            eventId: booking.eventId,
+            notes: `Booked for event ${booking.eventId}`,
+          });
+          slotsToCreate.push(slot);
+        }
+        // Add transition days before the first booked date
+        if (transitionTime > 0 && booking.bookingDates.length > 0) {
+          const firstDate = new Date(booking.bookingDates[0].date);
+          for (let i = 1; i <= transitionTime; i++) {
+            const transitionDate = new Date(firstDate);
+            transitionDate.setDate(transitionDate.getDate() - i);
+            // Check if slot is available
+            const existing = await slotRepo.findOne({
+              where: { venueId: venue.venueId, Date: transitionDate },
+            });
+            if (!existing) {
+              const transitionSlot = slotRepo.create({
+                venueId: venue.venueId,
+                Date: transitionDate,
+                status: "BOOKED",
+                eventId: null,
+                slotType: "TRANSITION",
+                notes: `Transition time for event ${booking.eventId}`,
+              });
+              slotsToCreate.push(transitionSlot);
+            }
+          }
+        }
+      } else if (venue.bookingType === "HOURLY") {
+        // Assume booking.bookingDates is an array of { date: string, hours: number[] }
+        for (const dateObj of booking.bookingDates) {
+          if (Array.isArray(dateObj.hours)) {
+            for (const hour of dateObj.hours) {
+              const slot = slotRepo.create({
+                venueId: venue.venueId,
+                Date: new Date(dateObj.date),
+                bookedHours: [hour],
+                status: "BOOKED",
+                eventId: booking.eventId,
+                notes: `Booked for event ${booking.eventId}`,
+              });
+              slotsToCreate.push(slot);
+              // Add transition hour before if required
+              if (transitionTime > 0) {
+                for (let t = 1; t <= transitionTime; t++) {
+                  const transitionHour = hour - t;
+                  if (transitionHour >= 0) {
+                    // Check if slot for this hour is available
+                    const existing = await slotRepo.findOne({
+                      where: {
+                        venueId: venue.venueId,
+                        Date: new Date(dateObj.date),
+                        bookedHours: [transitionHour],
+                      },
+                    });
+                    if (!existing) {
+                      const transitionSlot = slotRepo.create({
+                        venueId: venue.venueId,
+                        Date: new Date(dateObj.date),
+                        bookedHours: [transitionHour],
+                        status: "BOOKED",
+                        eventId: null,
+                        slotType: "TRANSITION",
+                        notes: `Transition hour for event ${booking.eventId}`,
+                      });
+                      slotsToCreate.push(transitionSlot);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      for (const slot of slotsToCreate) {
+        await slotRepo.save(slot);
+      }
+      await queryRunner.commitTransaction();
+      return {
+        success: true,
+        message:
+          "Booking approved, slots and transition time set where available.",
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();

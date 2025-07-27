@@ -75,6 +75,13 @@ export class EventRepository {
               : baseVenueAmount;
 
           // Create VenueBooking for this date and venue
+          // Fetch the user entity for the createdBy field
+          let userEntity = undefined;
+          if (eventData.eventOrganizerId) {
+            userEntity = await queryRunner.manager.getRepository(User).findOne({
+              where: { userId: eventData.eventOrganizerId },
+            });
+          }
           const venueBooking = queryRunner.manager.create(VenueBooking, {
             eventId: singleDateEvent.eventId,
             venueId: venue.venueId,
@@ -85,6 +92,7 @@ export class EventRepository {
             isPaid: false,
             timezone: "UTC",
             createdBy: eventData.eventOrganizerId,
+            user: userEntity || undefined, // <-- set the user relation
             amountToBePaid: totalAmount, // Use calculated total amount
           });
           await queryRunner.manager.save(venueBooking);

@@ -328,7 +328,38 @@ export class VenueBookingController {
   static async approveBooking(req: Request, res: Response): Promise<void> {
     try {
       const { bookingId } = req.params;
-      const result = await VenueBookingRepository.approveBooking(bookingId);
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      // Fetch booking with venue
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["venue"],
+      });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+
+      // Check if user is the manager of the venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await venueVariableRepo.findOne({
+        where: { venue: { venueId: booking.venue.venueId } },
+        relations: ["manager"],
+      });
+      if (!venueVariable || venueVariable.manager.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          message: "You are not the manager of this venue.",
+        });
+        return;
+      }
+
+      // Approve booking and create slots with transition time logic
+      const result = await VenueBookingRepository.approveBookingWithTransition(
+        bookingId
+      );
       if (!result.success) {
         res.status(400).json({ success: false, message: result.message });
         return;
@@ -993,6 +1024,233 @@ export class VenueBookingController {
         booking,
         event: booking.event,
         payments, // Return updated payments for user visibility
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to cancel booking.",
+      });
+    }
+  }
+
+  static async cancelAndDeleteSlotsByManager(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const { reason } = req.body;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      if (!reason) {
+        res.status(400).json({
+          success: false,
+          message: "Cancellation reason is required.",
+        });
+        return;
+      }
+
+      // Fetch booking with venue, event, and user
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["venue", "event", "user"],
+      });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+
+      // Check if user is the manager of the venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await venueVariableRepo.findOne({
+        where: { venue: { venueId: booking.venue.venueId } },
+        relations: ["manager"],
+      });
+      if (!venueVariable || venueVariable.manager.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          message: "You are not the manager of this venue.",
+        });
+        return;
+      }
+
+      // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+      if (
+        !["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Only approved bookings can be cancelled by manager.",
+        });
+        return;
+      }
+
+      // Cancel booking
+      booking.bookingStatus = BookingStatus.CANCELLED;
+      booking.cancellationReason = reason;
+      await bookingRepo.save(booking);
+
+      // Cancel event
+      if (booking.event) {
+        booking.event.eventStatus = EventStatus.CANCELLED;
+        booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+        await AppDataSource.getRepository(Event).save(booking.event);
+      }
+
+      // Delete all VenueAvailabilitySlot entries for this booking (booked and transition)
+      const slotRepo = AppDataSource.getRepository(
+        require("../models/Venue Tables/VenueAvailabilitySlot")
+          .VenueAvailabilitySlot
+      );
+      // Find all slots for this venue and event
+      const slots = await slotRepo.find({
+        where: {
+          venueId: booking.venue.venueId,
+          eventId: booking.event?.eventId,
+        },
+      });
+      for (const slot of slots) {
+        await slotRepo.remove(slot);
+      }
+      // Also remove transition slots (slotType: TRANSITION, eventId: null, but notes reference this event)
+      const transitionSlots = await slotRepo.find({
+        where: { venueId: booking.venue.venueId, slotType: "TRANSITION" },
+      });
+      for (const slot of transitionSlots) {
+        if (slot.notes && slot.notes.includes(booking.event?.eventId)) {
+          await slotRepo.remove(slot);
+        }
+      }
+
+      // Email notification
+      try {
+        if (booking.user && booking.user.email) {
+          await EmailService.sendBookingCancellationEmail({
+            to: booking.user.email,
+            userName: booking.user.firstName || booking.user.username || "User",
+            venueName: booking.venue.venueName,
+            eventName: booking.event?.eventName || "Event",
+            reason,
+            refundInfo: booking.isPaid
+              ? "Your payment will be refunded as soon as possible."
+              : undefined,
+            managerPhone: venueVariable?.manager?.phoneNumber,
+          });
+        }
+      } catch (e) {
+        // Log but do not block
+        console.error("Failed to send email notification:", e);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Booking, event, and slots cancelled/deleted.",
+        booking,
+        event: booking.event,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to cancel booking.",
+      });
+    }
+  }
+
+  static async cancelByManagerWithoutSlotDeletion(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { bookingId } = req.params;
+      const { reason } = req.body;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      if (!reason) {
+        res.status(400).json({
+          success: false,
+          message: "Cancellation reason is required.",
+        });
+        return;
+      }
+
+      // Fetch booking with venue, event, and user
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["venue", "event", "user"],
+      });
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
+        return;
+      }
+
+      // Check if user is the manager of the venue
+      const venueVariableRepo = AppDataSource.getRepository(VenueVariable);
+      const venueVariable = await venueVariableRepo.findOne({
+        where: { venue: { venueId: booking.venue.venueId } },
+        relations: ["manager"],
+      });
+      if (!venueVariable || venueVariable.manager.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          message: "You are not the manager of this venue.",
+        });
+        return;
+      }
+
+      // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+      if (
+        !["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Only approved bookings can be cancelled by manager.",
+        });
+        return;
+      }
+
+      // Cancel booking
+      booking.bookingStatus = BookingStatus.CANCELLED;
+      booking.cancellationReason = reason;
+      await bookingRepo.save(booking);
+
+      // Cancel event
+      if (booking.event) {
+        booking.event.eventStatus = EventStatus.CANCELLED;
+        booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+        await AppDataSource.getRepository(Event).save(booking.event);
+      }
+
+      // Email notification
+      try {
+        if (booking.user && booking.user.email) {
+          await EmailService.sendBookingCancellationEmail({
+            to: booking.user.email,
+            userName: booking.user.firstName || booking.user.username || "User",
+            venueName: booking.venue.venueName,
+            eventName: booking.event?.eventName || "Event",
+            reason,
+            refundInfo: booking.isPaid
+              ? "Your payment will be refunded as soon as possible."
+              : undefined,
+            managerPhone: venueVariable?.manager?.phoneNumber,
+          });
+        }
+      } catch (e) {
+        // Log but do not block
+        console.error("Failed to send email notification:", e);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Booking and event cancelled (slots not deleted).",
+        booking,
+        event: booking.event,
       });
     } catch (error) {
       res.status(500).json({
