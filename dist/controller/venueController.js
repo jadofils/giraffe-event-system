@@ -36,6 +36,7 @@ const Organization_1 = require("../models/Organization");
 const User_1 = require("../models/User");
 const OrganizationStatusEnum_1 = require("../interfaces/Enums/OrganizationStatusEnum");
 const VenueAvailabilitySlot_1 = require("../models/Venue Tables/VenueAvailabilitySlot");
+const VenueBookingRepository_1 = require("../repositories/VenueBookingRepository");
 class VenueController {
     static create(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -148,9 +149,15 @@ class VenueController {
                 withDeleted: true,
             });
             if ((isAdmin || !!organizationIdFromUser) && existingVenue) {
-                // If rejected, allow update and set to pending (non-admin) or approved (admin)
                 if (existingVenue.status === Venue_1.VenueStatus.REJECTED) {
-                    // Update fields
+                    res.status(409).json({
+                        success: false,
+                        message: "Venue with the same name and location already exists for this organization and was rejected. Cannot request again.",
+                    });
+                    return;
+                }
+                else if (existingVenue.status === Venue_1.VenueStatus.QUERY) {
+                    // Allow request again
                     existingVenue.capacity = data.capacity;
                     existingVenue.latitude = data.latitude;
                     existingVenue.longitude = data.longitude;
@@ -276,8 +283,8 @@ class VenueController {
                         });
                         if (!manager)
                             throw new Error("Manager user not found");
-                        const { venueManagerId } = venueVariable, restVenueVariable = __rest(venueVariable, ["venueManagerId"]);
-                        const venueVariableEntity = vvRepo.create(Object.assign(Object.assign({}, restVenueVariable), { venue,
+                        const { venueManagerId, isFree } = venueVariable, restVenueVariable = __rest(venueVariable, ["venueManagerId", "isFree"]);
+                        const venueVariableEntity = vvRepo.create(Object.assign(Object.assign({}, restVenueVariable), { isFree: !!isFree, venue,
                             manager }));
                         yield queryRunner.manager.save(venueVariableEntity);
                     }
@@ -971,7 +978,7 @@ class VenueController {
     static updateVenueVariableById(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             const { venueId, variableId } = req.params;
-            const { venueAmount, amount, venueManagerId, managerId } = req.body;
+            const { venueAmount, amount, venueManagerId, managerId, isFree } = req.body;
             if (!venueId || !variableId) {
                 res.status(400).json({
                     success: false,
@@ -991,11 +998,19 @@ class VenueController {
                         .json({ success: false, message: "Venue variable not found" });
                     return;
                 }
-                // Update amount/venueAmount
-                if (venueAmount !== undefined)
-                    venueVariable.venueAmount = Number(venueAmount);
-                if (amount !== undefined)
-                    venueVariable.venueAmount = Number(amount);
+                // Update isFree if provided
+                if (typeof isFree === "boolean")
+                    venueVariable.isFree = isFree;
+                // Update amount/venueAmount only if not free
+                if (venueVariable.isFree === false) {
+                    if (venueAmount !== undefined)
+                        venueVariable.venueAmount = Number(venueAmount);
+                    if (amount !== undefined)
+                        venueVariable.venueAmount = Number(amount);
+                }
+                else {
+                    venueVariable.venueAmount = 0;
+                }
                 // Update manager if provided
                 const newManagerId = venueManagerId || managerId;
                 if (newManagerId) {
@@ -1331,7 +1346,7 @@ class VenueController {
                             address: venue.organization.address,
                             organizationType: venue.organization.organizationType,
                             logo: venue.organization.logo,
-                            supportingDocument: venue.organization.supportingDocument,
+                            supportingDocument: venue.organization.supportingDocuments,
                             cancellationReason: venue.organization.cancellationReason,
                             status: venue.organization.status,
                             isEnabled: venue.organization.isEnabled,
@@ -1453,7 +1468,7 @@ class VenueController {
                             address: (_g = venue.organization) === null || _g === void 0 ? void 0 : _g.address,
                             organizationType: (_h = venue.organization) === null || _h === void 0 ? void 0 : _h.organizationType,
                             logo: (_j = venue.organization) === null || _j === void 0 ? void 0 : _j.logo,
-                            supportingDocument: (_k = venue.organization) === null || _k === void 0 ? void 0 : _k.supportingDocument,
+                            supportingDocument: (_k = venue.organization) === null || _k === void 0 ? void 0 : _k.supportingDocuments,
                             cancellationReason: (_l = venue.organization) === null || _l === void 0 ? void 0 : _l.cancellationReason,
                             status: (_m = venue.organization) === null || _m === void 0 ? void 0 : _m.status,
                             isEnabled: (_o = venue.organization) === null || _o === void 0 ? void 0 : _o.isEnabled,
@@ -1496,6 +1511,32 @@ class VenueController {
                     success: false,
                     message: "Internal server error",
                     error: error instanceof Error ? error.message : "Unknown error",
+                });
+            }
+        });
+    }
+    /**
+     * Get all booked dates and users for a venue
+     */
+    static getBookedDatesAndUsers(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { venueId } = req.params;
+                if (!venueId) {
+                    res
+                        .status(400)
+                        .json({ success: false, message: "venueId is required" });
+                    return;
+                }
+                const data = yield VenueBookingRepository_1.VenueBookingRepository.getBookedDatesAndUsersByVenueId(venueId);
+                res.status(200).json({ success: true, data });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to fetch booked dates and users.",
                 });
             }
         });
@@ -1689,6 +1730,102 @@ class VenueController {
                 res.status(500).json({
                     success: false,
                     message: "Failed to update virtual tour",
+                    error: err instanceof Error ? err.message : err,
+                });
+            }
+        });
+    }
+    // PATCH /venues/:id/query - admin queries a venue
+    static queryVenue(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const authenticatedReq = req;
+            const userRoles = ((_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.roles) || [];
+            const isAdmin = userRoles.some((r) => (r.roleName || r) === "ADMIN");
+            if (!isAdmin) {
+                res
+                    .status(403)
+                    .json({ success: false, message: "Only ADMIN can query venues." });
+                return;
+            }
+            const { id } = req.params;
+            const { queryReason } = req.body;
+            if (!id) {
+                res
+                    .status(400)
+                    .json({ success: false, message: "Venue ID is required." });
+                return;
+            }
+            try {
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                const venue = yield venueRepo.findOne({ where: { venueId: id } });
+                if (!venue) {
+                    res.status(404).json({ success: false, message: "Venue not found." });
+                    return;
+                }
+                // Only allow query if not REJECTED
+                if (venue.status === Venue_1.VenueStatus.REJECTED) {
+                    res
+                        .status(400)
+                        .json({ success: false, message: "Cannot query a rejected venue." });
+                    return;
+                }
+                venue.status = Venue_1.VenueStatus.QUERY;
+                venue.cancellationReason = queryReason !== null && queryReason !== void 0 ? queryReason : "";
+                yield venueRepo.save(venue);
+                res.status(200).json({ success: true, data: venue });
+            }
+            catch (err) {
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to query venue",
+                    error: err instanceof Error ? err.message : err,
+                });
+            }
+        });
+    }
+    // PATCH /venues/:id/request-again - user requests again if status is QUERY
+    static requestVenueAgain(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const authenticatedReq = req;
+            const userRoles = ((_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.roles) || [];
+            const isAdmin = userRoles.some((r) => (r.roleName || r) === "ADMIN");
+            const { id } = req.params;
+            if (!id) {
+                res
+                    .status(400)
+                    .json({ success: false, message: "Venue ID is required." });
+                return;
+            }
+            try {
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                const venue = yield venueRepo.findOne({ where: { venueId: id } });
+                if (!venue) {
+                    res.status(404).json({ success: false, message: "Venue not found." });
+                    return;
+                }
+                if (venue.status !== Venue_1.VenueStatus.QUERY) {
+                    res
+                        .status(400)
+                        .json({ success: false, message: "Venue is not in QUERY status." });
+                    return;
+                }
+                if (isAdmin) {
+                    venue.status = Venue_1.VenueStatus.APPROVED;
+                    venue.cancellationReason = undefined;
+                }
+                else {
+                    venue.status = Venue_1.VenueStatus.PENDING_QUERY;
+                    // Do not clear cancellationReason so user can still see the reason
+                }
+                yield venueRepo.save(venue);
+                res.status(200).json({ success: true, data: venue });
+            }
+            catch (err) {
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to request again for venue",
                     error: err instanceof Error ? err.message : err,
                 });
             }

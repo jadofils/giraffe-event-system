@@ -104,11 +104,10 @@ __decorate([
     __metadata("design:type", String)
 ], Organization.prototype, "stateProvince", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ type: "json", nullable: true }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)({ message: "supportingDocument must be a string (URL)" }),
-    __metadata("design:type", String)
-], Organization.prototype, "supportingDocument", void 0);
+    __metadata("design:type", Array)
+], Organization.prototype, "supportingDocuments", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     (0, class_validator_1.IsOptional)(),

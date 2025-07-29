@@ -24,6 +24,7 @@ import {
   VenueAvailabilitySlot,
   SlotStatus,
 } from "../models/Venue Tables/VenueAvailabilitySlot";
+import { VenueBookingRepository } from "../repositories/VenueBookingRepository";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -123,14 +124,7 @@ export class VenueController {
         .json({ success: false, message: "Organization not found." });
       return;
     }
-    // Move this check up for clarity and early exit
-    if (organization.organizationName === "Independent") {
-      res.status(403).json({
-        success: false,
-        message: "The 'Independent' organization cannot create venues.",
-      });
-      return;
-    }
+    // Remove all checks for 'Independent' organization
     if (organization.status !== "APPROVED") {
       res.status(403).json({
         success: false,
@@ -1583,6 +1577,36 @@ export class VenueController {
         success: false,
         message: "Internal server error",
         error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  /**
+   * Get all booked dates and users for a venue
+   */
+  static async getBookedDatesAndUsers(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { venueId } = req.params;
+      if (!venueId) {
+        res
+          .status(400)
+          .json({ success: false, message: "venueId is required" });
+        return;
+      }
+      const data = await VenueBookingRepository.getBookedDatesAndUsersByVenueId(
+        venueId
+      );
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch booked dates and users.",
       });
     }
   }

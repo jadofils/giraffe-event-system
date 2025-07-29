@@ -757,6 +757,12 @@ export class VenueBookingRepository {
     if (depositFulfilled) {
       booking.bookingStatus = "APPROVED_PAID";
       await bookingRepo.save(booking);
+    } else if (totalPaid > 0 && totalPaid < (booking.amountToBePaid || 0)) {
+      booking.bookingStatus = "PARTIAL";
+      await bookingRepo.save(booking);
+    } else if (totalPaid === 0) {
+      booking.bookingStatus = "APPROVED_NOT_PAID";
+      await bookingRepo.save(booking);
     }
 
     // 7. If total paid >= amountToBePaid, mark all payments as COMPLETED
@@ -814,5 +820,40 @@ export class VenueBookingRepository {
       relations: ["venue", "user", "event"],
       order: { createdAt: "DESC" },
     });
+  }
+
+  /**
+   * Get all booked dates and users for a given venueId
+   * Returns: [{ date, hours, user: { userId, firstName, lastName, email, phoneNumber } }]
+   */
+  static async getBookedDatesAndUsersByVenueId(venueId: string) {
+    const bookingRepo = AppDataSource.getRepository(VenueBooking);
+    const bookings = await bookingRepo.find({
+      where: { venueId },
+      relations: ["user"],
+      order: { createdAt: "ASC" },
+    });
+    // Only include non-cancelled bookings
+    const validStatuses = ["APPROVED_PAID", "APPROVED_NOT_PAID", "PENDING"];
+    const result: Array<{ date: string; hours?: number[]; user: any }> = [];
+    for (const booking of bookings) {
+      if (!validStatuses.includes(booking.bookingStatus)) continue;
+      for (const dateObj of booking.bookingDates) {
+        result.push({
+          date: dateObj.date,
+          hours: dateObj.hours,
+          user: booking.user
+            ? {
+                userId: booking.user.userId,
+                firstName: booking.user.firstName,
+                lastName: booking.user.lastName,
+                email: booking.user.email,
+                phoneNumber: booking.user.phoneNumber,
+              }
+            : null,
+        });
+      }
+    }
+    return result;
   }
 }

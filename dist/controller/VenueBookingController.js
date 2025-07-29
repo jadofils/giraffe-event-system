@@ -208,7 +208,8 @@ class VenueBookingController {
                     totalPaid: enrichedBookings.reduce((sum, b) => sum + b.paymentSummary.totalPaid, 0),
                     totalRemaining: enrichedBookings.reduce((sum, b) => sum + b.paymentSummary.remainingAmount, 0),
                     pendingBookings: enrichedBookings.filter((b) => b.bookingStatus === "PENDING").length,
-                    approvedBookings: enrichedBookings.filter((b) => ["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(b.bookingStatus)).length,
+                    approvedBookings: enrichedBookings.filter((b) => ["APPROVED_PAID", "APPROVED_NOT_PAID", "PARTIAL"].includes(b.bookingStatus)).length,
+                    partialBookings: enrichedBookings.filter((b) => b.bookingStatus === "PARTIAL").length,
                     cancelledBookings: enrichedBookings.filter((b) => b.bookingStatus === "CANCELLED").length,
                     bookingsByVenue: venueIds.map((venueId) => {
                         var _a;
@@ -268,9 +269,36 @@ class VenueBookingController {
     }
     static approveBooking(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const { bookingId } = req.params;
-                const result = yield VenueBookingRepository_1.VenueBookingRepository.approveBooking(bookingId);
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                // Fetch booking with venue
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["venue"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                // Check if user is the manager of the venue
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const venueVariable = yield venueVariableRepo.findOne({
+                    where: { venue: { venueId: booking.venue.venueId } },
+                    relations: ["manager"],
+                });
+                if (!venueVariable || venueVariable.manager.userId !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        message: "You are not the manager of this venue.",
+                    });
+                    return;
+                }
+                // Approve booking and create slots with transition time logic
+                const result = yield VenueBookingRepository_1.VenueBookingRepository.approveBookingWithTransition(bookingId);
                 if (!result.success) {
                     res.status(400).json({ success: false, message: result.message });
                     return;
@@ -298,6 +326,20 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { bookingId } = req.params;
+                // Check if booking is canceled
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({ where: { bookingId } });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                if (booking.bookingStatus === "CANCELLED") {
+                    res.status(400).json({
+                        success: false,
+                        message: "Cannot create payment for a canceled booking.",
+                    });
+                    return;
+                }
                 const paymentData = Object.assign(Object.assign({}, req.body), { bookingId });
                 const result = yield VenueBookingRepository_1.VenueBookingRepository.createVenueBookingPaymentWithDepositValidation(paymentData);
                 res.status(201).json(result);
@@ -423,6 +465,7 @@ class VenueBookingController {
             try {
                 const { userId } = req.params;
                 const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
                 const bookings = yield bookingRepo.find({
                     where: { createdBy: userId },
                     relations: [
@@ -456,6 +499,27 @@ class VenueBookingController {
                                 60 *
                                 1000)
                         : earliestDate;
+                    // Fetch all payments for this booking
+                    const payments = yield paymentRepo.find({
+                        where: { bookingId: booking.bookingId },
+                        order: { paymentDate: "ASC" },
+                    });
+                    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
+                    const remainingAmount = venueAmount - totalPaid;
+                    // Determine refund status if cancelled
+                    let refundStatus = null;
+                    if (booking.bookingStatus === "CANCELLED") {
+                        // If any payment is in refund process, show that
+                        if (payments.some((p) => p.paymentStatus === "REFUND_IN_PROGRESS")) {
+                            refundStatus = "REFUND_IN_PROGRESS";
+                        }
+                        else if (payments.every((p) => p.paymentStatus === "REFUNDED")) {
+                            refundStatus = "REFUNDED";
+                        }
+                        else if (payments.length > 0) {
+                            refundStatus = "PENDING_REFUND";
+                        }
+                    }
                     return {
                         bookingId: booking.bookingId,
                         eventId: event === null || event === void 0 ? void 0 : event.eventId,
@@ -483,10 +547,24 @@ class VenueBookingController {
                         bookingStatus: booking.bookingStatus,
                         isPaid: booking.isPaid,
                         createdAt: booking.createdAt,
+                        payments: payments.map((p) => ({
+                            paymentId: p.paymentId,
+                            amountPaid: Number(p.amountPaid),
+                            paymentDate: p.paymentDate,
+                            paymentMethod: p.paymentMethod,
+                            paymentStatus: p.paymentStatus,
+                            paymentReference: p.paymentReference,
+                            notes: p.notes,
+                        })),
+                        totalPaid,
+                        remainingAmount,
+                        refundStatus,
                         paymentSummary: {
                             totalAmount: venueAmount,
                             depositAmount: depositAmount,
-                            remainingAmount: venueAmount - depositAmount,
+                            totalPaid,
+                            remainingAmount,
+                            refundStatus,
                         },
                     };
                 })));
@@ -530,7 +608,33 @@ class VenueBookingController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { bookingId } = req.params;
-                const paymentData = Object.assign(Object.assign({}, req.body), { bookingId });
+                // Check if booking is canceled
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["event"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                if (booking.bookingStatus === "CANCELLED") {
+                    res.status(400).json({
+                        success: false,
+                        message: "Cannot create payment for a canceled booking.",
+                    });
+                    return;
+                }
+                // Extract payerId and payerType from the event
+                const event = booking.event;
+                if (!event) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Booking does not have an associated event.",
+                    });
+                    return;
+                }
+                const paymentData = Object.assign(Object.assign({}, req.body), { bookingId, payerId: event.eventOrganizerId, payerType: event.eventOrganizerType });
                 const result = yield VenueBookingPaymentService_1.VenueBookingPaymentService.processPayment(paymentData);
                 res.status(200).json({
                     success: true,
@@ -569,8 +673,11 @@ class VenueBookingController {
         });
     }
     static calculateBookingAmount(venue, bookingDates) {
-        var _a, _b;
-        const baseAmount = ((_b = (_a = venue.venueVariables) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.venueAmount) || 0;
+        var _a;
+        const variable = (_a = venue.venueVariables) === null || _a === void 0 ? void 0 : _a[0];
+        if (variable === null || variable === void 0 ? void 0 : variable.isFree)
+            return 0;
+        const baseAmount = (variable === null || variable === void 0 ? void 0 : variable.venueAmount) || 0;
         if (venue.bookingType === "HOURLY") {
             // Calculate total hours across all booking dates
             const totalHours = bookingDates.reduce((sum, date) => {
@@ -692,6 +799,13 @@ class VenueBookingController {
                 booking.bookingStatus = VenueBooking_2.BookingStatus.CANCELLED;
                 booking.cancellationReason = reason;
                 yield bookingRepo.save(booking);
+                // Set all payments for this booking to REFUND_IN_PROGRESS
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
+                const payments = yield paymentRepo.find({ where: { bookingId } });
+                for (const payment of payments) {
+                    payment.paymentStatus = VenueBookingPayment_1.VenueBookingPaymentStatus.REFUND_IN_PROGRESS;
+                    yield paymentRepo.save(payment);
+                }
                 // Cancel event
                 if (booking.event) {
                     booking.event.eventStatus = EventStatusEnum_1.EventStatus.CANCELLED;
@@ -751,6 +865,211 @@ class VenueBookingController {
                 res.status(200).json({
                     success: true,
                     message: "Booking and related event cancelled.",
+                    booking,
+                    event: booking.event,
+                    payments, // Return updated payments for user visibility
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to cancel booking.",
+                });
+            }
+        });
+    }
+    static cancelAndDeleteSlotsByManager(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e;
+            try {
+                const { bookingId } = req.params;
+                const { reason } = req.body;
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                if (!reason) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Cancellation reason is required.",
+                    });
+                    return;
+                }
+                // Fetch booking with venue, event, and user
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["venue", "event", "user"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                // Check if user is the manager of the venue
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const venueVariable = yield venueVariableRepo.findOne({
+                    where: { venue: { venueId: booking.venue.venueId } },
+                    relations: ["manager"],
+                });
+                if (!venueVariable || venueVariable.manager.userId !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        message: "You are not the manager of this venue.",
+                    });
+                    return;
+                }
+                // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+                if (!["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Only approved bookings can be cancelled by manager.",
+                    });
+                    return;
+                }
+                // Cancel booking
+                booking.bookingStatus = VenueBooking_2.BookingStatus.CANCELLED;
+                booking.cancellationReason = reason;
+                yield bookingRepo.save(booking);
+                // Cancel event
+                if (booking.event) {
+                    booking.event.eventStatus = EventStatusEnum_1.EventStatus.CANCELLED;
+                    booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+                    yield Database_1.AppDataSource.getRepository(Event_1.Event).save(booking.event);
+                }
+                // Delete all VenueAvailabilitySlot entries for this booking (booked and transition)
+                const slotRepo = Database_1.AppDataSource.getRepository(require("../models/Venue Tables/VenueAvailabilitySlot")
+                    .VenueAvailabilitySlot);
+                // Find all slots for this venue and event
+                const slots = yield slotRepo.find({
+                    where: {
+                        venueId: booking.venue.venueId,
+                        eventId: (_b = booking.event) === null || _b === void 0 ? void 0 : _b.eventId,
+                    },
+                });
+                for (const slot of slots) {
+                    yield slotRepo.remove(slot);
+                }
+                // Also remove transition slots (slotType: TRANSITION, eventId: null, but notes reference this event)
+                const transitionSlots = yield slotRepo.find({
+                    where: { venueId: booking.venue.venueId, slotType: "TRANSITION" },
+                });
+                for (const slot of transitionSlots) {
+                    if (slot.notes && slot.notes.includes((_c = booking.event) === null || _c === void 0 ? void 0 : _c.eventId)) {
+                        yield slotRepo.remove(slot);
+                    }
+                }
+                // Email notification
+                try {
+                    if (booking.user && booking.user.email) {
+                        yield EmailService_1.default.sendBookingCancellationEmail({
+                            to: booking.user.email,
+                            userName: booking.user.firstName || booking.user.username || "User",
+                            venueName: booking.venue.venueName,
+                            eventName: ((_d = booking.event) === null || _d === void 0 ? void 0 : _d.eventName) || "Event",
+                            reason,
+                            refundInfo: booking.isPaid
+                                ? "Your payment will be refunded as soon as possible."
+                                : undefined,
+                            managerPhone: (_e = venueVariable === null || venueVariable === void 0 ? void 0 : venueVariable.manager) === null || _e === void 0 ? void 0 : _e.phoneNumber,
+                        });
+                    }
+                }
+                catch (e) {
+                    // Log but do not block
+                    console.error("Failed to send email notification:", e);
+                }
+                res.status(200).json({
+                    success: true,
+                    message: "Booking, event, and slots cancelled/deleted.",
+                    booking,
+                    event: booking.event,
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to cancel booking.",
+                });
+            }
+        });
+    }
+    static cancelByManagerWithoutSlotDeletion(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            try {
+                const { bookingId } = req.params;
+                const { reason } = req.body;
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                if (!reason) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Cancellation reason is required.",
+                    });
+                    return;
+                }
+                // Fetch booking with venue, event, and user
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["venue", "event", "user"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                // Check if user is the manager of the venue
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const venueVariable = yield venueVariableRepo.findOne({
+                    where: { venue: { venueId: booking.venue.venueId } },
+                    relations: ["manager"],
+                });
+                if (!venueVariable || venueVariable.manager.userId !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        message: "You are not the manager of this venue.",
+                    });
+                    return;
+                }
+                // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
+                if (!["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Only approved bookings can be cancelled by manager.",
+                    });
+                    return;
+                }
+                // Cancel booking
+                booking.bookingStatus = VenueBooking_2.BookingStatus.CANCELLED;
+                booking.cancellationReason = reason;
+                yield bookingRepo.save(booking);
+                // Cancel event
+                if (booking.event) {
+                    booking.event.eventStatus = EventStatusEnum_1.EventStatus.CANCELLED;
+                    booking.event.cancellationReason = `Event cancelled because the venue is no longer available: ${reason}`;
+                    yield Database_1.AppDataSource.getRepository(Event_1.Event).save(booking.event);
+                }
+                // Email notification
+                try {
+                    if (booking.user && booking.user.email) {
+                        yield EmailService_1.default.sendBookingCancellationEmail({
+                            to: booking.user.email,
+                            userName: booking.user.firstName || booking.user.username || "User",
+                            venueName: booking.venue.venueName,
+                            eventName: ((_b = booking.event) === null || _b === void 0 ? void 0 : _b.eventName) || "Event",
+                            reason,
+                            refundInfo: booking.isPaid
+                                ? "Your payment will be refunded as soon as possible."
+                                : undefined,
+                            managerPhone: (_c = venueVariable === null || venueVariable === void 0 ? void 0 : venueVariable.manager) === null || _c === void 0 ? void 0 : _c.phoneNumber,
+                        });
+                    }
+                }
+                catch (e) {
+                    // Log but do not block
+                    console.error("Failed to send email notification:", e);
+                }
+                res.status(200).json({
+                    success: true,
+                    message: "Booking and event cancelled (slots not deleted).",
                     booking,
                     event: booking.event,
                 });
@@ -840,6 +1159,208 @@ class VenueBookingController {
                 booking.isFullyPaid = booking.remainingAmount <= 0;
             }
             res.json({ success: true, data: Object.values(bookingsMap) });
+        });
+    }
+    static refundAllPaymentsByManager(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const { bookingId } = req.params;
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                // Fetch booking with venue
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const booking = yield bookingRepo.findOne({
+                    where: { bookingId },
+                    relations: ["venue"],
+                });
+                if (!booking) {
+                    res.status(404).json({ success: false, message: "Booking not found." });
+                    return;
+                }
+                // Check if user is the manager of the venue
+                const venueVariableRepo = Database_1.AppDataSource.getRepository(VenueVariable_1.VenueVariable);
+                const venueVariable = yield venueVariableRepo.findOne({
+                    where: { venue: { venueId: booking.venue.venueId } },
+                    relations: ["manager"],
+                });
+                if (!venueVariable || venueVariable.manager.userId !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        message: "You are not the manager of this venue.",
+                    });
+                    return;
+                }
+                // Set all payments for this booking to REFUNDED
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
+                const payments = yield paymentRepo.find({ where: { bookingId } });
+                for (const payment of payments) {
+                    payment.paymentStatus = VenueBookingPayment_1.VenueBookingPaymentStatus.REFUNDED;
+                    yield paymentRepo.save(payment);
+                }
+                res.status(200).json({
+                    success: true,
+                    message: "All payments for this booking have been marked as refunded.",
+                    payments,
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to refund payments.",
+                });
+            }
+        });
+    }
+    static getAllAccessiblePaymentsForUser(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { userId } = req.params;
+                // Get all organizations for user
+                const orgRepo = require("../repositories/OrganizationRepository");
+                const orgsResult = yield orgRepo.OrganizationRepository.getOrganizationsByUserId(userId);
+                if (!orgsResult.success || !orgsResult.data) {
+                    console.log(`[DEBUG] No organizations found for userId: ${userId}`);
+                    res.status(404).json({
+                        success: false,
+                        message: "Could not fetch organizations for user.",
+                    });
+                    return;
+                }
+                // Filter out 'Independent' organizations
+                const organizations = orgsResult.data.filter((org) => { var _a; return ((_a = org.organizationName) === null || _a === void 0 ? void 0 : _a.toLowerCase()) !== "independent"; });
+                // Always get userPayments, even if organizations is empty
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
+                const userPayments = yield paymentRepo.find({
+                    where: { payerId: userId, payerType: VenueBookingPayment_1.PayerType.USER },
+                    order: { paymentDate: "DESC" },
+                });
+                // Only get organizationPayments if there are non-Independent organizations
+                const organizationPayments = {};
+                for (const org of organizations) {
+                    const orgPayments = yield paymentRepo.find({
+                        where: {
+                            payerId: org.organizationId,
+                            payerType: VenueBookingPayment_1.PayerType.ORGANIZATION,
+                        },
+                        order: { paymentDate: "DESC" },
+                    });
+                    organizationPayments[org.organizationId] = orgPayments;
+                }
+                res
+                    .status(200)
+                    .json({ success: true, organizationPayments, userPayments });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to fetch payments.",
+                });
+            }
+        });
+    }
+    static getBookingsByVenueId(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { venueId } = req.params;
+                if (!venueId) {
+                    res
+                        .status(400)
+                        .json({ success: false, message: "venueId is required" });
+                    return;
+                }
+                const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const bookings = yield bookingRepo.find({
+                    where: { venueId },
+                    order: { createdAt: "DESC" },
+                    relations: ["user"],
+                });
+                // Fetch venue summary
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                const venue = yield venueRepo.findOne({ where: { venueId } });
+                // Enhanced venue summary with payment stats
+                let venueSummary = null;
+                if (venue) {
+                    // Calculate payment stats
+                    let fullPaidCount = 0;
+                    let partialPaidCount = 0; // Not available without payment history
+                    let unpaidCount = 0;
+                    let totalRevenue = 0;
+                    let totalExpectedRevenue = 0;
+                    let totalPaidBookings = 0;
+                    let totalUnpaidAmount = 0;
+                    for (const booking of bookings) {
+                        totalExpectedRevenue += Number(booking.amountToBePaid || 0);
+                        if (booking.isPaid) {
+                            fullPaidCount++;
+                            totalRevenue += Number(booking.amountToBePaid || 0);
+                            totalPaidBookings++;
+                        }
+                        else {
+                            unpaidCount++;
+                            totalUnpaidAmount += Number(booking.amountToBePaid || 0);
+                        }
+                        // To support partialPaidCount, you would need to sum payments for each booking
+                    }
+                    venueSummary = {
+                        venueId: venue.venueId,
+                        venueName: venue.venueName,
+                        capacity: venue.capacity,
+                        location: venue.venueLocation,
+                        totalBookings: bookings.length,
+                        fullPaidCount,
+                        partialPaidCount, // Always 0 unless payment history is added
+                        unpaidCount,
+                        totalRevenue,
+                        totalExpectedRevenue,
+                        totalPaidBookings,
+                        totalUnpaidAmount,
+                        occupancyRate: venue.capacity
+                            ? ((bookings.length / venue.capacity) * 100).toFixed(2) + "%"
+                            : null,
+                    };
+                }
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                res.status(200).json({
+                    success: true,
+                    venueSummary,
+                    bookings: yield Promise.all(bookings.map((booking) => __awaiter(this, void 0, void 0, function* () {
+                        let userInfo = null;
+                        if (booking.user) {
+                            userInfo = {
+                                userId: booking.user.userId,
+                                firstName: booking.user.firstName,
+                                lastName: booking.user.lastName,
+                                email: booking.user.email,
+                                phoneNumber: booking.user.phoneNumber,
+                            };
+                        }
+                        else if (booking.createdBy) {
+                            const user = yield userRepo.findOne({
+                                where: { userId: booking.createdBy },
+                            });
+                            if (user) {
+                                userInfo = {
+                                    userId: user.userId,
+                                    firstName: user.firstName,
+                                    lastName: user.lastName,
+                                    email: user.email,
+                                    phoneNumber: user.phoneNumber,
+                                };
+                            }
+                        }
+                        return Object.assign(Object.assign({}, booking), { user: userInfo });
+                    }))),
+                });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to fetch bookings by venueId.",
+                });
+            }
         });
     }
 }

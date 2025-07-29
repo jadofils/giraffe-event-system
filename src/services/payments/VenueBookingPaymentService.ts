@@ -139,18 +139,22 @@ export class VenueBookingPaymentService {
         0
       );
 
-      // Calculate total hours and amount for hourly venues
-      const totalHours = booking.bookingDates.reduce((sum, date) => {
-        return sum + (date.hours?.length || 1); // If no hours specified, count as 1 day
-      }, 0);
-
+      // Calculate total amount based on booking type and dates
       const baseVenueAmount = booking.venue.venueVariables[0]?.venueAmount || 0;
+      const totalBookingDays = booking.bookingDates.length;
       const totalVenueAmount =
-        booking.venue.bookingType === "HOURLY"
-          ? baseVenueAmount * totalHours
+        booking.venue.bookingType === "DAILY"
+          ? baseVenueAmount * totalBookingDays
           : baseVenueAmount;
 
-      const remainingAmountToPay = totalVenueAmount - totalPaidSoFar;
+      // Verify total amount matches booking
+      if (totalVenueAmount !== booking.amountToBePaid) {
+        throw new Error(
+          `Payment amount mismatch. Expected: ${booking.amountToBePaid}, Calculated: ${totalVenueAmount}`
+        );
+      }
+
+      const remainingAmountToPay = booking.amountToBePaid - totalPaidSoFar;
 
       // 3. Validate payment amount
       if (paymentData.amountPaid <= 0) {
@@ -171,35 +175,30 @@ export class VenueBookingPaymentService {
         );
       }
 
-      const depositRequired = (totalVenueAmount * depositPercent) / 100;
+      const depositRequired = (booking.amountToBePaid * depositPercent) / 100;
 
       // If this is first payment, it must meet minimum deposit requirement
       if (totalPaidSoFar === 0 && paymentData.amountPaid < depositRequired) {
         throw new Error(
-          `First payment must be at least the required deposit amount: ${depositRequired} (${depositPercent}% of total amount ${totalVenueAmount}${
-            booking.venue.bookingType === "HOURLY"
-              ? ` for ${totalHours} hours`
-              : ""
-          })`
+          `First payment must be at least the required deposit amount: ${depositRequired} (${depositPercent}% of total amount ${booking.amountToBePaid})`
         );
       }
 
       // Allow for small floating point differences
       const newTotalPaid = totalPaidSoFar + paymentData.amountPaid;
-      if (Math.abs(newTotalPaid - totalVenueAmount) < 0.01) {
-        paymentData.amountPaid = remainingAmountToPay;
-      }
+      const isFullPayment =
+        Math.abs(newTotalPaid - booking.amountToBePaid) < 0.01;
 
       // 4. Create payment record
       const payment = queryRunner.manager.create(VenueBookingPayment, {
         ...paymentData,
-        remainingAmount: totalVenueAmount - newTotalPaid,
-        isFullPayment: newTotalPaid >= totalVenueAmount,
-        paymentStatus:
-          newTotalPaid >= totalVenueAmount
-            ? VenueBookingPaymentStatus.PAID
-            : VenueBookingPaymentStatus.PARTIAL,
+        remainingAmount: booking.amountToBePaid - newTotalPaid,
+        isFullPayment,
+        paymentStatus: isFullPayment
+          ? VenueBookingPaymentStatus.PAID
+          : VenueBookingPaymentStatus.PARTIAL,
       });
+
       await queryRunner.manager.save(payment);
 
       // 5. Check if this is the first payment meeting deposit requirement
@@ -208,10 +207,12 @@ export class VenueBookingPaymentService {
 
       // 6. Update booking status
       booking.bookingStatus =
-        newTotalPaid >= totalVenueAmount
+        newTotalPaid >= booking.amountToBePaid
           ? BookingStatus.APPROVED_PAID
+          : newTotalPaid > 0
+          ? BookingStatus.PARTIAL
           : BookingStatus.APPROVED_NOT_PAID;
-      booking.isPaid = newTotalPaid >= totalVenueAmount;
+      booking.isPaid = newTotalPaid >= booking.amountToBePaid;
       await queryRunner.manager.save(booking);
 
       // Handle venue availability slots ONLY on first deposit payment
@@ -405,9 +406,9 @@ export class VenueBookingPaymentService {
       // Create response with booking details
       const bookingDetails: BookingPaymentDetails = {
         ...booking,
-        totalAmount: totalVenueAmount,
+        totalAmount: booking.amountToBePaid,
         totalHours:
-          booking.venue.bookingType === "HOURLY" ? totalHours : undefined,
+          booking.venue.bookingType === "HOURLY" ? undefined : totalBookingDays,
         pricePerHour:
           booking.venue.bookingType === "HOURLY" ? baseVenueAmount : undefined,
       };
@@ -423,9 +424,9 @@ export class VenueBookingPaymentService {
           : isFirstDepositPayment
           ? `Deposit payment received (${
               bookingCondition?.depositRequiredPercent
-            }% of total amount ${totalVenueAmount}${
+            }% of total amount ${booking.amountToBePaid}${
               booking.venue.bookingType === "HOURLY"
-                ? ` for ${totalHours} hours`
+                ? ` for ${totalBookingDays} days`
                 : ""
             }) and venue slots reserved`
           : "Partial payment processed successfully",

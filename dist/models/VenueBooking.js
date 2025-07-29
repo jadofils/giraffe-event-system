@@ -26,6 +26,7 @@ var BookingStatus;
 (function (BookingStatus) {
     BookingStatus["APPROVED_PAID"] = "APPROVED_PAID";
     BookingStatus["APPROVED_NOT_PAID"] = "APPROVED_NOT_PAID";
+    BookingStatus["PARTIAL"] = "PARTIAL";
     BookingStatus["PENDING"] = "PENDING";
     BookingStatus["CANCELLED"] = "CANCELLED";
 })(BookingStatus || (exports.BookingStatus = BookingStatus = {}));

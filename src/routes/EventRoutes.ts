@@ -54,4 +54,11 @@ router.patch(
 );
 router.get("/user/:userId", EventController.getEventsByUserId);
 
+// Add manager endpoint for creating event for external user
+router.post(
+  "/manager/create-event-for-user",
+  authenticate,
+  EventController.createEventForExternalUser
+);
+
 export default router;

@@ -13,6 +13,7 @@ exports.EventRepository = void 0;
 const Database_1 = require("../config/Database");
 const Event_1 = require("../models/Event Tables/Event");
 const VenueBooking_1 = require("../models/VenueBooking");
+const User_1 = require("../models/User");
 const EventVenue_1 = require("../models/Event Tables/EventVenue");
 const EventGuest_1 = require("../models/Event Tables/EventGuest");
 const uuid_1 = require("uuid");
@@ -31,7 +32,16 @@ class EventRepository {
                 for (const bookingDate of dates) {
                     for (const venue of venues) {
                         // 1. Create Event for this specific date and venue
-                        const singleDateEvent = queryRunner.manager.create(Event_1.Event, Object.assign(Object.assign({}, eventData), { bookingDates: [bookingDate], groupId: groupId }));
+                        let createdByUserId = eventData.eventOrganizerId;
+                        let createdBy = undefined;
+                        if (createdByUserId) {
+                            createdBy = yield queryRunner.manager
+                                .getRepository(User_1.User)
+                                .findOne({ where: { userId: createdByUserId } });
+                        }
+                        const singleDateEvent = queryRunner.manager.create(Event_1.Event, Object.assign(Object.assign({}, eventData), { bookingDates: [bookingDate], groupId: groupId, // Set the groupId for related events
+                            createdByUserId,
+                            createdBy }));
                         yield queryRunner.manager.save(singleDateEvent);
                         // 2. Create EventVenue for this date and venue
                         const eventVenue = queryRunner.manager.create(EventVenue_1.EventVenue, {
@@ -48,6 +58,13 @@ class EventRepository {
                             ? baseVenueAmount * totalHours
                             : baseVenueAmount;
                         // Create VenueBooking for this date and venue
+                        // Fetch the user entity for the createdBy field
+                        let userEntity = undefined;
+                        if (eventData.eventOrganizerId) {
+                            userEntity = yield queryRunner.manager.getRepository(User_1.User).findOne({
+                                where: { userId: eventData.eventOrganizerId },
+                            });
+                        }
                         const venueBooking = queryRunner.manager.create(VenueBooking_1.VenueBooking, {
                             eventId: singleDateEvent.eventId,
                             venueId: venue.venueId,
@@ -58,6 +75,7 @@ class EventRepository {
                             isPaid: false,
                             timezone: "UTC",
                             createdBy: eventData.eventOrganizerId,
+                            user: userEntity || undefined, // <-- set the user relation
                             amountToBePaid: totalAmount, // Use calculated total amount
                         });
                         yield queryRunner.manager.save(venueBooking);
@@ -131,7 +149,19 @@ class EventRepository {
                 if (!event) {
                     return { success: false, message: "Event not found" };
                 }
-                return { success: true, data: event };
+                // Fetch venue details for each eventVenue
+                const venueRepo = Database_1.AppDataSource.getRepository(require("../models/Venue Tables/Venue").Venue);
+                const venues = [];
+                for (const ev of event.eventVenues || []) {
+                    if (ev.venueId) {
+                        const venue = yield venueRepo.findOne({
+                            where: { venueId: ev.venueId },
+                        });
+                        if (venue)
+                            venues.push(venue);
+                    }
+                }
+                return { success: true, data: Object.assign(Object.assign({}, event), { venues }) };
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to fetch event.";

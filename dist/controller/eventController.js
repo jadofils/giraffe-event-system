@@ -14,6 +14,7 @@ const EventStatusEnum_1 = require("../interfaces/Enums/EventStatusEnum");
 const eventRepository_1 = require("../repositories/eventRepository");
 const Database_1 = require("../config/Database");
 const Venue_1 = require("../models/Venue Tables/Venue");
+const EventGuest_1 = require("../models/Event Tables/EventGuest");
 const User_1 = require("../models/User");
 const Organization_1 = require("../models/Organization");
 const VenueVariable_1 = require("../models/Venue Tables/VenueVariable");
@@ -22,18 +23,93 @@ const BookingValidationService_1 = require("../services/bookings/BookingValidati
 const typeorm_1 = require("typeorm");
 const VenueBooking_1 = require("../models/VenueBooking");
 const Event_1 = require("../models/Event Tables/Event");
+const CloudinaryUploadService_1 = require("../services/CloudinaryUploadService");
 class EventController {
     static createEvent(req, res, next) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
+            const uploadedCloudinaryUrls = [];
             try {
+                if (!req.body) {
+                    res.status(400).json({ success: false, message: "No body provided" });
+                    return;
+                }
+                // Defensive destructuring
                 const { eventTitle, eventType, dates, description, guests, venues, venueId, // Support both venues and venueId
                 visibilityScope, eventOrganizerId, 
                 // Public event fields
-                maxAttendees, imageURL, socialMediaLinks, isEntryPaid, expectedGuests, specialNotes, eventPhoto, ignoreTransitionWarnings = false, // New parameter to allow proceeding despite warnings
+                maxAttendees, socialMediaLinks, isEntryPaid, expectedGuests, specialNotes, eventPhoto, ignoreTransitionWarnings = false, // New parameter to allow proceeding despite warnings
                  } = req.body;
-                // Handle both venues and venueId fields
-                const venueIds = venues || venueId;
+                // Parse guests and dates if sent as JSON strings (from form-data)
+                let parsedGuests = guests;
+                if (typeof guests === "string") {
+                    try {
+                        parsedGuests = JSON.parse(guests);
+                    }
+                    catch (e) {
+                        parsedGuests = [];
+                    }
+                }
+                let parsedDates = dates;
+                if (typeof dates === "string") {
+                    try {
+                        parsedDates = JSON.parse(dates);
+                    }
+                    catch (e) {
+                        parsedDates = [];
+                    }
+                }
+                // Handle Cloudinary upload for public event photo
+                let finalEventPhoto = eventPhoto;
+                if (visibilityScope === "PUBLIC") {
+                    const file = req.file ||
+                        (req.files && req.files.eventPhoto);
+                    if (file && file.buffer) {
+                        const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(file.buffer, "events/photos");
+                        finalEventPhoto = uploadResult.url;
+                        uploadedCloudinaryUrls.push(finalEventPhoto);
+                    }
+                    else if (Array.isArray(file) && file[0] && file[0].buffer) {
+                        const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(file[0].buffer, "events/photos");
+                        finalEventPhoto = uploadResult.url;
+                        uploadedCloudinaryUrls.push(finalEventPhoto);
+                    }
+                }
+                // Handle Cloudinary upload for guest photos (public events only)
+                let finalGuests = parsedGuests;
+                if (visibilityScope === "PUBLIC" && Array.isArray(parsedGuests)) {
+                    finalGuests = yield Promise.all(parsedGuests.map((guest, idx) => __awaiter(this, void 0, void 0, function* () {
+                        let guestPhoto = guest.guestPhoto;
+                        const guestFiles = req.files && req.files.guestPhotos;
+                        if (guestFiles &&
+                            Array.isArray(guestFiles) &&
+                            guestFiles[idx] &&
+                            guestFiles[idx].buffer) {
+                            const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(guestFiles[idx].buffer, "events/guests");
+                            guestPhoto = uploadResult.url;
+                            uploadedCloudinaryUrls.push(guestPhoto);
+                        }
+                        else if (guestPhoto && guestPhoto.buffer) {
+                            const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(guestPhoto.buffer, "events/guests");
+                            guestPhoto = uploadResult.url;
+                            uploadedCloudinaryUrls.push(guestPhoto);
+                        }
+                        return Object.assign(Object.assign({}, guest), { guestPhoto });
+                    })));
+                }
+                // Robustly parse venueId to support both single and multiple venues
+                let venueIds = venues || venueId;
+                if (typeof venueIds === "string") {
+                    try {
+                        const parsed = JSON.parse(venueIds);
+                        if (Array.isArray(parsed)) {
+                            venueIds = parsed;
+                        }
+                    }
+                    catch (_b) {
+                        // Not a JSON array, leave as is
+                    }
+                }
                 const venueIdsArray = Array.isArray(venueIds) ? venueIds : [venueIds];
                 // Basic validation for required fields
                 if (!eventTitle ||
@@ -41,7 +117,7 @@ class EventController {
                     !venueIdsArray ||
                     venueIdsArray.length === 0 ||
                     !eventOrganizerId ||
-                    !dates ||
+                    !parsedDates ||
                     !description) {
                     res.status(400).json({
                         success: false,
@@ -76,27 +152,27 @@ class EventController {
                 const hasHourlyVenue = selectedVenues.some((v) => v.bookingType === "HOURLY");
                 if (hasHourlyVenue) {
                     // If any venue is hourly, require hours for all dates
-                    if (!Array.isArray(dates) ||
-                        !dates.every((d) => d.date && Array.isArray(d.hours))) {
+                    if (!Array.isArray(parsedDates) ||
+                        !parsedDates.every((d) => d.date && Array.isArray(d.hours))) {
                         res.status(400).json({
                             success: false,
                             message: "When booking hourly venues, each date must include hours array",
                         });
                         return;
                     }
-                    bookingDates = dates;
+                    bookingDates = parsedDates;
                 }
                 else {
                     // For daily bookings, accept simple date strings
-                    if (!Array.isArray(dates) ||
-                        !dates.every((d) => typeof d === "string" || typeof d.date === "string")) {
+                    if (!Array.isArray(parsedDates) ||
+                        !parsedDates.every((d) => typeof d === "string" || typeof d.date === "string")) {
                         res.status(400).json({
                             success: false,
                             message: "For daily bookings, dates should be an array of date strings",
                         });
                         return;
                     }
-                    bookingDates = dates.map((d) => ({
+                    bookingDates = parsedDates.map((d) => ({
                         date: typeof d === "string" ? d : d.date,
                     }));
                 }
@@ -185,16 +261,17 @@ class EventController {
                 if (visibilityScope === "PUBLIC") {
                     Object.assign(eventData, {
                         maxAttendees,
-                        imageURL,
                         socialMediaLinks,
                         isEntryPaid,
                         expectedGuests,
                         specialNotes,
-                        eventPhoto,
+                        eventPhoto: finalEventPhoto,
                     });
                 }
                 // Create events with booking dates for each venue
-                const result = yield eventRepository_1.EventRepository.createEventWithRelations(eventData, selectedVenues, visibilityScope === "PUBLIC" && Array.isArray(guests) ? guests : [], bookingDates);
+                const result = yield eventRepository_1.EventRepository.createEventWithRelations(eventData, selectedVenues, visibilityScope === "PUBLIC" && Array.isArray(finalGuests)
+                    ? finalGuests
+                    : [], bookingDates);
                 if (!result.success) {
                     res.status(400).json({ success: false, message: result.message });
                     return;
@@ -219,6 +296,16 @@ class EventController {
                 return;
             }
             catch (error) {
+                // Cleanup uploaded images if event creation fails
+                for (const url of uploadedCloudinaryUrls) {
+                    try {
+                        yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(url, "image");
+                    }
+                    catch (e) {
+                        // Log and continue
+                        console.error("Failed to delete Cloudinary image:", url, e);
+                    }
+                }
                 next(error);
             }
         });
@@ -231,7 +318,42 @@ class EventController {
                     res.status(500).json({ success: false, message: result.message });
                     return;
                 }
-                res.status(200).json({ success: true, data: result.data });
+                // Filter out events with eventStatus 'DRAFTED'
+                const filteredEvents = (result.data || []).filter((event) => event.eventStatus !== "DRAFTED");
+                res.status(200).json({ success: true, data: filteredEvents });
+                return;
+            }
+            catch (error) {
+                next(error);
+            }
+        });
+    }
+    static getAllApprovedEvents(req, res, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                const orgRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const events = yield eventRepo.find({
+                    where: { eventStatus: EventStatusEnum_1.EventStatus.APPROVED },
+                    relations: ["eventVenues", "eventVenues.venue", "eventGuests"],
+                    order: { createdAt: "DESC" },
+                });
+                const eventsWithOrganizer = yield Promise.all(events.map((event) => __awaiter(this, void 0, void 0, function* () {
+                    let organizer = null;
+                    if (event.eventOrganizerType === "USER") {
+                        organizer = yield userRepo.findOne({
+                            where: { userId: event.eventOrganizerId },
+                        });
+                    }
+                    else if (event.eventOrganizerType === "ORGANIZATION") {
+                        organizer = yield orgRepo.findOne({
+                            where: { organizationId: event.eventOrganizerId },
+                        });
+                    }
+                    return Object.assign(Object.assign({}, event), { organizer });
+                })));
+                res.status(200).json({ success: true, data: eventsWithOrganizer });
                 return;
             }
             catch (error) {
@@ -242,12 +364,29 @@ class EventController {
     static getEventById(req, res, next) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const event = yield eventRepository_1.EventRepository.getEventByIdWithRelations(req.params.id);
-                if (!event.success) {
-                    res.status(404).json({ success: false, message: event.message });
+                const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                const orgRepo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const event = yield eventRepo.findOne({
+                    where: { eventId: req.params.id },
+                    relations: ["eventVenues", "eventVenues.venue", "eventGuests"],
+                });
+                if (!event) {
+                    res.status(404).json({ success: false, message: "Event not found" });
                     return;
                 }
-                res.status(200).json({ success: true, data: event.data });
+                let organizer = null;
+                if (event.eventOrganizerType === "USER") {
+                    organizer = yield userRepo.findOne({
+                        where: { userId: event.eventOrganizerId },
+                    });
+                }
+                else if (event.eventOrganizerType === "ORGANIZATION") {
+                    organizer = yield orgRepo.findOne({
+                        where: { organizationId: event.eventOrganizerId },
+                    });
+                }
+                res.status(200).json({ success: true, data: Object.assign(Object.assign({}, event), { organizer }) });
                 return;
             }
             catch (error) {
@@ -255,26 +394,115 @@ class EventController {
             }
         });
     }
-    static requestPublish(req, res, next) {
+    static requestPublish(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const updateResult = yield eventRepository_1.EventRepository.updateEventStatus(id, {
-                    eventStatus: EventStatusEnum_1.EventStatus.REQUESTED,
-                });
-                if (!updateResult.success) {
-                    res.status(400).json({ success: false, message: updateResult.message });
-                    return;
-                }
-                res.status(200).json({
-                    success: true,
-                    data: updateResult.data,
-                    message: "Event submitted for publishing/approval.",
-                });
+            const { id } = req.params;
+            const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+            const event = yield eventRepo.findOne({
+                where: { eventId: id },
+                relations: ["venueBookings"],
+            });
+            if (!event) {
+                res.status(404).json({ success: false, message: "Event not found" });
+                return;
             }
-            catch (error) {
-                next(error);
+            if (event.eventStatus === EventStatusEnum_1.EventStatus.REJECTED) {
+                res.status(400).json({
+                    success: false,
+                    message: "Event has been rejected and cannot be requested again.",
+                });
+                return;
             }
+            // Check all venue bookings
+            const allApproved = event.venueBookings.every((b) => b.bookingStatus === "APPROVED_NOT_PAID" ||
+                b.bookingStatus === "APPROVED_PAID");
+            if (!allApproved) {
+                res.status(400).json({
+                    success: false,
+                    message: "All venue bookings must be approved to request publish.",
+                });
+                return;
+            }
+            event.eventStatus = EventStatusEnum_1.EventStatus.REQUESTED;
+            event.visibilityScope = "PUBLIC";
+            event.cancellationReason = undefined;
+            yield eventRepo.save(event);
+            res.status(200).json({
+                success: true,
+                data: event,
+                message: "Event submitted for publishing/approval.",
+            });
+            return;
+        });
+    }
+    static queryEvent(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const { cancellationReason } = req.body;
+            const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+            const event = yield eventRepo.findOne({ where: { eventId: id } });
+            if (!event) {
+                res.status(404).json({ success: false, message: "Event not found" });
+                return;
+            }
+            event.eventStatus = EventStatusEnum_1.EventStatus.QUERIED;
+            event.cancellationReason = cancellationReason || "No reason provided";
+            yield eventRepo.save(event);
+            res.status(200).json({
+                success: true,
+                data: event,
+                message: "Event queried for more information.",
+            });
+            return;
+        });
+    }
+    static rejectEvent(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const { cancellationReason } = req.body;
+            const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+            const event = yield eventRepo.findOne({ where: { eventId: id } });
+            if (!event) {
+                res.status(404).json({ success: false, message: "Event not found" });
+                return;
+            }
+            event.eventStatus = EventStatusEnum_1.EventStatus.REJECTED;
+            event.cancellationReason = cancellationReason || "No reason provided";
+            yield eventRepo.save(event);
+            res.status(200).json({
+                success: true,
+                data: event,
+                message: "Event has been rejected.",
+            });
+            return;
+        });
+    }
+    static approveEvent(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+            const event = yield eventRepo.findOne({ where: { eventId: id } });
+            if (!event) {
+                res.status(404).json({ success: false, message: "Event not found" });
+                return;
+            }
+            if (event.eventStatus !== EventStatusEnum_1.EventStatus.REQUESTED &&
+                event.eventStatus !== EventStatusEnum_1.EventStatus.QUERIED) {
+                res.status(400).json({
+                    success: false,
+                    message: "Only events in REQUESTED or QUERIED status can be approved.",
+                });
+                return;
+            }
+            event.eventStatus = EventStatusEnum_1.EventStatus.APPROVED;
+            event.cancellationReason = undefined;
+            yield eventRepo.save(event);
+            res.status(200).json({
+                success: true,
+                data: event,
+                message: "Event has been approved.",
+            });
+            return;
         });
     }
     //   static async approveEvent(
@@ -1143,6 +1371,466 @@ class EventController {
                             paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY"],
                         },
                     },
+                });
+            }
+            catch (error) {
+                next(error);
+            }
+        });
+    }
+    static updateEventTextFields(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const updateFields = req.body;
+            try {
+                const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+                const event = yield eventRepo.findOne({ where: { eventId: id } });
+                if (!event) {
+                    res.status(404).json({ success: false, message: "Event not found" });
+                    return;
+                }
+                // Only update allowed text fields (not guests, eventPhoto, guestPhotos, dates)
+                const forbiddenFields = [
+                    "guests",
+                    "eventPhoto",
+                    "guestPhotos",
+                    "dates",
+                    "bookingDates",
+                ];
+                for (const key of Object.keys(updateFields)) {
+                    if (!forbiddenFields.includes(key)) {
+                        event[key] = updateFields[key];
+                    }
+                }
+                yield eventRepo.save(event);
+                res.status(200).json({ success: true, data: event });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to update event.",
+                });
+            }
+        });
+    }
+    static updateEventDates(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const { id } = req.params;
+            let { dates } = req.body;
+            if (typeof dates === "string") {
+                try {
+                    dates = JSON.parse(dates);
+                }
+                catch (_b) {
+                    dates = [];
+                }
+            }
+            if (!Array.isArray(dates) || dates.length === 0) {
+                res.status(400).json({ success: false, message: "No dates provided" });
+                return;
+            }
+            // Find event and booking
+            const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+            const event = yield eventRepo.findOne({
+                where: { eventId: id },
+                relations: ["venueBookings", "eventVenues"],
+            });
+            if (!event) {
+                res.status(404).json({ success: false, message: "Event not found" });
+                return;
+            }
+            // Assume one booking per event for simplicity
+            const booking = (_a = event.venueBookings) === null || _a === void 0 ? void 0 : _a[0];
+            if (!booking) {
+                res.status(404).json({ success: false, message: "Booking not found" });
+                return;
+            }
+            if (booking.bookingStatus !== "PENDING") {
+                res.status(400).json({
+                    success: false,
+                    message: "Booking must be in PENDING status to update dates",
+                });
+                return;
+            }
+            // Validate new dates for the venue
+            const venueId = booking.venueId;
+            const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+            const venue = yield venueRepo.findOne({ where: { venueId } });
+            if (!venue) {
+                res.status(404).json({ success: false, message: "Venue not found" });
+                return;
+            }
+            // Use BookingValidationService to check date availability
+            const validation = yield BookingValidationService_1.BookingValidationService.validateBookingDates(venue, dates);
+            if (!validation.isAvailable) {
+                res.status(400).json({
+                    success: false,
+                    message: "Selected dates are not available for this venue",
+                    unavailableDates: validation.unavailableDates,
+                });
+                return;
+            }
+            // Update event and booking dates
+            event.bookingDates = dates;
+            booking.bookingDates = dates;
+            yield eventRepo.save(event);
+            yield Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking).save(booking);
+            res.status(200).json({ success: true, data: { event, booking } });
+            return;
+        });
+    }
+    static addEventGuest(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const { eventId } = req.params;
+            const { guestName } = req.body;
+            try {
+                const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+                const event = yield eventRepo.findOne({
+                    where: { eventId },
+                    relations: ["eventGuests"],
+                });
+                if (!event) {
+                    res.status(404).json({ success: false, message: "Event not found" });
+                    return;
+                }
+                if ((((_a = event.eventGuests) === null || _a === void 0 ? void 0 : _a.length) || 0) >= 5) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Maximum of 5 guests allowed per event.",
+                    });
+                    return;
+                }
+                let guestPhotoUrl = undefined;
+                const file = req.file;
+                if (file && file.buffer) {
+                    const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(file.buffer, "events/guests");
+                    guestPhotoUrl = uploadResult.url;
+                }
+                const guestRepo = Database_1.AppDataSource.getRepository(EventGuest_1.EventGuest);
+                const newGuest = guestRepo.create({
+                    eventId,
+                    guestName,
+                    guestPhoto: guestPhotoUrl,
+                });
+                yield guestRepo.save(newGuest);
+                res.status(201).json({ success: true, data: newGuest });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to add guest.",
+                });
+            }
+        });
+    }
+    static updateEventGuestName(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { eventId, guestId } = req.params;
+            const { guestName } = req.body;
+            try {
+                const guestRepo = Database_1.AppDataSource.getRepository(EventGuest_1.EventGuest);
+                const guest = yield guestRepo.findOne({
+                    where: { id: guestId, eventId },
+                });
+                if (!guest) {
+                    res.status(404).json({ success: false, message: "Guest not found" });
+                    return;
+                }
+                guest.guestName = guestName;
+                yield guestRepo.save(guest);
+                res.status(200).json({ success: true, data: guest });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to update guest name.",
+                });
+            }
+        });
+    }
+    static deleteEventGuest(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { eventId, guestId } = req.params;
+            try {
+                const guestRepo = Database_1.AppDataSource.getRepository(EventGuest_1.EventGuest);
+                const guest = yield guestRepo.findOne({
+                    where: { id: guestId, eventId },
+                });
+                if (!guest) {
+                    res.status(404).json({ success: false, message: "Guest not found" });
+                    return;
+                }
+                // Delete guest photo from Cloudinary if exists
+                if (guest.guestPhoto) {
+                    try {
+                        yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(guest.guestPhoto, "image");
+                    }
+                    catch (e) {
+                        // Log and continue
+                        console.error("Failed to delete guest photo from Cloudinary:", guest.guestPhoto, e);
+                    }
+                }
+                yield guestRepo.remove(guest);
+                res.status(200).json({ success: true, message: "Guest deleted." });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error ? error.message : "Failed to delete guest.",
+                });
+            }
+        });
+    }
+    static updateEventGuestPhoto(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { eventId, guestId } = req.params;
+            try {
+                const guestRepo = Database_1.AppDataSource.getRepository(EventGuest_1.EventGuest);
+                const guest = yield guestRepo.findOne({
+                    where: { id: guestId, eventId },
+                });
+                if (!guest) {
+                    res.status(404).json({ success: false, message: "Guest not found" });
+                    return;
+                }
+                // Delete old photo from Cloudinary if exists
+                if (guest.guestPhoto) {
+                    try {
+                        yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(guest.guestPhoto, "image");
+                    }
+                    catch (e) {
+                        console.error("Failed to delete old guest photo from Cloudinary:", guest.guestPhoto, e);
+                    }
+                }
+                // Upload new photo
+                const file = req.file;
+                if (file && file.buffer) {
+                    const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(file.buffer, "events/guests");
+                    guest.guestPhoto = uploadResult.url;
+                }
+                yield guestRepo.save(guest);
+                res.status(200).json({ success: true, data: guest });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to update guest photo.",
+                });
+            }
+        });
+    }
+    static getEventsByUserId(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { userId } = req.params;
+            try {
+                const eventRepo = Database_1.AppDataSource.getRepository(Event_1.Event);
+                const events = yield eventRepo.find({
+                    where: { eventOrganizerId: userId },
+                    relations: ["venueBookings", "venueBookings.venue"],
+                    order: { createdAt: "DESC" },
+                });
+                res.status(200).json({ success: true, data: events });
+            }
+            catch (error) {
+                res.status(500).json({
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : "Failed to fetch events by user.",
+                });
+            }
+        });
+    }
+    static createEventForExternalUser(req, res, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            try {
+                // Parse new structure: { client: {...}, event: {...} }
+                const { client, event } = req.body;
+                if (!client || !event) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Missing 'client' or 'event' object in request body.",
+                    });
+                    return;
+                }
+                const { firstName, lastName, email, phoneNumber } = client;
+                if (!firstName || !lastName || !email || !phoneNumber) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Missing user info: firstName, lastName, email, phoneNumber are required.",
+                    });
+                    return;
+                }
+                // Fetch the GUEST role for new users
+                const userRepo = Database_1.AppDataSource.getRepository(User_1.User);
+                const roleRepository = Database_1.AppDataSource.getRepository(require("../models/Role").Role);
+                const guestRole = yield roleRepository.findOne({
+                    where: { roleName: "GUEST" },
+                });
+                if (!guestRole) {
+                    res.status(500).json({
+                        success: false,
+                        message: "Default GUEST role not found. Please initialize roles.",
+                    });
+                    return;
+                }
+                let user = yield userRepo.findOne({
+                    where: [{ email }, { phoneNumber }],
+                });
+                if (!user) {
+                    const randomPassword = Math.random().toString(36).slice(-8);
+                    // Generate a username from email or name
+                    let username = email
+                        ? email.split("@")[0]
+                        : `${firstName}.${lastName}`.toLowerCase().replace(/\s+/g, "");
+                    // Ensure username is unique
+                    let usernameCandidate = username;
+                    let counter = 1;
+                    while (yield userRepo.findOne({ where: { username: usernameCandidate } })) {
+                        usernameCandidate = `${username}${Math.floor(Math.random() * 10000)}`;
+                        counter++;
+                        if (counter > 5)
+                            break; // avoid infinite loop
+                    }
+                    username = usernameCandidate;
+                    user = userRepo.create({
+                        username,
+                        firstName,
+                        lastName,
+                        email,
+                        phoneNumber,
+                        password: randomPassword, // You may want to hash this in a real system
+                        roleId: guestRole.roleId,
+                    });
+                    yield userRepo.save(user);
+                }
+                // Only use allowed event fields for PRIVATE event
+                const { eventTitle, eventType, description, venueId, dates } = event;
+                if (!eventTitle || !eventType || !venueId || !dates || !description) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Missing required event fields: eventTitle, eventType, venueId, dates, description",
+                    });
+                    return;
+                }
+                // Prepare venueIds array
+                let venueIdsArray = Array.isArray(venueId) ? venueId : [venueId];
+                // Fetch venues
+                const venueRepo = Database_1.AppDataSource.getRepository(Venue_1.Venue);
+                const selectedVenues = yield venueRepo.find({
+                    where: { venueId: (0, typeorm_1.In)(venueIdsArray) },
+                    relations: ["venueVariables", "bookingConditions"],
+                });
+                if (selectedVenues.length !== venueIdsArray.length) {
+                    res
+                        .status(404)
+                        .json({ success: false, message: "One or more venues not found." });
+                    return;
+                }
+                // Check all venues belong to same org
+                const organizationId = selectedVenues[0].organizationId;
+                const allSameOrg = selectedVenues.every((venue) => venue.organizationId === organizationId);
+                if (!allSameOrg) {
+                    res.status(400).json({
+                        success: false,
+                        message: "All venues must belong to the same organization",
+                    });
+                    return;
+                }
+                // Dates validation (reuse logic)
+                let bookingDates;
+                const hasHourlyVenue = selectedVenues.some((v) => v.bookingType === "HOURLY");
+                if (hasHourlyVenue) {
+                    if (!Array.isArray(dates) ||
+                        !dates.every((d) => d.date && Array.isArray(d.hours))) {
+                        res.status(400).json({
+                            success: false,
+                            message: "When booking hourly venues, each date must include hours array",
+                        });
+                        return;
+                    }
+                    bookingDates = dates;
+                }
+                else {
+                    if (!Array.isArray(dates) ||
+                        !dates.every((d) => typeof d === "string" || typeof d.date === "string")) {
+                        res.status(400).json({
+                            success: false,
+                            message: "For daily bookings, dates should be an array of date strings",
+                        });
+                        return;
+                    }
+                    bookingDates = dates.map((d) => ({
+                        date: typeof d === "string" ? d : d.date,
+                    }));
+                }
+                // Validate dates for each venue
+                for (const venue of selectedVenues) {
+                    const validation = yield BookingValidationService_1.BookingValidationService.validateBookingDates(venue, bookingDates);
+                    if (!validation.isAvailable) {
+                        res.status(400).json({
+                            success: false,
+                            message: `Venue ${venue.venueName} has unavailable dates`,
+                            unavailableDates: validation.unavailableDates,
+                            venueId: venue.venueId,
+                        });
+                        return;
+                    }
+                }
+                // Build event data
+                const eventData = {
+                    eventName: eventTitle,
+                    eventType,
+                    eventDescription: description,
+                    visibilityScope: "PRIVATE",
+                    eventStatus: EventStatusEnum_1.EventStatus.DRAFTED,
+                    publishStatus: "DRAFT",
+                    eventOrganizerId: user.userId,
+                    eventOrganizerType: "USER",
+                };
+                // Create event(s)
+                const result = yield eventRepository_1.EventRepository.createEventWithRelations(eventData, selectedVenues, [], // No guests for private event
+                bookingDates);
+                if (!result.success) {
+                    res.status(400).json({ success: false, message: result.message });
+                    return;
+                }
+                // Approve all created bookings
+                const VenueBookingRepository = require("../repositories/VenueBookingRepository").VenueBookingRepository;
+                const approvalResults = [];
+                for (const created of (_a = result.data) !== null && _a !== void 0 ? _a : []) {
+                    const bookingId = created.venueBooking.bookingId;
+                    const approval = yield VenueBookingRepository.approveBookingWithTransition(bookingId);
+                    approvalResults.push(Object.assign({ bookingId }, approval));
+                    if (!approval.success) {
+                        res
+                            .status(500)
+                            .json({
+                            success: false,
+                            message: `Failed to approve booking ${bookingId}: ${approval.message}`,
+                        });
+                        return;
+                    }
+                }
+                res.status(201).json({
+                    success: true,
+                    user: {
+                        userId: user.userId,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        email: user.email,
+                        phoneNumber: user.phoneNumber,
+                    },
+                    event: (_b = result.data) !== null && _b !== void 0 ? _b : [],
+                    bookingApprovals: approvalResults,
+                    message: `Successfully created PRIVATE event(s) for user and approved booking(s)`,
                 });
             }
             catch (error) {

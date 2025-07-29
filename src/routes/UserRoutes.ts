@@ -14,7 +14,10 @@ router.post("/auth/login/default", LoginController.loginWithDefaultPassword);
 router.post("/auth/reset", ResetPasswordController.resetPassword);
 router.post("/auth/login", LoginController.login);
 router.post("/auth/forgot", ResetPasswordController.forgotPasswordLink);
-router.post("/auth/reset/resend", ResetPasswordController.resendPasswordResetEmail);
+router.post(
+  "/auth/reset/resend",
+  ResetPasswordController.resendPasswordResetEmail
+);
 // router.post("/auth/forgot/identifier", ResetPasswordController.forgotPasswordLinkByUsernameOrEmail); // deprecated
 
 // =======================

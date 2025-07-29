@@ -21,6 +21,7 @@ export enum VenueStatus {
 export enum BookingStatus {
   APPROVED_PAID = "APPROVED_PAID",
   APPROVED_NOT_PAID = "APPROVED_NOT_PAID",
+  PARTIAL = "PARTIAL", // Added for partial payment
   PENDING = "PENDING",
   CANCELLED = "CANCELLED",
 }

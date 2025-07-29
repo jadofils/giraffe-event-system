@@ -26,13 +26,78 @@ class OrganizationRepository {
     static getAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const cacheKey = "org:all";
-                const organizations = yield CacheService_1.CacheService.getOrSetMultiple(cacheKey, Database_1.AppDataSource.getRepository(Organization_1.Organization), () => __awaiter(this, void 0, void 0, function* () {
-                    return yield Database_1.AppDataSource.getRepository(Organization_1.Organization).find({
-                        relations: ["users", "users.role"],
-                    });
-                }), CACHE_TTL);
-                return { success: true, data: organizations };
+                // Fetch all organizations with users, roles, and venues
+                const organizations = yield Database_1.AppDataSource.getRepository(Organization_1.Organization)
+                    .createQueryBuilder("organization")
+                    .leftJoinAndSelect("organization.users", "user")
+                    .leftJoinAndSelect("user.role", "role")
+                    .leftJoinAndSelect("organization.venues", "venue")
+                    .where("organization.deletedAt IS NULL")
+                    .andWhere("LOWER(organization.organizationType) != :independent", {
+                    independent: "independent",
+                })
+                    .orderBy("organization.organizationName", "ASC")
+                    .getMany();
+                // For each organization, fetch all events linked to any of its venues
+                const eventVenueRepo = Database_1.AppDataSource.getRepository("event_venues");
+                const eventRepo = Database_1.AppDataSource.getRepository("events");
+                const data = yield Promise.all(organizations.map((org) => __awaiter(this, void 0, void 0, function* () {
+                    var _a;
+                    // Get all venueIds for this org
+                    const venueIds = (org.venues || []).map((v) => v.venueId);
+                    let events = [];
+                    if (venueIds.length > 0) {
+                        // Find all eventIds linked to these venues
+                        let eventVenueLinks = [];
+                        if (venueIds.length === 1) {
+                            eventVenueLinks = yield eventVenueRepo.find({
+                                where: { venueId: venueIds[0] },
+                                select: ["eventId"],
+                            });
+                        }
+                        else {
+                            eventVenueLinks = yield eventVenueRepo
+                                .createQueryBuilder("ev")
+                                .select(["ev.eventId"])
+                                .where("ev.venueId IN (:...venueIds)", { venueIds })
+                                .getMany();
+                        }
+                        const eventIds = [
+                            ...new Set(eventVenueLinks.map((ev) => ev.eventId)),
+                        ];
+                        if (eventIds.length > 0) {
+                            events = yield eventRepo.findByIds(eventIds);
+                        }
+                    }
+                    return Object.assign(Object.assign({}, org), { users: (_a = org.users) === null || _a === void 0 ? void 0 : _a.map((u) => ({
+                            userId: u.userId,
+                            username: u.username,
+                            firstName: u.firstName,
+                            lastName: u.lastName,
+                            email: u.email,
+                            phoneNumber: u.phoneNumber,
+                            role: u.role
+                                ? { roleId: u.role.roleId, roleName: u.role.roleName }
+                                : null,
+                            profilePictureURL: u.profilePictureURL,
+                            preferredLanguage: u.preferredLanguage,
+                            timezone: u.timezone,
+                            emailNotificationsEnabled: u.emailNotificationsEnabled,
+                            smsNotificationsEnabled: u.smsNotificationsEnabled,
+                            socialMediaLinks: u.socialMediaLinks,
+                            dateOfBirth: u.dateOfBirth,
+                            gender: u.gender,
+                            addressLine1: u.addressLine1,
+                            addressLine2: u.addressLine2,
+                            city: u.city,
+                            stateProvince: u.stateProvince,
+                            postalCode: u.postalCode,
+                            country: u.country,
+                            createdAt: u.createdAt,
+                            updatedAt: u.updatedAt,
+                        })), venues: org.venues, events });
+                })));
+                return { success: true, data };
             }
             catch (error) {
                 console.error("[Organization Fetch Error]:", error);
@@ -108,6 +173,22 @@ class OrganizationRepository {
         return { success: true, data: organization };
     }
     /**
+     * Helper to invalidate all cache keys for an organization
+     */
+    static invalidateOrgCacheKeys(orgId_1) {
+        return __awaiter(this, arguments, void 0, function* (orgId, userIds = []) {
+            const keys = [
+                "org:all",
+                `org:id:${orgId}`,
+                `org:id:${orgId}:withVenuesAndUsers`,
+                `org:users:${orgId}`,
+                ...userIds.map((id) => `org:user:${id}`),
+                ...userIds.map((id) => `user:id:${id}`),
+            ];
+            yield CacheService_1.CacheService.invalidateMultiple(keys);
+        });
+    }
+    /**
      * Create multiple organizations
      * @param data Array of organization data
      * @returns Created organizations
@@ -155,7 +236,7 @@ class OrganizationRepository {
                         organizationType: item.organizationType,
                         createdAt: new Date(),
                         updatedAt: new Date(),
-                        supportingDocument: item.supportingDocument,
+                        supportingDocuments: item.supportingDocuments,
                         logo: item.logo,
                         members: (_c = item.members) !== null && _c !== void 0 ? _c : 0,
                         status: item.status || OrganizationStatusEnum_1.OrganizationStatusEnum.PENDING,
@@ -179,10 +260,9 @@ class OrganizationRepository {
                 // Save all organizations
                 const savedOrganizations = yield repo.save(organizations);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    ...savedOrganizations.map((org) => `org:id:${org.organizationId}`),
-                ]);
+                for (const org of savedOrganizations) {
+                    yield this.invalidateOrgCacheKeys(org.organizationId);
+                }
                 return {
                     success: true,
                     data: savedOrganizations,
@@ -290,17 +370,13 @@ class OrganizationRepository {
                     address: (_e = data.address) !== null && _e !== void 0 ? _e : organization.address,
                     organizationType: (_f = data.organizationType) !== null && _f !== void 0 ? _f : organization.organizationType,
                     logo: (_g = data.logo) !== null && _g !== void 0 ? _g : organization.logo,
-                    supportingDocument: (_h = data.supportingDocument) !== null && _h !== void 0 ? _h : organization.supportingDocument,
+                    supportingDocuments: (_h = data.supportingDocuments) !== null && _h !== void 0 ? _h : organization.supportingDocuments,
                     members: (_j = data.members) !== null && _j !== void 0 ? _j : organization.members,
                     updatedAt: new Date(),
                 });
                 const updatedOrganization = yield repo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${id}`,
-                    ...organization.users.map((user) => `org:user:${user.userId}`),
-                ]);
+                yield this.invalidateOrgCacheKeys(id, organization.users.map((user) => user.userId));
                 return {
                     success: true,
                     data: updatedOrganization,
@@ -418,12 +494,9 @@ class OrganizationRepository {
                     };
                 }
                 // Invalidate cache for all deleted organizations
-                const cacheKeys = ["org:all"];
-                organizations.forEach((org) => {
-                    cacheKeys.push(`org:id:${org.organizationId}`);
-                    org.users.forEach((user) => cacheKeys.push(`org:user:${user.userId}`));
-                });
-                yield CacheService_1.CacheService.invalidateMultiple(cacheKeys);
+                for (const org of organizations) {
+                    yield this.invalidateOrgCacheKeys(org.organizationId, org.users.map((user) => user.userId));
+                }
                 return {
                     success: true,
                     message: `${result.affected} organization(s) deleted successfully`,
@@ -481,12 +554,7 @@ class OrganizationRepository {
                 organization.users = [...(organization.users || []), ...newUsers];
                 const updatedOrganization = yield organizationRepo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${organizationId}`,
-                    ...userIds.map((id) => `org:user:${id}`),
-                    ...userIds.map((id) => `user:id:${id}`),
-                ]);
+                yield this.invalidateOrgCacheKeys(organizationId, userIds);
                 return {
                     success: true,
                     message: `${newUsers.length} users assigned to organization`,
@@ -529,12 +597,7 @@ class OrganizationRepository {
                 organization.users = organization.users.filter((user) => !userIds.includes(user.userId));
                 const updatedOrganization = yield organizationRepo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${organizationId}`,
-                    ...userIds.map((id) => `org:user:${id}`),
-                    ...userIds.map((id) => `user:id:${id}`),
-                ]);
+                yield this.invalidateOrgCacheKeys(organizationId, userIds);
                 return {
                     success: true,
                     message: `${userIds.length} users removed from organization`,
@@ -633,7 +696,7 @@ class OrganizationRepository {
                     country: org.country,
                     postalCode: org.postalCode,
                     stateProvince: org.stateProvince,
-                    supportingDocument: org.supportingDocument,
+                    supportingDocuments: org.supportingDocuments,
                     logo: org.logo,
                     cancellationReason: org.cancellationReason,
                     status: org.status,
@@ -824,7 +887,7 @@ class OrganizationRepository {
                     relations: ["venues"],
                 });
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
+                yield this.invalidateOrgCacheKeys(organizationId);
                 return {
                     success: true,
                     message: `${assignedVenuesCount.added} venue(s) added successfully to organization`,
@@ -890,7 +953,7 @@ class OrganizationRepository {
                     relations: ["venues"],
                 });
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple(invalidateKeys);
+                yield this.invalidateOrgCacheKeys(organizationId);
                 return {
                     success: true,
                     message: `${removedCount} venue(s) removed from organization`,
@@ -923,11 +986,7 @@ class OrganizationRepository {
                 organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.APPROVED;
                 const updated = yield repo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${id}`,
-                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
-                ]);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
                 return {
                     success: true,
                     data: updated,
@@ -959,11 +1018,7 @@ class OrganizationRepository {
                 }
                 const updated = yield repo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${id}`,
-                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
-                ]);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
                 return {
                     success: true,
                     data: updated,
@@ -997,11 +1052,7 @@ class OrganizationRepository {
                 organization.isEnabled = true;
                 const updated = yield repo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${id}`,
-                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
-                ]);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
                 return {
                     success: true,
                     data: updated,
@@ -1036,11 +1087,7 @@ class OrganizationRepository {
                 organization.isEnabled = false;
                 const updated = yield repo.save(organization);
                 // Invalidate cache
-                yield CacheService_1.CacheService.invalidateMultiple([
-                    "org:all",
-                    `org:id:${id}`,
-                    ...(((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => `org:user:${user.userId}`)) || []),
-                ]);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
                 return {
                     success: true,
                     data: updated,
@@ -1050,6 +1097,85 @@ class OrganizationRepository {
             catch (error) {
                 console.error(`[Organization Disable Error] ID: ${id}:`, error);
                 return { success: false, message: "Failed to disable organization" };
+            }
+        });
+    }
+    static queryOrganization(id, reason) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield repo.findOne({
+                    where: { organizationId: id },
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                if (organization.status === OrganizationStatusEnum_1.OrganizationStatusEnum.REJECTED) {
+                    return {
+                        success: false,
+                        message: "Cannot query a rejected organization",
+                    };
+                }
+                organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.QUERY;
+                organization.cancellationReason = reason !== null && reason !== void 0 ? reason : "";
+                const updated = yield repo.save(organization);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
+                return {
+                    success: true,
+                    data: updated,
+                    message: "Organization set to QUERY.",
+                };
+            }
+            catch (error) {
+                return { success: false, message: "Failed to query organization" };
+            }
+        });
+    }
+    static requestOrganizationAgain(id) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            if (!id || !this.UUID_REGEX.test(id)) {
+                return { success: false, message: "Valid organization ID is required" };
+            }
+            try {
+                const repo = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                const organization = yield repo.findOne({
+                    where: { organizationId: id },
+                });
+                if (!organization) {
+                    return { success: false, message: "Organization not found" };
+                }
+                if (organization.status === OrganizationStatusEnum_1.OrganizationStatusEnum.REJECTED) {
+                    return {
+                        success: false,
+                        message: "Cannot request again for a rejected organization",
+                    };
+                }
+                if (organization.status !== OrganizationStatusEnum_1.OrganizationStatusEnum.QUERY) {
+                    return {
+                        success: false,
+                        message: "Organization is not in QUERY status",
+                    };
+                }
+                organization.status = OrganizationStatusEnum_1.OrganizationStatusEnum.PENDING_QUERY;
+                // Do not clear cancellationReason so user can see the reason
+                const updated = yield repo.save(organization);
+                yield this.invalidateOrgCacheKeys(id, ((_a = organization.users) === null || _a === void 0 ? void 0 : _a.map((user) => user.userId)) || []);
+                return {
+                    success: true,
+                    data: updated,
+                    message: "Organization set to PENDING_QUERY.",
+                };
+            }
+            catch (error) {
+                return {
+                    success: false,
+                    message: "Failed to request again for organization",
+                };
             }
         });
     }

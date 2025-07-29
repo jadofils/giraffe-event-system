@@ -37,7 +37,7 @@ export enum PaymentMethod {
   CARD = "CARD",
   BANK_TRANSFER = "BANK_TRANSFER",
   MOBILE_MONEY = "MOBILE_MONEY",
-  CASH = "CASH",
+  PAYPAL = "PAYPAL"
 }
 
 @Entity("venue_booking_payments")

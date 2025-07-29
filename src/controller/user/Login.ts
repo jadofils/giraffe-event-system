@@ -11,147 +11,192 @@ const COOKIE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours
 const CACHE_TTL = 3600; // 1 hour, consistent with VenueBookingRepository
 
 export class LoginController {
-  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   /**
    * Login using default or user password
    * @route POST /api/auth/login/default
    * @access Public
    */
-static async loginWithDefaultPassword(req: Request, res: Response): Promise<void> {
-  if (!AppDataSource.isInitialized) {
-    res.status(500).json({ success: false, message: "Database not initialized" });
-    return;
-  }
-
-  const { identifier, password } = req.body;
-
-  if (!identifier || !password) {
-    res.status(400).json({ success: false, message: "Please enter both identifier and password." });
-    return;
-  }
-
-  const userRepository = AppDataSource.getRepository(User);
-
-  try {
-    const user = await userRepository.findOne({
-      where: [
-        { email: identifier },
-        { username: identifier },
-        { phoneNumber: identifier }
-      ],
-      relations: ["role", "role.permissions", "organizations"],
-    });
-
-    if (!user) {
-      res.status(404).json({ success: false, message: "No account found with that email, username, or phone number." });
+  static async loginWithDefaultPassword(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    if (!AppDataSource.isInitialized) {
+      res
+        .status(500)
+        .json({ success: false, message: "Database not initialized" });
       return;
     }
 
-    // Validate user UUID
-    if (!LoginController.UUID_REGEX.test(user.userId)) {
-      res.status(500).json({ success: false, message: "Invalid user ID format." });
-      return;
-    }
+    const { identifier, password } = req.body;
 
-    // Password verification
-    let isMatch = false;
-    if (user.password) {
-      isMatch = await bcrypt.compare(password, user.password);
-    }
-
-    if (!isMatch) {
-      res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
-      return;
-    }
-
-    // Validate organization
-    if (!user.organizations || user.organizations.length === 0) {
-      res.status(401).json({ success: false, message: "User is not associated with any organization." });
-      return;
-    }
-
-    const firstOrganization = user.organizations[0];
-    if (!LoginController.UUID_REGEX.test(firstOrganization.organizationId)) {
-      res.status(500).json({ success: false, message: "Invalid organization ID format." });
-      return;
-    }
-
-    // Generate JWT token for authentication
-    const token = jwt.sign(
-      {
-        userId: user.userId,
-        email: user.email,
-        username: user.username,
-        phoneNumber: user.phoneNumber,
-        organizationId: firstOrganization.organizationId,
-        roleId: user.role.roleId,
-        roleName: user.role.roleName,
-      },
-      SECRET_KEY,
-      { expiresIn: "24h" }
-    );
-
-    res.cookie("authToken", token, {
-      httpOnly: true,
-      maxAge: COOKIE_EXPIRATION,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-      secure: process.env.NODE_ENV === "production",
-    });
-
-    const { password: _, ...userData } = user;
-
-    // Generate password reset token
-    const resetToken = jwt.sign(
-      {
-        userId: user.userId,
-        email: user.email,
-        username: user.username,
-        purpose: "password_reset",
-      },
-      SECRET_KEY,
-      { expiresIn: "1h" }
-    );
-
-    // Create reset link
-    const baseUrl = process.env.FRONTEND_URL || "https://venue-and-event-management-front-si.vercel.app/";
-    const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
-
-    // Log the reset link for debugging
-    console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
-
-    // Send reset link to user's email
-    try {
-      await PasswordService.sendPasswordResetEmail(user.email, resetLink, user.username);
-      console.log(`[Password Reset Email] Successfully sent to ${user.email}`);
-    } catch (emailError) {
-      console.error(`[Password Reset Email] Failed to send to ${user.email}:`, emailError);
-      res.status(500).json({
+    if (!identifier || !password) {
+      res.status(400).json({
         success: false,
-        message: "Login successful, but failed to send password reset email.",
-        user: { ...userData, needsPasswordReset: true },
-        token,
+        message: "Please enter both identifier and password.",
       });
       return;
     }
 
-    res.status(200).json({
-    success: true,
-    message: "Login successful! Please check your email to reset your password.",
-    user: { ...userData, needsPasswordReset: true },
-    token, // regular auth token
-    resetToken, // <-- add the reset token for direct use in Postman/testing
-    resetLink, // Optionally return the link for testing
-    });
-  } catch (error) {
-    console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
-    res.status(500).json({
-      success: false,
-      message: "Something went wrong while logging in.",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
+    const userRepository = AppDataSource.getRepository(User);
+
+    try {
+      const user = await userRepository.findOne({
+        where: [
+          { email: identifier },
+          { username: identifier },
+          { phoneNumber: identifier },
+        ],
+        relations: ["role", "role.permissions", "organizations"],
+      });
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          message:
+            "No account found with that email, username, or phone number.",
+        });
+        return;
+      }
+
+      // Validate user UUID
+      if (!LoginController.UUID_REGEX.test(user.userId)) {
+        res
+          .status(500)
+          .json({ success: false, message: "Invalid user ID format." });
+        return;
+      }
+
+      // Password verification
+      let isMatch = false;
+      if (user.password) {
+        isMatch = await bcrypt.compare(password, user.password);
+      }
+
+      if (!isMatch) {
+        res.status(401).json({
+          success: false,
+          message: "Incorrect password. Please try again.",
+        });
+        return;
+      }
+
+      // Remove organization association check for login
+      // if (!user.organizations || user.organizations.length === 0) {
+      //   res.status(401).json({ success: false, message: "User is not associated with any organization." });
+      //   return;
+      // }
+
+      const firstOrganization =
+        user.organizations && user.organizations.length > 0
+          ? user.organizations[0]
+          : null;
+      if (
+        !LoginController.UUID_REGEX.test(
+          firstOrganization?.organizationId || ""
+        )
+      ) {
+        res
+          .status(500)
+          .json({ success: false, message: "Invalid organization ID format." });
+        return;
+      }
+
+      // Generate JWT token for authentication
+      const token = jwt.sign(
+        {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          phoneNumber: user.phoneNumber,
+          organizationId: firstOrganization
+            ? firstOrganization.organizationId
+            : null,
+          roleId: user.role.roleId,
+          roleName: user.role.roleName,
+        },
+        SECRET_KEY,
+        { expiresIn: "24h" }
+      );
+
+      res.cookie("authToken", token, {
+        httpOnly: true,
+        maxAge: COOKIE_EXPIRATION,
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        secure: process.env.NODE_ENV === "production",
+      });
+
+      const { password: _, ...userData } = user;
+
+      // Generate password reset token
+      const resetToken = jwt.sign(
+        {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          purpose: "password_reset",
+        },
+        SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+
+      // Create reset link
+      const baseUrl =
+        process.env.FRONTEND_URL ||
+        "https://venue-and-event-management-front-si.vercel.app/";
+      const resetLink = `${baseUrl}/change-default-password?token=${resetToken}`;
+
+      // Log the reset link for debugging
+      console.log(`[Password Reset Email] Generated reset link: ${resetLink}`);
+
+      // Send reset link to user's email
+      try {
+        await PasswordService.sendPasswordResetEmail(
+          user.email,
+          resetLink,
+          user.username
+        );
+        console.log(
+          `[Password Reset Email] Successfully sent to ${user.email}`
+        );
+      } catch (emailError) {
+        console.error(
+          `[Password Reset Email] Failed to send to ${user.email}:`,
+          emailError
+        );
+        res.status(500).json({
+          success: false,
+          message: "Login successful, but failed to send password reset email.",
+          user: { ...userData, needsPasswordReset: true },
+          token,
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Login successful! Please check your email to reset your password.",
+        user: { ...userData, needsPasswordReset: true },
+        token, // regular auth token
+        resetToken, // <-- add the reset token for direct use in Postman/testing
+        resetLink, // Optionally return the link for testing
+      });
+    } catch (error) {
+      console.error(
+        `[Login Error] Identifier: ${identifier} - ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      res.status(500).json({
+        success: false,
+        message: "Something went wrong while logging in.",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
-}
 
   /**
    * Login using user password
@@ -163,8 +208,13 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
 
     // Validate request
     if (!identifier || !password) {
-      console.log(`[Login Attempt] Identifier: ${identifier} - Missing identifier or password`);
-      res.status(400).json({ success: false, message: "Please provide both identifier and password." });
+      console.log(
+        `[Login Attempt] Identifier: ${identifier} - Missing identifier or password`
+      );
+      res.status(400).json({
+        success: false,
+        message: "Please provide both identifier and password.",
+      });
       return;
     }
 
@@ -180,47 +230,65 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
             where: [
               { email: identifier },
               { username: identifier },
-              { phoneNumber: identifier }
+              { phoneNumber: identifier },
             ],
-          relations: [
-  "organizations",
-  "organizations.venues",
-  "role",
-  "role.permissions"
-]
+            relations: [
+              "organizations",
+              "organizations.venues",
+              "role",
+              "role.permissions",
+            ],
           });
         },
         CACHE_TTL
       );
 
       if (!user) {
-        console.log(`[Login Attempt] Identifier: ${identifier} - No account found`);
-        res.status(404).json({ success: false, "message": "No account found with that email, username, or phone number." });
+        console.log(
+          `[Login Attempt] Identifier: ${identifier} - No account found`
+        );
+        res.status(404).json({
+          success: false,
+          message:
+            "No account found with that email, username, or phone number.",
+        });
         return;
       }
 
       // Validate user UUID
       if (!LoginController.UUID_REGEX.test(user.userId)) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Invalid UUID format`);
-        res.status(500).json({ success: false, message: "Invalid user ID format." });
+        console.log(
+          `[Login Attempt] User ID: ${user.userId} - Invalid UUID format`
+        );
+        res
+          .status(500)
+          .json({ success: false, message: "Invalid user ID format." });
         return;
       }
 
       // Check password
       if (!user.password || !(await bcrypt.compare(password, user.password))) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - Incorrect password`);
-        res.status(401).json({ success: false, message: "Incorrect password. Please try again." });
+        console.log(
+          `[Login Attempt] User ID: ${user.userId} - Incorrect password`
+        );
+        res.status(401).json({
+          success: false,
+          message: "Incorrect password. Please try again.",
+        });
         return;
       }
 
-      // Validate organization
-      if (!user.organizations || user.organizations.length === 0) {
-        console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
-        res.status(401).json({ success: false, message: "User is not associated with any organization." });
-        return;
-      }
+      // Remove organization association check for login
+      // if (!user.organizations || user.organizations.length === 0) {
+      //   console.log(`[Login Attempt] User ID: ${user.userId} - No associated organizations`);
+      //   res.status(401).json({ success: false, message: "User is not associated with any organization." });
+      //   return;
+      // }
 
-      const firstOrganization = user.organizations[0];
+      const firstOrganization =
+        user.organizations && user.organizations.length > 0
+          ? user.organizations[0]
+          : null;
 
       // Filter venues and only include approved events for each venue
       // const venuesWithApprovedEvents = (firstOrganization.venues || []).map(venue => ({
@@ -228,15 +296,19 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
       //   events: (venue.events || []).filter(event => event.status === "APPROVED")
       // }));
 
-      const organization = {
-        organizationId: firstOrganization.organizationId,
-        organizationName: firstOrganization.organizationName,
-        description: firstOrganization.description,
-        contactEmail: firstOrganization.contactEmail,
-        contactPhone: firstOrganization.contactPhone,
-        address: firstOrganization.address,
-        organizationType: firstOrganization.organizationType,
-      };
+      // Build organization object only if firstOrganization exists
+      let organization = undefined;
+      if (firstOrganization) {
+        organization = {
+          organizationId: firstOrganization.organizationId,
+          organizationName: firstOrganization.organizationName,
+          description: firstOrganization.description,
+          contactEmail: firstOrganization.contactEmail,
+          contactPhone: firstOrganization.contactPhone,
+          address: firstOrganization.address,
+          organizationType: firstOrganization.organizationType,
+        };
+      }
 
       // Generate JWT token
       const token = jwt.sign(
@@ -245,7 +317,9 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
           email: user.email,
           username: user.username,
           phoneNumber: user.phoneNumber,
-          organizationId: firstOrganization.organizationId,
+          organizationId: firstOrganization
+            ? firstOrganization.organizationId
+            : null,
           roles: {
             roleId: user.role.roleId,
             roleName: user.role.roleName,
@@ -262,9 +336,15 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
         secure: process.env.NODE_ENV === "production",
       });
 
-      console.log(`[Login Success] User ID: ${user.userId}, Role: ${user.role.roleName}, Organization ID: ${firstOrganization.organizationId}`);
+      console.log(
+        `[Login Success] User ID: ${user.userId}, Role: ${
+          user.role.roleName
+        }, Organization ID: ${
+          firstOrganization ? firstOrganization.organizationId : "N/A"
+        }`
+      );
 
-      user.role.permissions.forEach(permission => {
+      user.role.permissions.forEach((permission) => {
         console.log({
           userId: user.userId,
           username: user.username,
@@ -276,6 +356,7 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
         });
       });
 
+      // In the response, only include 'organization' if it exists
       res.status(200).json({
         success: true,
         message: "Login successful!",
@@ -284,13 +365,25 @@ static async loginWithDefaultPassword(req: Request, res: Response): Promise<void
           email: user.email,
           username: user.username,
           phoneNumber: user.phoneNumber,
-          roles: user.role,
-          organization // <-- now includes venues and only approved events
+          roles: {
+            roleId: user.role.roleId,
+            roleName: user.role.roleName,
+            description: user.role.description,
+            createdAt: user.role.createdAt,
+            updatedAt: user.role.updatedAt,
+            deletedAt: user.role.deletedAt,
+            permissions: user.role.permissions || [],
+          },
+          ...(organization ? { organization } : {}),
         },
         token,
       });
     } catch (error) {
-      console.error(`[Login Error] Identifier: ${identifier} - ${error instanceof Error ? error.message : "Unknown error"}`);
+      console.error(
+        `[Login Error] Identifier: ${identifier} - ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
       res.status(500).json({
         success: false,
         message: "Something went wrong while logging in.",

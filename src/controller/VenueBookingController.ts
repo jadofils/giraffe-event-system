@@ -247,7 +247,12 @@ export class VenueBookingController {
           (b) => b.bookingStatus === "PENDING"
         ).length,
         approvedBookings: enrichedBookings.filter((b) =>
-          ["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(b.bookingStatus)
+          ["APPROVED_PAID", "APPROVED_NOT_PAID", "PARTIAL"].includes(
+            b.bookingStatus
+          )
+        ).length,
+        partialBookings: enrichedBookings.filter(
+          (b) => b.bookingStatus === "PARTIAL"
         ).length,
         cancelledBookings: enrichedBookings.filter(
           (b) => b.bookingStatus === "CANCELLED"
@@ -736,7 +741,10 @@ export class VenueBookingController {
       const { bookingId } = req.params;
       // Check if booking is canceled
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
-      const booking = await bookingRepo.findOne({ where: { bookingId } });
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: ["event"],
+      });
       if (!booking) {
         res.status(404).json({ success: false, message: "Booking not found." });
         return;
@@ -748,9 +756,20 @@ export class VenueBookingController {
         });
         return;
       }
+      // Extract payerId and payerType from the event
+      const event = booking.event;
+      if (!event) {
+        res.status(400).json({
+          success: false,
+          message: "Booking does not have an associated event.",
+        });
+        return;
+      }
       const paymentData = {
         ...req.body,
         bookingId,
+        payerId: event.eventOrganizerId,
+        payerType: event.eventOrganizerType,
       };
 
       const result = await VenueBookingPaymentService.processPayment(
@@ -1079,7 +1098,9 @@ export class VenueBookingController {
 
       // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
       if (
-        !["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)
+        !["PENDING", "APPROVED_PAID", "APPROVED_NOT_PAID"].includes(
+          booking.bookingStatus
+        )
       ) {
         res.status(400).json({
           success: false,
@@ -1205,7 +1226,9 @@ export class VenueBookingController {
 
       // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
       if (
-        !["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)
+        !["PENDING", "APPROVED_PAID", "APPROVED_NOT_PAID"].includes(
+          booking.bookingStatus
+        )
       ) {
         res.status(400).json({
           success: false,
@@ -1468,6 +1491,7 @@ export class VenueBookingController {
       const bookings = await bookingRepo.find({
         where: { venueId },
         order: { createdAt: "DESC" },
+        relations: ["user"],
       });
       // Fetch venue summary
       const venueRepo = AppDataSource.getRepository(Venue);
@@ -1513,7 +1537,42 @@ export class VenueBookingController {
             : null,
         };
       }
-      res.status(200).json({ success: true, venueSummary, bookings });
+      const userRepo = AppDataSource.getRepository(User);
+      res.status(200).json({
+        success: true,
+        venueSummary,
+        bookings: await Promise.all(
+          bookings.map(async (booking) => {
+            let userInfo = null;
+            if (booking.user) {
+              userInfo = {
+                userId: booking.user.userId,
+                firstName: booking.user.firstName,
+                lastName: booking.user.lastName,
+                email: booking.user.email,
+                phoneNumber: booking.user.phoneNumber,
+              };
+            } else if (booking.createdBy) {
+              const user = await userRepo.findOne({
+                where: { userId: booking.createdBy },
+              });
+              if (user) {
+                userInfo = {
+                  userId: user.userId,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  email: user.email,
+                  phoneNumber: user.phoneNumber,
+                };
+              }
+            }
+            return {
+              ...booking,
+              user: userInfo,
+            };
+          })
+        ),
+      });
     } catch (error) {
       res.status(500).json({
         success: false,

@@ -47,6 +47,11 @@ router.get(
   authenticate,
   VenueController.getVenueVariables
 );
+router.get(
+  "/:venueId/booked-dates-users",
+  authenticate,
+  VenueController.getBookedDatesAndUsers
+);
 
 router.get(
   "/:venueId/amenities/:amenityId",

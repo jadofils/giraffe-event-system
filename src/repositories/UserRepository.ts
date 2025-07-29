@@ -2,7 +2,7 @@ import { AppDataSource } from "../config/Database";
 import { User } from "../models/User";
 import { Role } from "../models/Role";
 import { UserInterface } from "../interfaces/UserInterface";
-import { In } from "typeorm";
+import { In, IsNull } from "typeorm";
 import { Organization } from "../models/Organization";
 import { CacheService } from "../services/CacheService";
 
@@ -484,48 +484,35 @@ export class UserRepository {
 
   /**
    * Find multiple existing users by email or username
+   * NOTE: For registration, we do NOT cache this check to avoid stale cache issues.
+   * Only users with deletedAt IS NULL are considered existing.
    */
   static async findExistingUsers(
     usersData: { email: string; username: string }[]
   ): Promise<Map<string, User>> {
-    const cacheKey = `${this.CACHE_PREFIX}findMultiple:${JSON.stringify(
-      usersData.map((u) => `${u.email}:${u.username}`).sort()
-    )}`;
-
-    return (
-      (await CacheService.getOrSetMap(
-        cacheKey,
-        async () => {
-          if (!AppDataSource.isInitialized) {
-            throw new Error("Database not initialized");
-          }
-
-          const userRepository = AppDataSource.getRepository(User);
-          const existingUsers = new Map<string, User>();
-
-          try {
-            const emails = usersData.map((u) => u.email);
-            const usernames = usersData.map((u) => u.username);
-
-            const users = await userRepository.find({
-              where: [{ email: In(emails) }, { username: In(usernames) }],
-              relations: ["role"],
-            });
-
-            users.forEach((user) => {
-              existingUsers.set(user.email, user);
-              existingUsers.set(user.username, user);
-            });
-
-            return existingUsers;
-          } catch (err) {
-            const errorMessage =
-              err instanceof Error ? err.message : "Unknown error";
-            throw new Error("Error finding existing users: " + errorMessage);
-          }
-        },
-        this.CACHE_TTL
-      )) || new Map<string, User>()
-    );
+    if (!AppDataSource.isInitialized) {
+      throw new Error("Database not initialized");
+    }
+    const userRepository = AppDataSource.getRepository(User);
+    const existingUsers = new Map<string, User>();
+    try {
+      const emails = usersData.map((u) => u.email);
+      const usernames = usersData.map((u) => u.username);
+      const users = await userRepository.find({
+        where: [
+          { email: In(emails), deletedAt: IsNull() },
+          { username: In(usernames), deletedAt: IsNull() },
+        ],
+        relations: ["role"],
+      });
+      users.forEach((user) => {
+        existingUsers.set(user.email, user);
+        existingUsers.set(user.username, user);
+      });
+      return existingUsers;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      throw new Error("Error finding existing users: " + errorMessage);
+    }
   }
 }

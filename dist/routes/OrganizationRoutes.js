@@ -12,13 +12,14 @@ const upload_1 = __importDefault(require("../middlewares/upload"));
 const router = (0, express_1.Router)();
 // Public endpoints
 router.get("/public", OrganizationController_1.OrganizationController.getAllPublicOrganizations);
+router.get("/:organizationId/venues/public", OrganizationController_1.OrganizationController.getApprovedVenuesByOrganizationId);
 // Protected endpoints
 router.get("/all", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.getAll);
 router.get("/user/:userId", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.getOrganizationsByUserId);
 router.get("/:id", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.getById);
 // Update the POST / route to accept both 'supportingDocument' and 'logo' files
 router.post("/", AuthMiddleware_1.authenticate, upload_1.default.fields([
-    { name: "supportingDocument", maxCount: 1 },
+    { name: "supportingDocument", maxCount: 3 },
     { name: "logo", maxCount: 1 },
 ]), OrganizationController_1.OrganizationController.create);
 router.put("/:id", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.update);
@@ -38,4 +39,6 @@ router.patch("/:id/logo", AuthMiddleware_1.authenticate, upload_1.default.single
 router.patch("/:id/supporting-document", AuthMiddleware_1.authenticate, upload_1.default.single("supportingDocument"), OrganizationController_1.OrganizationController.updateSupportingDocument);
 router.patch("/:id/enable-status", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.enableStatus);
 router.patch("/:id/disable-status", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.disableStatus);
+router.patch("/:id/query", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.queryOrganization);
+router.patch("/:id/request-again", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.requestOrganizationAgain);
 exports.organizationRoutes = router;

@@ -354,6 +354,7 @@ export class EventController {
         bookingDates
       );
 
+      // After event creation
       if (!result.success) {
         res.status(400).json({ success: false, message: result.message });
         return;
@@ -376,7 +377,9 @@ export class EventController {
       res.status(201).json({
         success: true,
         data: result.data,
-        message: `Successfully created ${result.data?.length || 0} event(s)`,
+        message: `Successfully created event for ${
+          result.data?.eventVenues?.length || 0
+        } venue(s)`,
         transitionWarnings:
           transitionWarnings.length > 0 ? transitionWarnings : undefined,
       });
@@ -1877,6 +1880,227 @@ export class EventController {
             ? error.message
             : "Failed to fetch events by user.",
       });
+    }
+  }
+
+  static async createEventForExternalUser(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      // Parse new structure: { client: {...}, event: {...} }
+      const { client, event } = req.body;
+      if (!client || !event) {
+        res.status(400).json({
+          success: false,
+          message: "Missing 'client' or 'event' object in request body.",
+        });
+        return;
+      }
+      const { firstName, lastName, email, phoneNumber } = client;
+      if (!firstName || !lastName || !email || !phoneNumber) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Missing user info: firstName, lastName, email, phoneNumber are required.",
+        });
+        return;
+      }
+      // Fetch the GUEST role for new users
+      const userRepo = AppDataSource.getRepository(User);
+      const roleRepository = AppDataSource.getRepository(
+        require("../models/Role").Role
+      );
+      const guestRole = await roleRepository.findOne({
+        where: { roleName: "GUEST" },
+      });
+      if (!guestRole) {
+        res.status(500).json({
+          success: false,
+          message: "Default GUEST role not found. Please initialize roles.",
+        });
+        return;
+      }
+      let user = await userRepo.findOne({
+        where: [{ email }, { phoneNumber }],
+      });
+      if (!user) {
+        const randomPassword = Math.random().toString(36).slice(-8);
+        // Generate a username from email or name
+        let username = email
+          ? email.split("@")[0]
+          : `${firstName}.${lastName}`.toLowerCase().replace(/\s+/g, "");
+        // Ensure username is unique
+        let usernameCandidate = username;
+        let counter = 1;
+        while (
+          await userRepo.findOne({ where: { username: usernameCandidate } })
+        ) {
+          usernameCandidate = `${username}${Math.floor(Math.random() * 10000)}`;
+          counter++;
+          if (counter > 5) break; // avoid infinite loop
+        }
+        username = usernameCandidate;
+        user = userRepo.create({
+          username,
+          firstName,
+          lastName,
+          email,
+          phoneNumber,
+          password: randomPassword, // You may want to hash this in a real system
+          roleId: guestRole.roleId,
+        });
+        await userRepo.save(user);
+      }
+      // Only use allowed event fields for PRIVATE event
+      const { eventTitle, eventType, description, venueId, dates } = event;
+      if (!eventTitle || !eventType || !venueId || !dates || !description) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Missing required event fields: eventTitle, eventType, venueId, dates, description",
+        });
+        return;
+      }
+      // Prepare venueIds array
+      let venueIdsArray = Array.isArray(venueId) ? venueId : [venueId];
+      // Fetch venues
+      const venueRepo = AppDataSource.getRepository(Venue);
+      const selectedVenues = await venueRepo.find({
+        where: { venueId: In(venueIdsArray) },
+        relations: ["venueVariables", "bookingConditions"],
+      });
+      if (selectedVenues.length !== venueIdsArray.length) {
+        res
+          .status(404)
+          .json({ success: false, message: "One or more venues not found." });
+        return;
+      }
+      // Check all venues belong to same org
+      const organizationId = selectedVenues[0].organizationId;
+      const allSameOrg = selectedVenues.every(
+        (venue) => venue.organizationId === organizationId
+      );
+      if (!allSameOrg) {
+        res.status(400).json({
+          success: false,
+          message: "All venues must belong to the same organization",
+        });
+        return;
+      }
+      // Dates validation (reuse logic)
+      let bookingDates;
+      const hasHourlyVenue = selectedVenues.some(
+        (v) => v.bookingType === "HOURLY"
+      );
+      if (hasHourlyVenue) {
+        if (
+          !Array.isArray(dates) ||
+          !dates.every((d) => d.date && Array.isArray(d.hours))
+        ) {
+          res.status(400).json({
+            success: false,
+            message:
+              "When booking hourly venues, each date must include hours array",
+          });
+          return;
+        }
+        bookingDates = dates;
+      } else {
+        if (
+          !Array.isArray(dates) ||
+          !dates.every(
+            (d) => typeof d === "string" || typeof d.date === "string"
+          )
+        ) {
+          res.status(400).json({
+            success: false,
+            message:
+              "For daily bookings, dates should be an array of date strings",
+          });
+          return;
+        }
+        bookingDates = dates.map((d) => ({
+          date: typeof d === "string" ? d : d.date,
+        }));
+      }
+      // Validate dates for each venue
+      for (const venue of selectedVenues) {
+        const validation = await BookingValidationService.validateBookingDates(
+          venue,
+          bookingDates
+        );
+        if (!validation.isAvailable) {
+          res.status(400).json({
+            success: false,
+            message: `Venue ${venue.venueName} has unavailable dates`,
+            unavailableDates: validation.unavailableDates,
+            venueId: venue.venueId,
+          });
+          return;
+        }
+      }
+      // Build event data
+      const eventData: any = {
+        eventName: eventTitle,
+        eventType,
+        eventDescription: description,
+        visibilityScope: "PRIVATE",
+        eventStatus: EventStatus.DRAFTED,
+        publishStatus: "DRAFT",
+        eventOrganizerId: user.userId,
+        eventOrganizerType: "USER",
+      };
+      // Create event(s)
+      const result = await EventRepository.createEventWithRelations(
+        eventData,
+        selectedVenues,
+        [], // No guests for private event
+        bookingDates
+      );
+      if (!result.success) {
+        res.status(400).json({ success: false, message: result.message });
+        return;
+      }
+      // Approve all created bookings
+      const VenueBookingRepository =
+        require("../repositories/VenueBookingRepository").VenueBookingRepository;
+      const approvalResults = [];
+      if (!result.data) {
+        res
+          .status(500)
+          .json({ success: false, message: "No bookings to approve." });
+        return;
+      }
+      for (const booking of result.data.venueBookings ?? []) {
+        const bookingId = booking.bookingId;
+        const approval =
+          await VenueBookingRepository.approveBookingWithTransition(bookingId);
+        approvalResults.push({ bookingId, ...approval });
+        if (!approval.success) {
+          res.status(500).json({
+            success: false,
+            message: `Failed to approve booking ${bookingId}: ${approval.message}`,
+          });
+          return;
+        }
+      }
+      res.status(201).json({
+        success: true,
+        user: {
+          userId: user.userId,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+        },
+        event: result.data ?? [],
+        bookingApprovals: approvalResults,
+        message: `Successfully created PRIVATE event(s) for user and approved booking(s)`,
+      });
+    } catch (error) {
+      next(error);
     }
   }
 }
