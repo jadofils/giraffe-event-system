@@ -23,7 +23,6 @@ import { User } from "./User";
 import { VenueBooking } from "./VenueBooking";
 import { Venue } from "./Venue Tables/Venue";
 import { VenueInvoice } from "./VenueInvoice";
-import { TicketType } from "./TicketType";
 import { OrganizationStatusEnum } from "../interfaces/Enums/OrganizationStatusEnum";
 
 @Entity("organizations")
@@ -133,9 +132,6 @@ export class Organization {
 
   @OneToMany(() => VenueInvoice, (venueInvoice) => venueInvoice.organization)
   venueInvoices!: VenueInvoice[];
-
-  @OneToMany(() => TicketType, (ticketType) => ticketType.organization)
-  ticketTypes!: TicketType[];
 
   @Column({ type: "integer", default: 0 })
   @IsOptional()

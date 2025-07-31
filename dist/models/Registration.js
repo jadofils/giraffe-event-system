@@ -12,12 +12,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Registration = void 0;
 const typeorm_1 = require("typeorm");
 const class_validator_1 = require("class-validator");
-const TicketType_1 = require("./TicketType");
+const EventTicketType_1 = require("./Event Tables/EventTicketType");
 const Event_1 = require("./Event Tables/Event");
 const User_1 = require("./User");
 const Venue_1 = require("./Venue Tables/Venue");
-const Payment_1 = require("./Payment"); // Import Payment
-const Invoice_1 = require("./Invoice"); // Import Invoice
+const Invoice_1 = require("./Invoice");
+const TicketPayment_1 = require("./TicketPayment"); // NEW IMPORT
 let Registration = class Registration {
 };
 exports.Registration = Registration;
@@ -28,72 +28,78 @@ __decorate([
 ], Registration.prototype, "registrationId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Event_1.Event, (event) => event.registrations, {
-        nullable: false,
-        eager: true,
+        nullable: true,
+        onDelete: "SET NULL",
     }),
-    (0, typeorm_1.JoinColumn)({ name: "eventId" }) // Use JoinColumn with name for explicit foreign key column
-    ,
+    (0, typeorm_1.JoinColumn)({ name: "eventId" }),
     __metadata("design:type", Event_1.Event)
 ], Registration.prototype, "event", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], Registration.prototype, "eventId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => User_1.User, (user) => user.registrationsAsAttendee, {
-        nullable: false,
-        eager: true,
+        nullable: true,
+        onDelete: "SET NULL",
     }),
     (0, typeorm_1.JoinColumn)({ name: "userId" }),
     __metadata("design:type", User_1.User)
 ], Registration.prototype, "user", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], Registration.prototype, "userId", void 0);
 __decorate([
-    (0, typeorm_1.Column)("uuid", { array: true, nullable: true, default: () => "'{}'" }) // 'uuid' for element type, array: true for array
-    ,
+    (0, typeorm_1.Column)({ type: "varchar", length: 255, nullable: true }),
+    __metadata("design:type", String)
+], Registration.prototype, "attendeeName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "json", nullable: true }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)({ message: "boughtForIds must be an array" }),
-    (0, class_validator_1.IsUUID)("4", { each: true, message: "Each boughtForId must be a valid UUID" }),
-    (0, class_validator_1.ValidateIf)((o) => o.boughtForIds !== undefined &&
-        o.boughtForIds !== null &&
-        o.boughtForIds.length > 0) // Better validation condition
-    ,
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsUUID)("4", { each: true, message: "Each ID must be a valid UUID" }),
     __metadata("design:type", Array)
 ], Registration.prototype, "boughtForIds", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => User_1.User, (user) => user.registrationsAsBuyer, {
-        nullable: false,
-        eager: true,
+        nullable: true,
+        onDelete: "SET NULL",
     }),
     (0, typeorm_1.JoinColumn)({ name: "buyerId" }),
     __metadata("design:type", User_1.User)
 ], Registration.prototype, "buyer", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], Registration.prototype, "buyerId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => TicketType_1.TicketType, (ticketType) => ticketType.registrations, {
-        nullable: false,
-        eager: true,
+    (0, typeorm_1.ManyToOne)(() => EventTicketType_1.EventTicketType, (eventTicketType) => eventTicketType.registrations, {
+        nullable: true,
+        onDelete: "SET NULL",
     }),
     (0, typeorm_1.JoinColumn)({ name: "ticketTypeId" }),
-    (0, class_validator_1.IsNotEmpty)({ message: "A ticket type is required" }),
-    __metadata("design:type", TicketType_1.TicketType)
+    __metadata("design:type", EventTicketType_1.EventTicketType)
 ], Registration.prototype, "ticketType", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], Registration.prototype, "ticketTypeId", void 0);
 __decorate([
+    (0, typeorm_1.ManyToOne)(() => Venue_1.Venue, (venue) => venue.registrations, {
+        nullable: true,
+        onDelete: "SET NULL",
+    }),
     (0, typeorm_1.JoinColumn)({ name: "venueId" }),
     __metadata("design:type", Venue_1.Venue)
 ], Registration.prototype, "venue", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid" }),
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
+    (0, class_validator_1.IsUUID)("4"),
     __metadata("design:type", String)
 ], Registration.prototype, "venueId", void 0);
 __decorate([
@@ -112,6 +118,12 @@ __decorate([
     (0, class_validator_1.IsDateString)({}, { message: "registrationDate must be a valid ISO date string" }),
     __metadata("design:type", Date)
 ], Registration.prototype, "registrationDate", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "date", nullable: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", String)
+], Registration.prototype, "attendedDate", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: "pending" }),
     (0, class_validator_1.IsNotEmpty)({ message: "paymentStatus is required" }),
@@ -140,17 +152,17 @@ __decorate([
     __metadata("design:type", String)
 ], Registration.prototype, "registrationStatus", void 0);
 __decorate([
-    (0, typeorm_1.OneToOne)(() => Payment_1.Payment, (payment) => payment.registration, {
+    (0, typeorm_1.ManyToOne)(() => TicketPayment_1.TicketPayment, (ticketPayment) => ticketPayment.registrations, {
         cascade: true,
-        onDelete: "SET NULL",
+        onDelete: "SET NULL", // Keep SET NULL or change to CASCADE based on your desired behavior
         nullable: true,
     }),
-    (0, typeorm_1.JoinColumn)({ name: "paymentId" }),
-    __metadata("design:type", Payment_1.Payment)
+    (0, typeorm_1.JoinColumn)({ name: "paymentId" }) // This column will store the ID of the TicketPayment
+    ,
+    __metadata("design:type", TicketPayment_1.TicketPayment)
 ], Registration.prototype, "payment", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "uuid", nullable: true }) // Explicit foreign key column
-    ,
+    (0, typeorm_1.Column)({ type: "uuid", nullable: true }),
     __metadata("design:type", String)
 ], Registration.prototype, "paymentId", void 0);
 __decorate([

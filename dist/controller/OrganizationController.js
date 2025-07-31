@@ -500,7 +500,6 @@ class OrganizationController {
      */
     static updateSupportingDocument(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
             const { id } = req.params;
             if (!id || !OrganizationRepository_1.OrganizationRepository.UUID_REGEX.test(id)) {
                 res
@@ -508,10 +507,18 @@ class OrganizationController {
                     .json({ success: false, message: "Valid organization ID is required" });
                 return;
             }
-            if (!req.file) {
+            const files = req.files;
+            if (!files || files.length === 0) {
                 res.status(400).json({
                     success: false,
-                    message: "Supporting document file is required",
+                    message: "At least one supporting document file is required",
+                });
+                return;
+            }
+            if (files.length > 3) {
+                res.status(400).json({
+                    success: false,
+                    message: "You can upload up to 3 supporting documents only.",
                 });
                 return;
             }
@@ -523,41 +530,86 @@ class OrganizationController {
                 "image/gif",
                 "image/webp",
             ];
-            if (!allowedTypes.includes(req.file.mimetype)) {
-                res.status(400).json({
-                    success: false,
-                    message: "Only PDF and image files are allowed as supporting documents.",
-                });
-                return;
+            for (const file of files) {
+                if (!allowedTypes.includes(file.mimetype)) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Only PDF and image files are allowed as supporting documents.",
+                    });
+                    return;
+                }
             }
+            let uploadedFileUrls = [];
+            const uploadedFilesToCleanup = [];
             try {
-                // Fetch the current organization to get the old document URL
+                // Fetch the current organization to get the old document URLs
                 const orgResult = yield OrganizationRepository_1.OrganizationRepository.getById(id);
-                const oldDocUrl = (_b = (_a = orgResult.data) === null || _a === void 0 ? void 0 : _a.supportingDocuments) === null || _b === void 0 ? void 0 : _b[0]; // Assuming only one supporting document for now
                 if (!orgResult.success || !orgResult.data) {
                     res
                         .status(404)
                         .json({ success: false, message: "Organization not found" });
                     return;
                 }
-                if (oldDocUrl) {
-                    const resourceType = oldDocUrl.endsWith(".pdf") ? "raw" : "image";
+                const oldDocUrls = orgResult.data.supportingDocuments || [];
+                // Delete old documents from Cloudinary
+                for (const oldUrl of oldDocUrls) {
+                    if (oldUrl) {
+                        const resourceType = oldUrl.endsWith(".pdf") ? "raw" : "image";
+                        try {
+                            yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(oldUrl, resourceType);
+                            console.log(`✅ Deleted old document: ${oldUrl}`);
+                        }
+                        catch (deleteErr) {
+                            console.warn(`❌ Failed to delete old document ${oldUrl}:`, deleteErr);
+                            // Don't fail the entire operation if old document deletion fails
+                        }
+                    }
+                }
+                // Upload new documents
+                for (const file of files) {
                     try {
-                        yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(oldDocUrl, resourceType);
+                        const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(file.buffer, "uploads/organization-supporting-document");
+                        uploadedFileUrls.push(uploadResult.url);
+                        uploadedFilesToCleanup.push({
+                            url: uploadResult.url,
+                            type: file.mimetype.startsWith("image/") ? "image" : "raw",
+                        });
                     }
-                    catch (deleteErr) {
-                        console.warn("❌ Failed to delete old document, but update was successful:", deleteErr);
-                        // Don't fail the entire operation if old document deletion fails
+                    catch (uploadError) {
+                        console.error("New supporting document upload error:", uploadError);
+                        // Clean up newly uploaded files if any upload fails
+                        for (const cleanupFile of uploadedFilesToCleanup) {
+                            try {
+                                yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(cleanupFile.url, cleanupFile.type);
+                            }
+                            catch (cleanupErr) {
+                                console.error(`Failed to cleanup newly uploaded file ${cleanupFile.url}:`, cleanupErr);
+                            }
+                        }
+                        res.status(500).json({
+                            success: false,
+                            message: "Failed to upload new supporting documents",
+                            error: uploadError instanceof Error
+                                ? uploadError.message
+                                : "Unknown error",
+                        });
+                        return;
                     }
                 }
-                else {
-                    console.log("ℹ️  No old document to delete");
-                }
-                const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(req.file.buffer, "uploads/organization-supporting-document");
+                // Update organization with new document URLs
                 const result = yield OrganizationRepository_1.OrganizationRepository.update(id, {
-                    supportingDocuments: [uploadResult.url],
+                    supportingDocuments: uploadedFileUrls,
                 });
                 if (!result.success) {
+                    // If organization update fails, delete the newly uploaded files
+                    for (const cleanupFile of uploadedFilesToCleanup) {
+                        try {
+                            yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(cleanupFile.url, cleanupFile.type);
+                        }
+                        catch (cleanupErr) {
+                            console.error(`Failed to cleanup newly uploaded file ${cleanupFile.url}:`, cleanupErr);
+                        }
+                    }
                     res.status(400).json(result);
                     return;
                 }
@@ -567,13 +619,23 @@ class OrganizationController {
                 res.status(200).json({
                     success: true,
                     data: result.data,
-                    message: "Supporting document updated successfully.",
+                    message: "Supporting documents updated successfully.",
                 });
             }
             catch (error) {
+                console.error(`[OrganizationController UpdateSupportingDocument Error] ID: ${id}:`, error);
+                // Clean up any newly uploaded files in case of unexpected errors
+                for (const cleanupFile of uploadedFilesToCleanup) {
+                    try {
+                        yield CloudinaryUploadService_1.CloudinaryUploadService.deleteFromCloudinary(cleanupFile.url, cleanupFile.type);
+                    }
+                    catch (cleanupErr) {
+                        console.error(`Failed to cleanup newly uploaded file ${cleanupFile.url}:`, cleanupErr);
+                    }
+                }
                 res.status(500).json({
                     success: false,
-                    message: "Failed to update supporting document.",
+                    message: "Failed to update supporting documents.",
                     error: error instanceof Error ? error.message : "Unknown error",
                 });
             }

@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { UserRepository } from "../../repositories/UserRepository";
 import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
-import PasswordService from "../../services/emails/EmailService"; // Assuming this is correct
+import { EmailService } from "../../services/emails/EmailService"; // Correct import for EmailService
 import { Role } from "../../models/Role";
 import { Organization } from "../../models/Organization"; // Import Organization model
 import { UserInterface } from "../../interfaces/UserInterface"; // Import UserInterface
@@ -201,9 +201,9 @@ export class UserController {
         // Only generate and set a default password if user did NOT provide one
         if (!password) {
           try {
-            generatedPassword = PasswordService.generatePassword();
+            generatedPassword = EmailService.generatePassword();
             const emailSent =
-              await PasswordService.sendDefaultPasswordWithPassword(
+              await EmailService.sendDefaultPasswordWithPassword(
                 email!,
                 completeUser.lastName,
                 completeUser.firstName,

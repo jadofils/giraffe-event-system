@@ -22,12 +22,13 @@ import {
   IsArray,
   ValidateIf,
 } from "class-validator";
-import { TicketType } from "./TicketType";
+import { EventTicketType } from "./Event Tables/EventTicketType";
 import { Event } from "./Event Tables/Event";
 import { User } from "./User";
 import { Venue } from "./Venue Tables/Venue";
-import { Payment } from "./Payment"; // Import Payment
-import { Invoice } from "./Invoice"; // Import Invoice
+import { Payment } from "./Payment"; // Keep this import for now if it's used elsewhere, but we'll remove the OneToOne to it
+import { Invoice } from "./Invoice";
+import { TicketPayment } from "./TicketPayment"; // NEW IMPORT
 
 @Entity("registrations")
 export class Registration {
@@ -36,74 +37,83 @@ export class Registration {
   registrationId!: string;
 
   @ManyToOne(() => Event, (event) => event.registrations, {
-    nullable: false,
-    eager: true,
+    nullable: true,
+    onDelete: "SET NULL",
   })
-  @JoinColumn({ name: "eventId" }) // Use JoinColumn with name for explicit foreign key column
+  @JoinColumn({ name: "eventId" })
   event!: Event;
 
   // Direct foreign key column for eventId
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: true })
+  @IsUUID("4")
   eventId!: string;
 
   @ManyToOne(() => User, (user) => user.registrationsAsAttendee, {
-    nullable: false,
-    eager: true,
+    nullable: true,
+    onDelete: "SET NULL",
   })
   @JoinColumn({ name: "userId" })
   user!: User;
 
   // Direct foreign key column for userId
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: true })
+  @IsUUID("4")
   userId!: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  attendeeName?: string; // Name of the person attending this specific ticket
 
   // --- CRUCIAL CHANGE HERE ---
   // Define the column to use PostgreSQL's native UUID array type
-  @Column("uuid", { array: true, nullable: true, default: () => "'{}'" }) // 'uuid' for element type, array: true for array
+  @Column({ type: "json", nullable: true })
   @IsOptional()
-  @IsArray({ message: "boughtForIds must be an array" })
-  @IsUUID("4", { each: true, message: "Each boughtForId must be a valid UUID" })
-  @ValidateIf(
-    (o) =>
-      o.boughtForIds !== undefined &&
-      o.boughtForIds !== null &&
-      o.boughtForIds.length > 0
-  ) // Better validation condition
-  boughtForIds?: string[];
+  @IsArray()
+  @IsUUID("4", { each: true, message: "Each ID must be a valid UUID" })
+  boughtForIds?: string[]; // IDs of users this ticket was bought for
 
   @ManyToOne(() => User, (user) => user.registrationsAsBuyer, {
-    nullable: false,
-    eager: true,
+    nullable: true,
+    onDelete: "SET NULL",
   })
   @JoinColumn({ name: "buyerId" })
-  buyer!: User;
+  buyer?: User; // The user who made the purchase
 
   // Direct foreign key column for buyerId
-  @Column({ type: "uuid" })
-  buyerId!: string;
+  @Column({ type: "uuid", nullable: true })
+  @IsUUID("4")
+  buyerId?: string;
 
-  @ManyToOne(() => TicketType, (ticketType) => ticketType.registrations, {
-    nullable: false,
-    eager: true,
-  })
+  @ManyToOne(
+    () => EventTicketType,
+    (eventTicketType) => eventTicketType.registrations,
+    {
+      nullable: true,
+      onDelete: "SET NULL",
+    }
+  )
   @JoinColumn({ name: "ticketTypeId" })
-  @IsNotEmpty({ message: "A ticket type is required" })
-  ticketType!: TicketType;
+  ticketType!: EventTicketType;
 
   // Direct foreign key column for ticketTypeId
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: true })
+  @IsUUID("4")
   ticketTypeId!: string;
 
   // @ManyToOne(() => Venue, (venue) => venue.registrations, {
   //   nullable: false,
   //   eager: true,
   // })
+  @ManyToOne(() => Venue, (venue) => venue.registrations, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
   @JoinColumn({ name: "venueId" })
-  venue!: Venue;
+  venue?: Venue;
 
   // Direct foreign key column for venueId
-  @Column({ type: "uuid" })
-  venueId!: string;
+  @Column({ type: "uuid", nullable: true })
+  @IsUUID("4")
+  venueId?: string;
 
   @Column({ type: "int" })
   @IsNumber({}, { message: "noOfTickets must be a number" })
@@ -120,6 +130,11 @@ export class Registration {
     { message: "registrationDate must be a valid ISO date string" }
   )
   registrationDate!: Date; // Change to Date type to match TypeORM's handling of timestamptz
+
+  @Column({ type: "date", nullable: true })
+  @IsOptional()
+  @IsDateString()
+  attendedDate?: string; // The specific date this ticket is for (if event is multi-day)
 
   @Column({ default: "pending" })
   @IsNotEmpty({ message: "paymentStatus is required" })
@@ -146,16 +161,20 @@ export class Registration {
   @Column({ type: "varchar", length: 50, default: "active" })
   registrationStatus!: string;
 
-  @OneToOne(() => Payment, (payment) => payment.registration, {
-    cascade: true,
-    onDelete: "SET NULL",
-    nullable: true,
-  })
-  @JoinColumn({ name: "paymentId" })
-  payment?: Payment;
+  @ManyToOne(
+    () => TicketPayment,
+    (ticketPayment) => ticketPayment.registrations,
+    {
+      cascade: true,
+      onDelete: "SET NULL", // Keep SET NULL or change to CASCADE based on your desired behavior
+      nullable: true,
+    }
+  )
+  @JoinColumn({ name: "paymentId" }) // This column will store the ID of the TicketPayment
+  payment?: TicketPayment;
 
-  @Column({ type: "uuid", nullable: true }) // Explicit foreign key column
-  paymentId?: string; // Add paymentId here, matched by @JoinColumn
+  @Column({ type: "uuid", nullable: true })
+  paymentId?: string;
 
   @OneToOne(() => Invoice, (invoice) => invoice.registration, {
     cascade: true,

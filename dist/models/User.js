@@ -117,10 +117,6 @@ __decorate([
     __metadata("design:type", Array)
 ], User.prototype, "invoices", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => Registration_1.Registration, (registration) => registration.user),
-    __metadata("design:type", Array)
-], User.prototype, "registrations", void 0);
-__decorate([
     (0, typeorm_1.OneToMany)(() => Event_1.Event, (event) => event.createdBy),
     __metadata("design:type", Array)
 ], User.prototype, "createdEvents", void 0);

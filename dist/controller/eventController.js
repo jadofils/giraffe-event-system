@@ -24,10 +24,11 @@ const typeorm_1 = require("typeorm");
 const VenueBooking_1 = require("../models/VenueBooking");
 const Event_1 = require("../models/Event Tables/Event");
 const CloudinaryUploadService_1 = require("../services/CloudinaryUploadService");
+const TicketPurchaseService_1 = require("../services/tickets/TicketPurchaseService"); // Import the updated service
 class EventController {
     static createEvent(req, res, next) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             const uploadedCloudinaryUrls = [];
             try {
                 if (!req.body) {
@@ -106,7 +107,7 @@ class EventController {
                             venueIds = parsed;
                         }
                     }
-                    catch (_b) {
+                    catch (_c) {
                         // Not a JSON array, leave as is
                     }
                 }
@@ -272,6 +273,7 @@ class EventController {
                 const result = yield eventRepository_1.EventRepository.createEventWithRelations(eventData, selectedVenues, visibilityScope === "PUBLIC" && Array.isArray(finalGuests)
                     ? finalGuests
                     : [], bookingDates);
+                // After event creation
                 if (!result.success) {
                     res.status(400).json({ success: false, message: result.message });
                     return;
@@ -290,7 +292,7 @@ class EventController {
                 res.status(201).json({
                     success: true,
                     data: result.data,
-                    message: `Successfully created ${((_a = result.data) === null || _a === void 0 ? void 0 : _a.length) || 0} event(s)`,
+                    message: `Successfully created event for ${((_b = (_a = result.data) === null || _a === void 0 ? void 0 : _a.eventVenues) === null || _b === void 0 ? void 0 : _b.length) || 0} venue(s)`,
                     transitionWarnings: transitionWarnings.length > 0 ? transitionWarnings : undefined,
                 });
                 return;
@@ -1287,73 +1289,66 @@ class EventController {
                     const venue = booking.venue;
                     const bookingCondition = venue.bookingConditions[0];
                     const baseVenueAmount = ((_a = venue.venueVariables[0]) === null || _a === void 0 ? void 0 : _a.venueAmount) || 0;
-                    // Calculate total hours across all booking dates
-                    const totalHours = booking.bookingDates.reduce((sum, date) => {
-                        var _a;
-                        return sum + (((_a = date.hours) === null || _a === void 0 ? void 0 : _a.length) || 1); // If no hours specified, count as 1 day
-                    }, 0);
-                    // Calculate amounts based on venue booking type
-                    const venueAmount = venue.bookingType === "HOURLY"
-                        ? baseVenueAmount * totalHours
-                        : baseVenueAmount;
+                    let venueAmount = 0;
+                    let totalHours = 0;
+                    if (venue.bookingType === "HOURLY") {
+                        totalHours = booking.bookingDates.reduce((sum, date) => { var _a; return sum + (((_a = date.hours) === null || _a === void 0 ? void 0 : _a.length) || 1); }, 0);
+                        venueAmount = baseVenueAmount * totalHours;
+                    }
+                    else if (venue.bookingType === "DAILY") {
+                        venueAmount = baseVenueAmount * booking.bookingDates.length;
+                    }
+                    else {
+                        venueAmount = baseVenueAmount;
+                    }
                     const depositAmount = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent)
                         ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
                         : venueAmount;
+                    // Fetch all payments for this booking
+                    const paymentRepo = Database_1.AppDataSource.getRepository(require("../models/VenueBookingPayment").VenueBookingPayment);
+                    const payments = yield paymentRepo.find({
+                        where: { bookingId: booking.bookingId },
+                    });
+                    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
+                    const remainingAmount = venueAmount - totalPaid;
                     totalAmount += venueAmount;
                     totalDepositRequired += depositAmount;
-                    // Get earliest booking date for this booking
-                    const earliestDate = new Date(Math.min(...booking.bookingDates.map((d) => new Date(d.date).getTime())));
-                    const paymentDeadline = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent)
-                        ? new Date(earliestDate.getTime() -
-                            bookingCondition.paymentComplementTimeBeforeEvent *
-                                24 *
-                                60 *
-                                60 *
-                                1000)
-                        : earliestDate;
-                    bookingDetails.push({
-                        bookingId: booking.bookingId,
-                        eventId: (_b = booking.event) === null || _b === void 0 ? void 0 : _b.eventId,
-                        eventName: (_c = booking.event) === null || _c === void 0 ? void 0 : _c.eventName,
-                        venue: {
-                            venueId: venue.venueId,
-                            venueName: venue.venueName,
-                            bookingType: venue.bookingType,
-                            baseAmount: baseVenueAmount,
-                            totalHours: totalHours,
-                            totalAmount: venueAmount,
-                            depositRequired: {
+                    bookingDetails.push(Object.assign(Object.assign({}, booking), { eventId: (_b = booking.event) === null || _b === void 0 ? void 0 : _b.eventId, eventName: (_c = booking.event) === null || _c === void 0 ? void 0 : _c.eventName, venue: Object.assign(Object.assign({}, venue), { depositRequired: {
                                 percentage: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent) || 100,
                                 amount: depositAmount,
                                 description: venue.bookingType === "HOURLY"
                                     ? `Initial deposit required to secure the booking (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount for ${totalHours} hours)`
-                                    : "Initial deposit required to secure the booking",
-                            },
-                            paymentCompletionRequired: {
+                                    : `Initial deposit required to secure the booking (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount for ${booking.bookingDates.length} days)`,
+                            }, paymentCompletionRequired: {
                                 daysBeforeEvent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0,
-                                amount: venueAmount - depositAmount,
-                                deadline: paymentDeadline,
+                                deadline: (() => {
+                                    const earliestDate = new Date(Math.min(...booking.bookingDates.map((d) => new Date(d.date).getTime())));
+                                    return (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent)
+                                        ? new Date(earliestDate.getTime() -
+                                            bookingCondition.paymentComplementTimeBeforeEvent *
+                                                24 *
+                                                60 *
+                                                60 *
+                                                1000)
+                                        : earliestDate;
+                                })(),
                                 description: `Remaining payment must be completed ${(bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0} days before the event`,
-                            },
-                            bookingDates: booking.bookingDates,
-                            bookingConditions: {
+                            }, bookingDates: booking.bookingDates, bookingConditions: {
                                 depositRequiredPercent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent) || 100,
                                 paymentComplementTimeBeforeEvent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0,
                                 description: bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.descriptionCondition,
                                 notaBene: bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.notaBene,
                                 transitionTime: bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.transitionTime,
-                            },
-                        },
-                        paymentSummary: {
+                            }, baseAmount: baseVenueAmount, totalHours: venue.bookingType === "HOURLY" ? totalHours : null, totalAmount: venueAmount }), paymentSummary: {
                             totalAmount: venueAmount,
-                            depositAmount: depositAmount,
-                            remainingAmount: venueAmount - depositAmount,
+                            requiredDepositAmount: depositAmount,
+                            totalPaid: totalPaid,
+                            remainingAmount: remainingAmount,
                             bookingStatus: booking.bookingStatus,
                             isPaid: booking.isPaid,
                             pricePerHour: venue.bookingType === "HOURLY" ? baseVenueAmount : null,
                             totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
-                        },
-                    });
+                        } }));
                 }
                 res.status(200).json({
                     success: true,
@@ -1363,12 +1358,11 @@ class EventController {
                         totals: {
                             totalAmount,
                             totalDepositRequired,
-                            totalRemainingAmount: totalAmount - totalDepositRequired,
                         },
                         paymentInstructions: {
                             description: "Please make payment to secure your bookings",
                             depositDeadline: new Date(Math.min(...bookings.map((b) => new Date(Math.min(...b.bookingDates.map((d) => new Date(d.date).getTime()))).getTime()))),
-                            paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY"],
+                            paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY", "PayPal"],
                         },
                     },
                 });
@@ -1805,14 +1799,18 @@ class EventController {
                 // Approve all created bookings
                 const VenueBookingRepository = require("../repositories/VenueBookingRepository").VenueBookingRepository;
                 const approvalResults = [];
-                for (const created of (_a = result.data) !== null && _a !== void 0 ? _a : []) {
-                    const bookingId = created.venueBooking.bookingId;
+                if (!result.data) {
+                    res
+                        .status(500)
+                        .json({ success: false, message: "No bookings to approve." });
+                    return;
+                }
+                for (const booking of (_a = result.data.venueBookings) !== null && _a !== void 0 ? _a : []) {
+                    const bookingId = booking.bookingId;
                     const approval = yield VenueBookingRepository.approveBookingWithTransition(bookingId);
                     approvalResults.push(Object.assign({ bookingId }, approval));
                     if (!approval.success) {
-                        res
-                            .status(500)
-                            .json({
+                        res.status(500).json({
                             success: false,
                             message: `Failed to approve booking ${bookingId}: ${approval.message}`,
                         });
@@ -1832,6 +1830,55 @@ class EventController {
                     bookingApprovals: approvalResults,
                     message: `Successfully created PRIVATE event(s) for user and approved booking(s)`,
                 });
+            }
+            catch (error) {
+                next(error);
+            }
+        });
+    }
+    static purchaseTicket(req, res, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                const { recipientEmail, ticketsToPurchase, paymentDetails } = req.body;
+                const authenticatedReq = req;
+                const userId = (_a = authenticatedReq.user) === null || _a === void 0 ? void 0 : _a.userId;
+                if (!userId) {
+                    res.status(401).json({
+                        success: false,
+                        message: "Unauthorized: User ID not found.",
+                    });
+                    return;
+                }
+                if (!recipientEmail ||
+                    !ticketsToPurchase ||
+                    !Array.isArray(ticketsToPurchase) ||
+                    ticketsToPurchase.length === 0 ||
+                    !paymentDetails) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Missing required fields: recipientEmail, ticketsToPurchase (array of {ticketTypeId, attendeeName}), paymentDetails.",
+                    });
+                    return;
+                }
+                // Basic validation for each ticket in the array
+                for (const ticket of ticketsToPurchase) {
+                    if (!ticket.ticketTypeId || !ticket.attendeeName) {
+                        res.status(400).json({
+                            success: false,
+                            message: "Each ticket in 'ticketsToPurchase' must have a 'ticketTypeId' and 'attendeeName'.",
+                        });
+                        return;
+                    }
+                }
+                const result = yield TicketPurchaseService_1.TicketPurchaseService.purchaseTicket(userId, // buyerUserId
+                recipientEmail, ticketsToPurchase, paymentDetails);
+                if (result.success) {
+                    res.status(200).json(result);
+                }
+                else {
+                    res.status(400).json(result);
+                }
             }
             catch (error) {
                 next(error);

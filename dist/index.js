@@ -24,16 +24,6 @@ function bootstrap() {
             // Initialize database connection
             yield (0, Database_1.initializeDatabase)();
             console.log("Database initialized successfully."); // Add a success log
-            // Seed Independent organization and assign to all users
-            try {
-                //  const seeder = new IndependentOrganizationSeeder();
-                // //Pass an empty object as SeederFactoryManager (not used in this seeder)
-                // //await seeder.run(AppDataSource, {} as any);
-                //  console.log("Independent organization seeded and assigned to all users.");
-            }
-            catch (seedError) {
-                console.error("Failed to seed Independent organization:", seedError);
-            }
             // Seed admin role
             try {
                 //await AdminRoleSeeder.seed();

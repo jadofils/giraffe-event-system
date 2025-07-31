@@ -55,6 +55,7 @@ const PermissionRoutes_1 = __importDefault(require("./PermissionRoutes"));
 const VenueRoutes_1 = require("./VenueRoutes");
 const VenueBookingRoutes_1 = __importDefault(require("./VenueBookingRoutes"));
 const NotificationRoutes_1 = __importDefault(require("./NotificationRoutes"));
+const EventTicketTypeRoutes_1 = __importDefault(require("./EventTicketTypeRoutes"));
 // import RegistrationRoutes from "./RegistrationRoutes";
 const router = (0, express_1.Router)();
 router.use("/static", express_1.default.static(path_1.default.join(__dirname, "..", "..", "uploads"))); // Adjust path as needed
@@ -75,6 +76,8 @@ router.use("/venue-bookings", VenueBookingRoutes_1.default);
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes_1.default);
 router.use("/notifications", NotificationRoutes_1.default);
+// Use EventTicketTypeRoutes
+router.use("/events", EventTicketTypeRoutes_1.default);
 //endpoints of the payments
 // Add PermissionRoutes
 router.use("/permissions", PermissionRoutes_1.default);

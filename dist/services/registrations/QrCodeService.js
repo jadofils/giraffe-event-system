@@ -15,19 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.QrCodeService = void 0;
 const uuid_1 = require("uuid");
 const qrcode_1 = __importDefault(require("qrcode"));
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
-const QR_CODES_UPLOAD_BASE_DIR = path_1.default.join(__dirname, '..', '..', 'src', 'Uploads', 'qrcodes');
-if (!fs_1.default.existsSync(QR_CODES_UPLOAD_BASE_DIR)) {
-    try {
-        fs_1.default.mkdirSync(QR_CODES_UPLOAD_BASE_DIR, { recursive: true });
-        console.log(`[QrCodeService] Successfully created directory: ${QR_CODES_UPLOAD_BASE_DIR}`);
-    }
-    catch (dirError) {
-        console.error(`[QrCodeService] Failed to create directory ${QR_CODES_UPLOAD_BASE_DIR}:`, dirError);
-        throw new Error(`Failed to initialize QR code upload directory: ${dirError}`);
-    }
-}
+const CloudinaryUploadService_1 = require("../../services/CloudinaryUploadService");
 class QrCodeService {
     static generateQrCode(registrationId, userId, eventId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -39,37 +27,52 @@ class QrCodeService {
                     timestamp: new Date().toISOString(),
                     uniqueHash: (0, uuid_1.v4)(),
                 };
-                const qrDataString = Buffer.from(JSON.stringify(qrPayload)).toString('base64');
-                const filename = `qrcode-${registrationId}.png`;
-                const absoluteFilePath = path_1.default.join(QR_CODES_UPLOAD_BASE_DIR, filename);
-                console.log(`[QrCodeService] Generating QR code for registration ${registrationId} at: ${absoluteFilePath}`);
-                yield qrcode_1.default.toFile(absoluteFilePath, qrDataString);
-                console.log(`[QrCodeService] Successfully saved QR code to: ${absoluteFilePath}`);
-                return filename;
+                const qrDataString = Buffer.from(JSON.stringify(qrPayload)).toString("base64");
+                // Generate QR code as a data URL (base64 string)
+                const qrCodeDataUrl = yield qrcode_1.default.toDataURL(qrDataString);
+                // Upload to Cloudinary
+                const uploadResult = yield CloudinaryUploadService_1.CloudinaryUploadService.uploadBuffer(Buffer.from(qrCodeDataUrl.split(",")[1], "base64"), // Extract base64 data and convert to buffer
+                "qrcodes", // Folder in Cloudinary
+                `qrcode-${registrationId}` // Public ID
+                );
+                console.log(`[QrCodeService] Successfully uploaded QR code to: ${uploadResult.url}`);
+                return uploadResult.url;
             }
             catch (error) {
                 console.error(`[QrCodeService] Error generating QR code for ${registrationId}:`, error);
-                throw new Error('Failed to generate and save QR code image.');
+                throw new Error("Failed to generate and save QR code image.");
             }
         });
     }
-    static validateQrCode(qrDataString) {
+    static validateQrCode(qrCodeData) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const decodedString = Buffer.from(qrDataString, 'base64').toString('utf8');
+                // QR code data is Base64 encoded JSON payload
+                const decodedString = Buffer.from(qrCodeData, "base64").toString("utf8");
                 const qrPayload = JSON.parse(decodedString);
-                if (qrPayload && qrPayload.registrationId && qrPayload.userId && qrPayload.eventId) {
-                    return {
-                        registrationId: qrPayload.registrationId,
-                        userId: qrPayload.userId,
-                        eventId: qrPayload.eventId,
-                    };
+                // Basic validation of payload structure
+                if (!qrPayload.registrationId ||
+                    !qrPayload.userId ||
+                    !qrPayload.eventId ||
+                    !qrPayload.uniqueHash) {
+                    return { success: false, message: "Invalid QR code data structure." };
                 }
-                return null;
+                // You can add more complex validation here:
+                // - Check if registrationId exists in your database
+                // - Check if the ticket is still valid (not expired, not used)
+                // - Check if userId and eventId match the registration record
+                return {
+                    success: true,
+                    message: "QR Code data is valid.",
+                    data: qrPayload,
+                };
             }
             catch (error) {
-                console.error('Error validating QR code:', error);
-                return null;
+                console.error("Error validating QR code:", error);
+                return {
+                    success: false,
+                    message: "Failed to parse or validate QR code data.",
+                };
             }
         });
     }

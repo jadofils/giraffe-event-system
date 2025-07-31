@@ -121,9 +121,6 @@ export class User {
   @OneToMany(() => Invoice, (invoice) => invoice.user)
   invoices!: Invoice[];
 
-  @OneToMany(() => Registration, (registration) => registration.user)
-  registrations!: Registration[];
-
   @OneToMany(() => Event, (event) => event.createdBy)
   createdEvents!: Event[];
 

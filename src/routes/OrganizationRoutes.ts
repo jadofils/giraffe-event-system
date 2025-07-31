@@ -26,7 +26,7 @@ router.post(
   "/",
   authenticate,
   upload.fields([
-    { name: "supportingDocument", maxCount: 3},
+    { name: "supportingDocument", maxCount: 3 },
     { name: "logo", maxCount: 1 },
   ]),
   OrganizationController.create
@@ -67,7 +67,7 @@ router.patch(
 router.patch(
   "/:id/supporting-document",
   authenticate,
-  upload.single("supportingDocument"),
+  upload.array("supportingDocument", 3), // Changed from upload.single to upload.array with maxCount
   OrganizationController.updateSupportingDocument
 );
 

@@ -1,452 +1,381 @@
-// import { NextFunction, Request, Response, RequestHandler } from 'express';
-// import { RegistrationRepository } from '../repositories/RegistrationRepository';
-// import { v4 as uuidv4 } from 'uuid';
-// import { RegistrationService } from '../services/registrations/ValidationRegistrationService';
-// import { QrCodeService } from '../services/registrations/QrCodeService';
-// import path from 'path';
-// import fs from 'fs';
-// import { RegistrationRequestInterface, RegistrationResponseInterface } from '../interfaces/RegistrationInterface';
-// import { PaymentStatus } from '../interfaces/Enums/PaymentStatusEnum';
-// import { UserInterface } from '../interfaces/UserInterface';
-// import { AppDataSource } from '../config/Database';
-// import { User } from '../models/User';
+import { Request, Response } from "express";
+import { QrCodeService } from "../services/registrations/QrCodeService";
+import { AppDataSource } from "../config/Database";
+import { Registration } from "../models/Registration";
+import { EventVenue } from "../models/Event Tables/EventVenue";
 
-// declare global {
-//   namespace Express {
-//     interface UserPayload {
-//       userId: string;
-//       roles?: { roleName: string }[];
-//     }
-//     interface Request {
-//       user: UserInterface & { id: string; isAdmin?: boolean };
-//     }
-//   }
-// }
+export class RegistrationController {
+  static async validateTicketQrCode(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { qrCodeData } = req.body; // Expecting the raw Base64 string from the QR code
 
-// export class RegistrationController {
-//   // Create Registration
-//   static async createRegistration(req: Request, res: Response): Promise<void> {
-//     try {
-//       const registrationData = { ...req.body } as Partial<RegistrationRequestInterface>;
-//       const loggedInUserId = req.user?.userId;
+      if (!qrCodeData) {
+        res
+          .status(400)
+          .json({ success: false, message: "QR code data is required." });
+        return;
+      }
 
-//       if (!loggedInUserId) {
-//         res.status(401).json({ success: false, message: 'Unauthorized: User information missing.' });
-//         return;
-//       }
+      // The qrCodeData from the scanned QR code is the Base64 encoded payload
+      const validationResult = await QrCodeService.validateQrCode(qrCodeData);
 
-//       // Remove userId from body if present
-//       delete registrationData.userId;
+      if (!validationResult.success || !validationResult.data) {
+        res
+          .status(400)
+          .json({ success: false, message: validationResult.message });
+        return;
+      }
 
-//       // Always use userId from token
-//       const userId = loggedInUserId;
-//       const buyerId = registrationData.buyerId ?? loggedInUserId;
-//       const registrationId = uuidv4();
+      // Fetch more details about the registration for the response
+      const registrationRepo = AppDataSource.getRepository(Registration);
+      const registration = await registrationRepo.findOne({
+        where: { registrationId: validationResult.data.registrationId },
+        relations: ["event", "ticketType", "user"], // Load necessary relations
+      });
 
-//       // Ensure noOfTickets is provided
-//       if (registrationData.noOfTickets === undefined || registrationData.noOfTickets === null) {
-//         res.status(400).json({ success: false, message: 'Number of tickets (noOfTickets) is required.' });
-//         return;
-//       }
+      if (!registration) {
+        res.status(404).json({
+          success: false,
+          message: "Registration not found after QR validation.",
+        });
+        return;
+      }
 
-//       const dataForService: RegistrationRequestInterface = {
-//         ...registrationData,
-//         registrationId,
-//         userId, // always from token
-//         buyerId,
-//         paymentStatus: registrationData.paymentStatus || PaymentStatus.PENDING,
-//         attended: registrationData.attended || false,
-//         boughtForIds: registrationData.boughtForIds || [],
-//         eventId: registrationData.eventId ?? '',
-//         ticketTypeId: registrationData.ticketTypeId ?? '',
-//         venueId: registrationData.venueId ?? '',
-//         noOfTickets: Number(registrationData.noOfTickets),
-//         registrationDate: registrationData.registrationDate || new Date().toISOString(),
-//       };
+      // Explicitly fetch EventVenues for the event to ensure venue details are loaded
+      const eventVenueRepo = AppDataSource.getRepository(EventVenue);
+      const eventVenues = await eventVenueRepo.find({
+        where: { eventId: registration.eventId },
+        relations: ["venue"], // Load the venue for each EventVenue
+      });
 
-//       // Step 1: Validate IDs
-//       const validationResult = await RegistrationService.validateRegistrationIds(dataForService);
-//       if (!validationResult.valid) {
-//         res.status(400).json({
-//           success: false,
-//           message: validationResult.message,
-//           errors: validationResult.errors,
-//         });
-//         return;
-//       }
+      // Check if eventDate is an array and access the first element, or provide a fallback
+      const eventDate =
+        registration.event.bookingDates &&
+        registration.event.bookingDates.length > 0
+          ? registration.event.bookingDates[0].date
+          : null;
 
-//       // Step 2: Validate event capacity
-//       const capacityValidation = await RegistrationService.validateEventCapacity(
-//         dataForService.eventId,
-//         dataForService.venueId,
-//         dataForService.noOfTickets
-//       );
-//       if (!capacityValidation.valid) {
-//         res.status(400).json({
-//           success: false,
-//           message: capacityValidation.message,
-//         });
-//         return;
-//       }
+      res.status(200).json({
+        success: true,
+        message: "QR Code validated successfully!",
+        data: {
+          qrPayload: validationResult.data, // The decoded QR payload
+          registration: {
+            registrationId: registration.registrationId,
+            attendeeName: registration.attendeeName,
+            ticketTypeName: registration.ticketType.name,
+            eventName: registration.event.eventName,
+            eventDate: registration.attendedDate || null, // Specific date for THIS ticket
+            allEventBookingDates: registration.event?.bookingDates || [], // All dates for the event
+            venueName: eventVenues[0]?.venue?.venueName || "N/A", // Use explicitly fetched venue name
+            paymentStatus: registration.paymentStatus,
+            registrationStatus: registration.registrationStatus,
+            qrCode: registration.qrCode,
+            buyerId: registration.buyerId,
+            attendedDate: registration.attendedDate || null, // Include the attended date
+            attended: registration.attended, // Include the attended status
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error validating QR code:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred during QR code validation.",
+      });
+    }
+  }
 
-//       // Step 3: Validate ticket cost
-//       const ticketCostValidation = await RegistrationService.validateAndCalculateTicketCost(
-//         dataForService.ticketTypeId,
-//         dataForService.noOfTickets
-//       );
-//       if (!ticketCostValidation.valid || ticketCostValidation.totalCost === undefined) {
-//         res.status(400).json({
-//           success: false,
-//           message: ticketCostValidation.message || 'Could not validate ticket type or calculate cost.',
-//         });
-//         return;
-//       }
+  static async getTicketsByUserId(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
 
-//       dataForService.totalCost = ticketCostValidation.totalCost;
+      if (!userId) {
+        res
+          .status(400)
+          .json({ success: false, message: "User ID is required." });
+        return;
+      }
 
-//       // Step 4: Check for duplicates
-//       const duplicateValidation = await RegistrationService.validateDuplicateRegistration(
-//         dataForService.eventId,
-//         dataForService.userId,
-//         dataForService.buyerId ?? '',
-//         dataForService.boughtForIds
-//       );
-//       if (!duplicateValidation.valid) {
-//         res.status(400).json({
-//           success: false,
-//           message: duplicateValidation.message,
-//         });
-//         return;
-//       }
+      const registrationRepo = AppDataSource.getRepository(Registration);
+      const tickets = await registrationRepo.find({
+        where: { buyerId: userId },
+        relations: ["event", "ticketType", "venue", "payment"], // Load all necessary relations
+        order: { createdAt: "DESC" },
+      });
 
-//       // Only now create the registration
-//       const registration = await RegistrationService.createRegistration(dataForService);
-//       res.status(201).json({ success: true, data: registration });
-//     } catch (error: any) {
-//       console.error('Error creating registration:', error);
-//       res.status(500).json({
-//         success: false,
-//         message: 'Failed to create registration due to an unexpected server error.',
-//         error: error.message,
-//       });
-//     }
-//   }
+      if (!tickets || tickets.length === 0) {
+        res
+          .status(404)
+          .json({ success: false, message: "No tickets found for this user." });
+        return;
+      }
 
-//   // Get all registrations
-//   static async getAllRegistrations(req: Request, res: Response): Promise<void> {
-//     try {
-//       const registrations = await RegistrationRepository.findAll();
-//       res.status(200).json({ success: true, data: registrations });
-//     } catch (error) {
-//       console.error('Error getting all registrations:', error);
-//       res.status(500).json({ success: false, message: 'Failed to retrieve registrations.' });
-//     }
-//   }
+      const formattedTickets = tickets.map((ticket) => ({
+        registrationId: ticket.registrationId,
+        attendeeName: ticket.attendeeName,
+        ticketTypeName: ticket.ticketType?.name || "N/A",
+        eventId: ticket.eventId,
+        eventName: ticket.event?.eventName || "N/A",
+        eventPhoto: ticket.event?.eventPhoto || undefined, // Include event photo
+        venueId: ticket.venueId,
+        venueName: ticket.venue?.venueName || "N/A",
+        venueGoogleMapsLink: ticket.venue?.googleMapsLink || undefined,
+        noOfTickets: ticket.noOfTickets,
+        totalCost: ticket.totalCost,
+        registrationDate: ticket.registrationDate,
+        attendedDate: ticket.attendedDate,
+        checkDate: ticket.checkDate || "N/A",
+        paymentStatus: ticket.paymentStatus,
+        qrCode: ticket.qrCode,
+        buyerId: ticket.buyerId,
+        attended: ticket.attended,
+        ticketTypeDetails: {
+          ticketTypeId: ticket.ticketType?.ticketTypeId,
+          name: ticket.ticketType?.name,
+          price: ticket.ticketType?.price,
+          quantityAvailable: ticket.ticketType?.quantityAvailable,
+          quantitySold: ticket.ticketType?.quantitySold,
+          currency: ticket.ticketType?.currency,
+          description: ticket.ticketType?.description,
+          saleStartsAt: ticket.ticketType?.saleStartsAt,
+          saleEndsAt: ticket.ticketType?.saleEndsAt,
+          isPubliclyAvailable: ticket.ticketType?.isPubliclyAvailable,
+          maxPerPerson: ticket.ticketType?.maxPerPerson,
+          isActive: ticket.ticketType?.isActive,
+          categoryDiscounts: ticket.ticketType?.categoryDiscounts,
+          isRefundable: ticket.ticketType?.isRefundable,
+          refundPolicy: ticket.ticketType?.refundPolicy,
+          transferable: ticket.ticketType?.transferable,
+          ageRestriction: ticket.ticketType?.ageRestriction,
+          specialInstructions: ticket.ticketType?.specialInstructions,
+          status: ticket.ticketType?.status,
+        },
+        payment: ticket.payment
+          ? {
+              paymentId: ticket.payment.paymentId,
+              amountPaid: ticket.payment.amountPaid,
+              paymentMethod: ticket.payment.paymentMethod,
+              paymentStatus: ticket.payment.paymentStatus,
+              paymentReference: ticket.payment.paymentReference,
+              notes: ticket.payment.notes,
+            }
+          : null,
+      }));
 
-//   // Get ticket cost summary for a user
-//   static async getUserTicketCostSummary(req: Request, res: Response): Promise<void> {
-//     const loggedInUserId = req.user?.userId;
-//     const loggedInUserRoles = req.user?.role ? [req.user.role] : [];
-//     const { userId: targetUserId } = req.params;
+      res.status(200).json({ success: true, data: formattedTickets });
+    } catch (error) {
+      console.error("Error fetching tickets by user ID:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred while fetching tickets.",
+      });
+    }
+  }
 
-//     try {
-//       if (!loggedInUserId) {
-//         res.status(401).json({ success: false, message: 'Unauthorized: User information missing.' });
-//         return;
-//       }
+  static async markTicketAttended(req: Request, res: Response): Promise<void> {
+    try {
+      const { registrationId } = req.params;
 
-//       if (!targetUserId) {
-//         res.status(400).json({ success: false, message: 'Target user ID is required.' });
-//         return;
-//       }
+      if (!registrationId) {
+        res
+          .status(400)
+          .json({ success: false, message: "Registration ID is required." });
+        return;
+      }
 
-//       const targetUser = await AppDataSource.getRepository(User).findOne({ where: { userId: targetUserId } });
-//       if (!targetUser) {
-//         res.status(404).json({ success: false, message: 'Target user not found.' });
-//         return;
-//       }
+      const registrationRepo = AppDataSource.getRepository(Registration);
+      const ticket = await registrationRepo.findOne({
+        where: { registrationId },
+        relations: ["event", "ticketType", "venue", "payment"], // Load relevant relations
+      });
 
-//       const normalizedRoles = loggedInUserRoles.map((role: any) => typeof role === 'string' ? role.toLowerCase() : (role.roleName ? role.roleName.toLowerCase() : ''));
-//       const hasAdminAccess = normalizedRoles.includes('admin');
-//       const hasManagerAccess = normalizedRoles.includes('manager');
-//       const isSelfAccess = loggedInUserId === targetUserId;
+      if (!ticket) {
+        res.status(404).json({ success: false, message: "Ticket not found." });
+        return;
+      }
 
-//       let hasBuyerAccess = false;
-//       if (normalizedRoles.includes('buyer')) {
-//         const buyerRegistrations = await RegistrationRepository.getRepository().find({
-//           where: [
-//             { buyer: { userId: loggedInUserId }, user: { userId: targetUserId } },
-//             { buyer: { userId: loggedInUserId } },
-//           ],
-//           relations: ['buyer', 'user'],
-//         });
-//         hasBuyerAccess = buyerRegistrations.some(reg =>
-//           reg.buyer.userId === loggedInUserId &&
-//           (reg.user.userId === targetUserId || (reg.boughtForIds && reg.boughtForIds.includes(targetUserId)))
-//         );
-//       }
+      if (ticket.attended) {
+        res.status(400).json({
+          success: false,
+          message: "Ticket has already been marked as attended.",
+          data: ticket, // Return the already-attended ticket details
+        });
+        return;
+      }
 
-//       if (!hasAdminAccess && !hasManagerAccess && !isSelfAccess && !hasBuyerAccess) {
-//         res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to view this user\'s ticket cost summary.' });
-//         return;
-//       }
+      // You might add additional checks here, e.g., if paymentStatus is not PAID
+      // if (ticket.paymentStatus !== "PAID") {
+      //   res.status(400).json({ success: false, message: "Cannot mark an unpaid ticket as attended." });
+      //   return;
+      // }
 
-//       const registrations = await RegistrationRepository.getRepository().find({
-//         where: [
-//           { user: { userId: targetUserId } },
-//           { buyer: { userId: targetUserId } },
-//         ],
-//         relations: ['event', 'user', 'buyer', 'ticketType', 'venue', 'payment'],
-//         order: { registrationDate: 'DESC' },
-//       });
+      // Mark as attended
+      ticket.attended = true;
+      ticket.checkDate = new Date(); // Record the time of attendance
+      await registrationRepo.save(ticket);
 
-//       const additionalRegistrations = await RegistrationRepository.getRepository()
-//         .createQueryBuilder('registration')
-//         .leftJoinAndSelect('registration.event', 'event')
-//         .leftJoinAndSelect('registration.user', 'user')
-//         .leftJoinAndSelect('registration.buyer', 'buyer')
-//         .leftJoinAndSelect('registration.ticketType', 'ticketType')
-//         .leftJoinAndSelect('registration.venue', 'venue')
-//         .leftJoinAndSelect('registration.payment', 'payment')
-//         .where('registration.boughtForIds @> ARRAY[:userId]::uuid[]', { userId: targetUserId })
-//         .getMany();
+      res.status(200).json({
+        success: true,
+        message: "Ticket marked as attended successfully.",
+        data: ticket,
+      });
+    } catch (error) {
+      console.error("Error marking ticket as attended:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred while marking ticket attended.",
+      });
+    }
+  }
 
-//       const allRegistrations = [...registrations, ...additionalRegistrations].filter(
-//         (reg, index, arr) => arr.findIndex(r => r.registrationId === reg.registrationId) === index
-//       );
+  static async checkInTicket(req: Request, res: Response): Promise<void> {
+    try {
+      const { qrCodeData, eventId: requestedEventId } = req.body; // eventId is optional for extra context
 
-//       let totalTickets = 0;
-//       let totalCost = 0;
-//       let totalPaid = 0;
-//       let totalPending = 0;
-//       let totalRefunded = 0;
+      if (!qrCodeData) {
+        res
+          .status(400)
+          .json({ success: false, message: "QR code data is required." });
+        return;
+      }
 
-//       const registrationSummaries = allRegistrations.map(registration => {
-//         const ticketPrice = registration.ticketType ? parseFloat(registration.ticketType.price.toString()) : 0;
-//         const regTotalCost = ticketPrice * registration.noOfTickets;
+      // 1. Decode QR Code
+      const validationResult = await QrCodeService.validateQrCode(qrCodeData);
 
-//         totalTickets += registration.noOfTickets;
-//         totalCost += regTotalCost;
+      if (!validationResult.success || !validationResult.data) {
+        res.status(400).json({
+          success: false,
+          message: validationResult.message,
+          alertType: "error",
+        });
+        return;
+      }
 
-//         switch (registration.paymentStatus?.toLowerCase()) {
-//           case 'completed':
-//           case 'paid':
-//             totalPaid += regTotalCost;
-//             break;
-//           case 'pending':
-//             totalPending += regTotalCost;
-//             break;
-//           case 'refunded':
-//             totalRefunded += regTotalCost;
-//             break;
-//         }
+      const { registrationId, eventId: qrEventId } = validationResult.data;
 
-//         return {
-//           registrationId: registration.registrationId,
-//           eventId: registration.eventId,
-//           eventName: registration.event.eventTitle,
-//           eventDate: registration.event.createdAt,
-//           ticketType: registration.ticketType.ticketName,
-//           noOfTickets: registration.noOfTickets,
-//           ticketPrice: ticketPrice,
-//           totalCost: regTotalCost,
-//           paymentStatus: registration.paymentStatus,
-//           registrationStatus: registration.registrationStatus,
-//           registrationDate: registration.registrationDate,
-//           isPrimaryAttendee: registration.user.userId === targetUserId,
-//           isBuyer: registration.buyer.userId === targetUserId,
-//           isInBoughtForIds: registration.boughtForIds ? registration.boughtForIds.includes(targetUserId) : false,
-//         };
-//       });
+      // 2. Fetch Ticket Details
+      const registrationRepo = AppDataSource.getRepository(Registration);
+      const ticket = await registrationRepo.findOne({
+        where: { registrationId },
+        relations: ["event", "ticketType", "venue", "payment"], // Load all necessary relations
+      });
 
-//       const summary = {
-//         targetUser: {
-//           userId: targetUser.userId,
-//           fullName: targetUser.lastName,
-//           email: targetUser.email,
-//         },
-//         totalRegistrations: allRegistrations.length,
-//         totalTickets,
-//         totalCost: parseFloat(totalCost.toFixed(2)),
-//         totalPaid: parseFloat(totalPaid.toFixed(2)),
-//         totalPending: parseFloat(totalPending.toFixed(2)),
-//         totalRefunded: parseFloat(totalRefunded.toFixed(2)),
-//         registrations: registrationSummaries,
-//       };
+      if (!ticket) {
+        res.status(404).json({
+          success: false,
+          message: "Ticket not found in system.",
+          alertType: "error",
+        });
+        return;
+      }
 
-//       res.status(200).json({
-//         success: true,
-//         message: 'User ticket cost summary retrieved successfully.',
-//         data: summary,
-//       });
-//     } catch (error) {
-//       console.error(`Error getting ticket cost summary for user ${targetUserId}:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to retrieve ticket cost summary.' });
-//     }
-//   }
+      // Explicitly fetch EventVenues for the event to ensure venue details are loaded
+      const eventVenueRepo = AppDataSource.getRepository(EventVenue);
+      const eventVenues = await eventVenueRepo.find({
+        where: { eventId: ticket.eventId },
+        relations: ["venue"], // Load the venue for each EventVenue
+      });
 
-//   // Update registration
-//   static async updateRegistration(req: Request, res: Response): Promise<void> {
-//     try {
-//       const registrationId = req.params.id;
-//       const updateData: Partial<RegistrationRequestInterface> = req.body;
+      // 3. Security & Context Validation
+      // Ensure the ticket is for the event being checked in (if eventId is provided by scanner app)
+      if (requestedEventId && requestedEventId !== ticket.eventId) {
+        res.status(400).json({
+          success: false,
+          message: "Ticket is for a different event.",
+          alertType: "error",
+          data: { eventName: ticket.event?.eventName || "Unknown Event" },
+        });
+        return;
+      }
 
-//       const validationResult = await RegistrationService.validateRegistrationIds(updateData);
-//       if (!validationResult.valid) {
-//         res.status(400).json({
-//           success: false,
-//           message: validationResult.message,
-//           errors: validationResult.errors,
-//         });
-//         return;
-//       }
+      // Check payment status
+      if (ticket.paymentStatus !== "PAID") {
+        res.status(400).json({
+          success: false,
+          message: `Ticket payment status is '${ticket.paymentStatus}'. Payment required.`, // Customize message
+          alertType: "warning",
+          data: { paymentStatus: ticket.paymentStatus },
+        });
+        return;
+      }
 
-//       const updatedRegistration = await RegistrationRepository.update(registrationId, updateData);
-//       if (!updatedRegistration) {
-//         res.status(404).json({ success: false, message: 'Registration not found.' });
-//         return;
-//       }
-//       res.status(200).json({ success: true, data: updatedRegistration });
-//     } catch (error) {
-//       console.error('Error updating registration:', error);
-//       res.status(500).json({ success: false, message: 'Failed to update registration.' });
-//     }
-//   }
+      // 4. Attendance Status Check (already used?)
+      if (ticket.attended) {
+        res.status(400).json({
+          success: false,
+          message: "Ticket has already been used.",
+          alertType: "warning",
+          data: { checkDate: ticket.checkDate?.toISOString() }, // Show when it was used
+        });
+        return;
+      }
 
-//   // Delete registration
-//   static async deleteRegistration(req: Request, res: Response): Promise<void> {
-//     const { registrationId } = req.params;
-//     try {
-//       if (!registrationId) {
-//         res.status(400).json({ success: false, message: 'Registration ID is required.' });
-//         return;
-//       }
+      // 5. Date Validity Check (for day-specific tickets at multi-day events)
+      // const today = new Date().toISOString().split("T")[0]; // Current date in YYYY-MM-DD format (UTC)
+      // const ticketAttendedDateISO = ticket.attendedDate
+      //   ? new Date(ticket.attendedDate).toISOString().split("T")[0]
+      //   : null;
 
-//       const success = await RegistrationRepository.delete(registrationId);
-//       if (success) {
-//         res.status(200).json({ success: true, message: 'Registration deleted successfully.' });
-//       } else {
-//         res.status(404).json({ success: false, message: 'Registration not found or could not be deleted.' });
-//       }
-//     } catch (error) {
-//       console.error(`Error deleting registration ${registrationId}:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to delete registration.' });
-//     }
-//   }
+      // if (ticketAttendedDateISO && ticketAttendedDateISO !== today) {
+      //   res.status(400).json({
+      //     success: false,
+      //     message: `Ticket is for ${new Date(
+      //       ticket.attendedDate!
+      //     ).toDateString()}, not for today (${new Date().toDateString()}).`,
+      //     alertType: "error",
+      //     data: { ticketDate: ticket.attendedDate, todayDate: today },
+      //   });
+      //   return;
+      // }
 
-//   // Regenerate QR code
-//   static regenerateQrCode: RequestHandler<{ id: string }> = async (req, res) => {
-//     try {
-//       const { id: registrationId } = req.params;
+      // 6. Mark Attended (if all checks pass)
+      ticket.attended = true;
+      ticket.checkDate = new Date();
+      await registrationRepo.save(ticket);
 
-//       const existingRegistration = await RegistrationRepository.findById(registrationId);
-//       if (!existingRegistration) {
-//         res.status(404).json({ success: false, message: 'Registration not found.' });
-//         return;
-//       }
-
-//       if (existingRegistration.qrCode) {
-//         const oldQrCodePath = path.join(__dirname, '..', '..', 'src', 'Uploads', 'qrcodes', existingRegistration.qrCode);
-//         if (fs.existsSync(oldQrCodePath)) {
-//           fs.unlinkSync(oldQrCodePath);
-//           console.log(`Deleted old QR code file: ${oldQrCodePath}`);
-//         }
-//       }
-
-//       const newQrCodeFileName = await QrCodeService.generateQrCode(
-//         existingRegistration.registrationId,
-//         existingRegistration.user.userId,
-//         existingRegistration.event.eventId
-//       );
-
-//       const updatedRegistration = await RegistrationRepository.update(registrationId, { qrCode: newQrCodeFileName });
-//       if (!updatedRegistration) {
-//         throw new Error('Failed to update registration with new QR code path.');
-//       }
-
-//       res.status(200).json({
-//         success: true,
-//         message: 'QR code regenerated successfully.',
-//         data: updatedRegistration,
-//         qrCodeUrl: `/static/${newQrCodeFileName}`,
-//       });
-//     } catch (error) {
-//       console.error(`Error regenerating QR code for registration ${req.params.id}:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to regenerate QR code.' });
-//     }
-//   }
-
-//   // Validate QR code
-//   static validateQrCode: RequestHandler<{ qrCode: string }> = async (req, res) => {
-//     try {
-//       const { qrCode } = req.params;
-//       if (!qrCode) {
-//         res.status(400).json({ success: false, message: 'QR code string is required.' });
-//         return;
-//       }
-
-//       const registration = await RegistrationRepository.findByQRCode(qrCode);
-//       if (!registration) {
-//         res.status(404).json({ success: false, message: 'Invalid or expired QR code, or registration not found.' });
-//         return;
-//       }
-
-//       res.status(200).json({
-//         success: true,
-//         message: 'QR code validated successfully.',
-//         data: registration,
-//       });
-//     } catch (error) {
-//       console.error(`Error validating QR code:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to validate QR code.' });
-//     }
-//   }
-
-//   // Get QR code path
-//   static async getRegistrationQrCode(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const registration = await RegistrationRepository.findById(id);
-//       if (!registration || !registration.qrCode) {
-//         res.status(404).json({ success: false, message: 'Registration or QR code not found.' });
-//         return;
-//       }
-
-//       res.status(200).json({
-//         success: true,
-//         message: 'QR code path retrieved successfully.',
-//         qrCodePath: registration.qrCode,
-//         qrCodeUrl: `/static/${registration.qrCode}`,
-//       });
-//     } catch (error) {
-//       console.error(`Error getting QR code path for registration ${req.params.id}:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to retrieve QR code path.' });
-//     }
-//   }
-
-//   // Serve QR code image
-//   static async getRegistrationQrCodeImage(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id } = req.params;
-//       const registration = await RegistrationRepository.findById(id);
-//       if (!registration || !registration.qrCode) {
-//         res.status(404).json({ success: false, message: 'QR code not found for this registration.' });
-//         return;
-//       }
-
-//       const QR_CODES_UPLOAD_BASE_DIR = path.join(__dirname, '..', '..', 'src', 'Uploads', 'qrcodes');
-//       const absolutePath = path.join(QR_CODES_UPLOAD_BASE_DIR, registration.qrCode);
-
-//       if (!fs.existsSync(absolutePath)) {
-//         console.error(`QR code image file not found at: ${absolutePath}`);
-//         res.status(404).json({ success: false, message: 'QR code image file not found on server.' });
-//         return;
-//       }
-
-//       res.sendFile(absolutePath);
-//     } catch (error) {
-//       console.error(`Error retrieving QR code image for registration ${req.params.id}:`, error);
-//       res.status(500).json({ success: false, message: 'Failed to retrieve QR code image.' });
-//     }
-//   }
-// }
+      // 7. Comprehensive Success Response
+      res.status(200).json({
+        success: true,
+        message: "Check-in successful!",
+        alertType: "success",
+        data: {
+          registrationId: ticket.registrationId,
+          attendeeName: ticket.attendeeName,
+          ticketTypeName: ticket.ticketType?.name || "N/A",
+          eventName: ticket.event?.eventName || "N/A",
+          ticketAttendedDate: ticket.attendedDate, // The specific date this ticket is valid for
+          allEventBookingDates: ticket.event?.bookingDates || [], // All event dates
+          venueName: eventVenues[0]?.venue?.venueName || "N/A",
+          venueGoogleMapsLink:
+            eventVenues[0]?.venue?.googleMapsLink || undefined,
+          paymentStatus: ticket.paymentStatus,
+          currentAttendanceStatus: ticket.attended, // Should be true
+          checkInTimestamp: ticket.checkDate?.toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Error during ticket check-in:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred during check-in.",
+        alertType: "error",
+      });
+    }
+  }
+}

@@ -2,7 +2,7 @@ import { DataSource } from "typeorm";
 import { Role } from "../models/Role";
 import { User } from "../models/User";
 import { Venue } from "../models/Venue Tables/Venue";
-import { TicketType } from "../models/TicketType";
+import { EventTicketType } from "../models/Event Tables/EventTicketType";
 import { Event } from "../models/Event Tables/Event";
 import { VenueAmenities } from "../models/Venue Tables/VenueAmenities";
 import { Feedback } from "../models/Feedback";
@@ -24,6 +24,7 @@ import { Resources } from "../models/Resources";
 import { EventVenue } from "../models/Event Tables/EventVenue";
 import { EventGuest } from "../models/Event Tables/EventGuest";
 import { VenueBookingPayment } from "../models/VenueBookingPayment";
+import { TicketPayment } from "../models/TicketPayment";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -36,7 +37,7 @@ export const AppDataSource = new DataSource({
   entities: [
     User,
     Venue,
-    TicketType,
+    EventTicketType,
     Event,
     VenueAmenities,
     Feedback,
@@ -59,6 +60,7 @@ export const AppDataSource = new DataSource({
     Resources,
     EventVenue,
     EventGuest,
+    TicketPayment,
   ],
   migrations: [
     isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

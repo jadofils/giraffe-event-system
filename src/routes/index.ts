@@ -19,6 +19,7 @@ import { venueRoute } from "./VenueRoutes";
 import VenueBookingRoutes from "./VenueBookingRoutes";
 import { Registration } from "../models/Registration";
 import NotificationRoutes from "./NotificationRoutes";
+import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
 
 // import RegistrationRoutes from "./RegistrationRoutes";
 const router = Router();
@@ -45,7 +46,8 @@ router.use("/venue-bookings", VenueBookingRoutes);
 // router.use("/registrations", RegistrationRoutes); // This makes `/api/v1/registrations/*` available
 router.use("/invoices", InvoiceRoutes);
 router.use("/notifications", NotificationRoutes);
-
+// Use EventTicketTypeRoutes
+router.use("/events", EventTicketTypeRoutes);
 //endpoints of the payments
 
 // Add PermissionRoutes

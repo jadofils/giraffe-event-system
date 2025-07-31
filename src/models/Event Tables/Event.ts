@@ -31,7 +31,7 @@ import { Payment } from "../Payment";
 import { Invoice } from "../Invoice";
 import { EventType } from "../../interfaces/Enums/EventTypeEnum";
 import { EventStatus } from "../../interfaces/Enums/EventStatusEnum";
-import { TicketType } from "../TicketType";
+import { EventTicketType } from "./EventTicketType";
 import { EventVenue } from "./EventVenue";
 import { EventGuest } from "./EventGuest";
 
@@ -143,7 +143,6 @@ export class Event {
   })
   visibilityScope!: "PUBLIC" | "PRIVATE";
 
-
   @Column({ type: "text", nullable: true })
   cancellationReason?: string;
 
@@ -163,8 +162,12 @@ export class Event {
   @OneToMany(() => Invoice, (invoice) => invoice.event)
   invoices?: Invoice[];
 
-  @OneToMany(() => TicketType, (ticketType) => ticketType.event)
-  ticketTypes!: TicketType[];
+  @OneToMany(
+    () => EventTicketType,
+    (eventTicketType) => eventTicketType.event,
+    { cascade: true }
+  )
+  ticketTypes!: EventTicketType[];
 
   @OneToMany(() => EventVenue, (ev) => ev.event, { cascade: true })
   eventVenues!: EventVenue[];

@@ -18,7 +18,7 @@ import {
   PayerType,
 } from "../models/VenueBookingPayment";
 import { SimpleNotificationService } from "../services/notifications/SimpleNotificationService";
-import EmailService from "../services/emails/EmailService";
+import { EmailService } from "../services/emails/EmailService";
 import { BookingStatus } from "../models/VenueBooking";
 import { EventStatus } from "../interfaces/Enums/EventStatusEnum";
 
@@ -64,6 +64,8 @@ export class VenueBookingController {
               totalVenues: 0,
               totalBookings: 0,
               totalAmount: 0,
+              totalPaid: 0,
+              totalRemaining: 0,
               pendingBookings: 0,
               approvedBookings: 0,
               cancelledBookings: 0,
@@ -78,6 +80,7 @@ export class VenueBookingController {
 
       // Get all bookings for these venues with necessary relations
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
       const bookings = await bookingRepo.find({
         where: { venueId: In(venueIds) },
         relations: [
@@ -93,7 +96,6 @@ export class VenueBookingController {
       });
 
       // Get payment details for each booking
-      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
           const venue = booking.venue;
@@ -106,10 +108,14 @@ export class VenueBookingController {
           }, 0);
 
           const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
-          const totalVenueAmount =
-            venue.bookingType === "HOURLY"
-              ? baseVenueAmount * totalHours
-              : baseVenueAmount;
+          let totalVenueAmount = 0;
+          if (venue.bookingType === "HOURLY") {
+            totalVenueAmount = baseVenueAmount * totalHours;
+          } else if (venue.bookingType === "DAILY") {
+            totalVenueAmount = baseVenueAmount * booking.bookingDates.length;
+          } else {
+            totalVenueAmount = baseVenueAmount;
+          }
 
           const depositAmount = bookingCondition?.depositRequiredPercent
             ? (totalVenueAmount * bookingCondition.depositRequiredPercent) / 100
@@ -160,6 +166,28 @@ export class VenueBookingController {
             };
           });
 
+          // Payment status logic
+          let paymentStatus = "PENDING";
+          if (booking.isPaid || totalPaid >= totalVenueAmount) {
+            paymentStatus = "PAID";
+          } else if (totalPaid >= depositAmount) {
+            paymentStatus = "DEPOSIT_PAID";
+          }
+
+          // Deposit status
+          const depositStatus =
+            totalPaid >= depositAmount ? "FULFILLED" : "PENDING";
+
+          // Deposit description for clarity
+          let depositDescription = "";
+          if (venue.bookingType === "HOURLY") {
+            depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount} for ${totalHours} hours)`;
+          } else if (venue.bookingType === "DAILY") {
+            depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${baseVenueAmount} x ${booking.bookingDates.length} days = ${totalVenueAmount})`;
+          } else {
+            depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount})`;
+          }
+
           return {
             bookingId: booking.bookingId,
             eventDetails: {
@@ -179,15 +207,11 @@ export class VenueBookingController {
               depositRequired: {
                 percentage: bookingCondition?.depositRequiredPercent || 100,
                 amount: depositAmount,
-                description:
-                  venue.bookingType === "HOURLY"
-                    ? `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount} for ${totalHours} hours)`
-                    : `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount})`,
+                description: depositDescription,
               },
               paymentCompletionRequired: {
                 daysBeforeEvent:
                   bookingCondition?.paymentComplementTimeBeforeEvent || 0,
-                amount: totalVenueAmount - depositAmount,
                 deadline: paymentDeadline,
               },
             },
@@ -209,15 +233,10 @@ export class VenueBookingController {
               depositAmount: depositAmount,
               totalPaid: totalPaid,
               remainingAmount: totalVenueAmount - totalPaid,
-              paymentStatus: booking.isPaid
-                ? "PAID"
-                : totalPaid >= depositAmount
-                ? "DEPOSIT_PAID"
-                : "PENDING",
+              paymentStatus: paymentStatus,
               paymentProgress:
                 ((totalPaid / totalVenueAmount) * 100).toFixed(2) + "%",
-              depositStatus:
-                totalPaid >= depositAmount ? "FULFILLED" : "PENDING",
+              depositStatus: depositStatus,
               paymentHistory: paymentHistory,
               nextPaymentDue:
                 totalPaid < totalVenueAmount ? totalVenueAmount - totalPaid : 0,
@@ -1168,7 +1187,7 @@ export class VenueBookingController {
 
       res.status(200).json({
         success: true,
-        message: "Booking, event, and slots cancelled/deleted.",
+        message: "Booking and event cancelled (slots not deleted).",
         booking,
         event: booking.event,
       });
@@ -1488,6 +1507,7 @@ export class VenueBookingController {
         return;
       }
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
       const bookings = await bookingRepo.find({
         where: { venueId },
         order: { createdAt: "DESC" },
@@ -1499,25 +1519,36 @@ export class VenueBookingController {
       // Enhanced venue summary with payment stats
       let venueSummary = null;
       if (venue) {
-        // Calculate payment stats
         let fullPaidCount = 0;
-        let partialPaidCount = 0; // Not available without payment history
+        let partialPaidCount = 0;
         let unpaidCount = 0;
         let totalRevenue = 0;
         let totalExpectedRevenue = 0;
         let totalPaidBookings = 0;
         let totalUnpaidAmount = 0;
+        // For each booking, fetch payments and calculate payment status
         for (const booking of bookings) {
+          const payments = await paymentRepo.find({
+            where: { bookingId: booking.bookingId },
+          });
+          const totalPaid = payments.reduce(
+            (sum, p) => sum + Number(p.amountPaid || 0),
+            0
+          );
           totalExpectedRevenue += Number(booking.amountToBePaid || 0);
-          if (booking.isPaid) {
+          if (totalPaid >= Number(booking.amountToBePaid || 0)) {
             fullPaidCount++;
             totalRevenue += Number(booking.amountToBePaid || 0);
             totalPaidBookings++;
+          } else if (totalPaid > 0) {
+            partialPaidCount++;
+            totalRevenue += totalPaid;
+            totalUnpaidAmount +=
+              Number(booking.amountToBePaid || 0) - totalPaid;
           } else {
             unpaidCount++;
             totalUnpaidAmount += Number(booking.amountToBePaid || 0);
           }
-          // To support partialPaidCount, you would need to sum payments for each booking
         }
         venueSummary = {
           venueId: venue.venueId,
@@ -1526,7 +1557,7 @@ export class VenueBookingController {
           location: venue.venueLocation,
           totalBookings: bookings.length,
           fullPaidCount,
-          partialPaidCount, // Always 0 unless payment history is added
+          partialPaidCount,
           unpaidCount,
           totalRevenue,
           totalExpectedRevenue,
@@ -1566,9 +1597,21 @@ export class VenueBookingController {
                 };
               }
             }
+            // Calculate totalPaid and remainingAmount for this booking
+            const payments = await paymentRepo.find({
+              where: { bookingId: booking.bookingId },
+            });
+            const totalPaid = payments.reduce(
+              (sum, p) => sum + Number(p.amountPaid || 0),
+              0
+            );
+            const remainingAmount =
+              Number(booking.amountToBePaid || 0) - totalPaid;
             return {
               ...booking,
               user: userInfo,
+              totalPaid,
+              remainingAmount,
             };
           })
         ),

@@ -14,7 +14,7 @@ const typeorm_1 = require("typeorm");
 const Role_1 = require("../models/Role");
 const User_1 = require("../models/User");
 const Venue_1 = require("../models/Venue Tables/Venue");
-const TicketType_1 = require("../models/TicketType");
+const EventTicketType_1 = require("../models/Event Tables/EventTicketType");
 const Event_1 = require("../models/Event Tables/Event");
 const VenueAmenities_1 = require("../models/Venue Tables/VenueAmenities");
 const Feedback_1 = require("../models/Feedback");
@@ -36,6 +36,7 @@ const Resources_1 = require("../models/Resources");
 const EventVenue_1 = require("../models/Event Tables/EventVenue");
 const EventGuest_1 = require("../models/Event Tables/EventGuest");
 const VenueBookingPayment_1 = require("../models/VenueBookingPayment");
+const TicketPayment_1 = require("../models/TicketPayment");
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -46,7 +47,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     entities: [
         User_1.User,
         Venue_1.Venue,
-        TicketType_1.TicketType,
+        EventTicketType_1.EventTicketType,
         Event_1.Event,
         VenueAmenities_1.VenueAmenities,
         Feedback_1.Feedback,
@@ -69,6 +70,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
         Resources_1.Resources,
         EventVenue_1.EventVenue,
         EventGuest_1.EventGuest,
+        TicketPayment_1.TicketPayment,
     ],
     migrations: [
         isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

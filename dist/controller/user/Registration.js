@@ -16,7 +16,7 @@ exports.UserController = void 0;
 const UserRepository_1 = require("../../repositories/UserRepository");
 const Database_1 = require("../../config/Database");
 const User_1 = require("../../models/User");
-const EmailService_1 = __importDefault(require("../../services/emails/EmailService")); // Assuming this is correct
+const EmailService_1 = require("../../services/emails/EmailService"); // Correct import for EmailService
 const Role_1 = require("../../models/Role");
 const Organization_1 = require("../../models/Organization"); // Import Organization model
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
@@ -49,8 +49,8 @@ class UserController {
                     }
                     // === Input Validation ===
                     const errors = [];
-                    if (!username || username.length < 3 || username.length > 50) {
-                        errors.push("Username must be between 3 and 50 characters.");
+                    if (!username || username.length < 6 || username.length > 50) {
+                        errors.push("Username must be between 6 and 50 characters.");
                     }
                     if (!firstName || firstName.length < 1 || firstName.length > 50) {
                         errors.push("First name must be between 1 and 50 characters.");
@@ -103,22 +103,12 @@ class UserController {
                         continue;
                     }
                     // === Handle Organization ===
-                    const organizationRepository = Database_1.AppDataSource.getRepository(Organization_1.Organization);
-                    const defaultOrgName = "Independent";
-                    const effectiveOrgName = ((organizationNameFromRequest === null || organizationNameFromRequest === void 0 ? void 0 : organizationNameFromRequest.trim()) || defaultOrgName).toLowerCase() === "independent"
-                        ? defaultOrgName
-                        : organizationNameFromRequest.trim();
-                    let userOrganization = yield organizationRepository.findOne({
-                        where: { organizationName: effectiveOrgName },
-                    });
-                    if (!userOrganization && effectiveOrgName === defaultOrgName) {
-                        userOrganization = organizationRepository.create({
-                            organizationName: defaultOrgName,
-                            organizationType: "General",
-                            description: "Auto-created organization: Independent",
-                            contactEmail: "admin@independent.com",
+                    let userOrganization = null;
+                    if (organizationNameFromRequest) {
+                        const organizationRepository = Database_1.AppDataSource.getRepository(Organization_1.Organization);
+                        userOrganization = yield organizationRepository.findOne({
+                            where: { organizationName: organizationNameFromRequest.trim() },
                         });
-                        yield organizationRepository.save(userOrganization);
                     }
                     // === Create User Data ===
                     const userData = {
@@ -172,8 +162,8 @@ class UserController {
                     // Only generate and set a default password if user did NOT provide one
                     if (!password) {
                         try {
-                            generatedPassword = EmailService_1.default.generatePassword();
-                            const emailSent = yield EmailService_1.default.sendDefaultPasswordWithPassword(email, completeUser.lastName, completeUser.firstName, completeUser.username, generatedPassword);
+                            generatedPassword = EmailService_1.EmailService.generatePassword();
+                            const emailSent = yield EmailService_1.EmailService.sendDefaultPasswordWithPassword(email, completeUser.lastName, completeUser.firstName, completeUser.username, generatedPassword);
                             if (!emailSent) {
                                 console.warn(`Email not sent to ${email}, but user created.`);
                             }
@@ -372,7 +362,7 @@ class UserController {
                     updatedAt: user.updatedAt,
                     deletedAt: user.deletedAt,
                     organizations: Array.isArray(user.organizations)
-                        ? user.organizations.map(org => ({
+                        ? user.organizations.map((org) => ({
                             organizationId: org.organizationId,
                             organizationName: org.organizationName,
                             description: org.description,
@@ -417,7 +407,9 @@ class UserController {
             }
             catch (error) {
                 console.error("Error in getUserById:", error);
-                res.status(500).json({ success: false, message: "Internal server error" });
+                res
+                    .status(500)
+                    .json({ success: false, message: "Internal server error" });
             }
         });
     }

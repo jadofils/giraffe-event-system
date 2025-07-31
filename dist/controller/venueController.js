@@ -123,14 +123,7 @@ class VenueController {
                     .json({ success: false, message: "Organization not found." });
                 return;
             }
-            // Move this check up for clarity and early exit
-            if (organization.organizationName === "Independent") {
-                res.status(403).json({
-                    success: false,
-                    message: "The 'Independent' organization cannot create venues.",
-                });
-                return;
-            }
+            // Remove all checks for 'Independent' organization
             if (organization.status !== "APPROVED") {
                 res.status(403).json({
                     success: false,

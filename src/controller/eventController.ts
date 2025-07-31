@@ -18,6 +18,7 @@ import { VenueBooking } from "../models/VenueBooking";
 import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { Event } from "../models/Event Tables/Event";
 import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
+import { TicketPurchaseService } from "../services/tickets/TicketPurchaseService"; // Import the updated service
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -1467,67 +1468,72 @@ export class EventController {
         const venue = booking.venue;
         const bookingCondition = venue.bookingConditions[0];
         const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
-
-        // Calculate total hours across all booking dates
-        const totalHours = booking.bookingDates.reduce((sum, date) => {
-          return sum + (date.hours?.length || 1); // If no hours specified, count as 1 day
-        }, 0);
-
-        // Calculate amounts based on venue booking type
-        const venueAmount =
-          venue.bookingType === "HOURLY"
-            ? baseVenueAmount * totalHours
-            : baseVenueAmount;
-
+        let venueAmount = 0;
+        let totalHours = 0;
+        if (venue.bookingType === "HOURLY") {
+          totalHours = booking.bookingDates.reduce(
+            (sum, date) => sum + (date.hours?.length || 1),
+            0
+          );
+          venueAmount = baseVenueAmount * totalHours;
+        } else if (venue.bookingType === "DAILY") {
+          venueAmount = baseVenueAmount * booking.bookingDates.length;
+        } else {
+          venueAmount = baseVenueAmount;
+        }
         const depositAmount = bookingCondition?.depositRequiredPercent
           ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
           : venueAmount;
-
+        // Fetch all payments for this booking
+        const paymentRepo = AppDataSource.getRepository(
+          require("../models/VenueBookingPayment").VenueBookingPayment
+        );
+        const payments = await paymentRepo.find({
+          where: { bookingId: booking.bookingId },
+        });
+        const totalPaid = payments.reduce(
+          (sum, p) => sum + Number(p.amountPaid || 0),
+          0
+        );
+        const remainingAmount = venueAmount - totalPaid;
         totalAmount += venueAmount;
         totalDepositRequired += depositAmount;
-
-        // Get earliest booking date for this booking
-        const earliestDate = new Date(
-          Math.min(
-            ...booking.bookingDates.map((d) => new Date(d.date).getTime())
-          )
-        );
-        const paymentDeadline =
-          bookingCondition?.paymentComplementTimeBeforeEvent
-            ? new Date(
-                earliestDate.getTime() -
-                  bookingCondition.paymentComplementTimeBeforeEvent *
-                    24 *
-                    60 *
-                    60 *
-                    1000
-              )
-            : earliestDate;
-
         bookingDetails.push({
-          bookingId: booking.bookingId,
+          ...booking,
           eventId: booking.event?.eventId,
           eventName: booking.event?.eventName,
           venue: {
-            venueId: venue.venueId,
-            venueName: venue.venueName,
-            bookingType: venue.bookingType,
-            baseAmount: baseVenueAmount,
-            totalHours: totalHours,
-            totalAmount: venueAmount,
+            ...venue, // include all venue details
             depositRequired: {
               percentage: bookingCondition?.depositRequiredPercent || 100,
               amount: depositAmount,
               description:
                 venue.bookingType === "HOURLY"
                   ? `Initial deposit required to secure the booking (${bookingCondition?.depositRequiredPercent}% of total amount for ${totalHours} hours)`
-                  : "Initial deposit required to secure the booking",
+                  : `Initial deposit required to secure the booking (${bookingCondition?.depositRequiredPercent}% of total amount for ${booking.bookingDates.length} days)`,
             },
             paymentCompletionRequired: {
               daysBeforeEvent:
                 bookingCondition?.paymentComplementTimeBeforeEvent || 0,
-              amount: venueAmount - depositAmount,
-              deadline: paymentDeadline,
+              deadline: (() => {
+                const earliestDate = new Date(
+                  Math.min(
+                    ...booking.bookingDates.map((d) =>
+                      new Date(d.date).getTime()
+                    )
+                  )
+                );
+                return bookingCondition?.paymentComplementTimeBeforeEvent
+                  ? new Date(
+                      earliestDate.getTime() -
+                        bookingCondition.paymentComplementTimeBeforeEvent *
+                          24 *
+                          60 *
+                          60 *
+                          1000
+                    )
+                  : earliestDate;
+              })(),
               description: `Remaining payment must be completed ${
                 bookingCondition?.paymentComplementTimeBeforeEvent || 0
               } days before the event`,
@@ -1542,11 +1548,15 @@ export class EventController {
               notaBene: bookingCondition?.notaBene,
               transitionTime: bookingCondition?.transitionTime,
             },
+            baseAmount: baseVenueAmount,
+            totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
+            totalAmount: venueAmount,
           },
           paymentSummary: {
             totalAmount: venueAmount,
-            depositAmount: depositAmount,
-            remainingAmount: venueAmount - depositAmount,
+            requiredDepositAmount: depositAmount,
+            totalPaid: totalPaid,
+            remainingAmount: remainingAmount,
             bookingStatus: booking.bookingStatus,
             isPaid: booking.isPaid,
             pricePerHour:
@@ -1564,7 +1574,6 @@ export class EventController {
           totals: {
             totalAmount,
             totalDepositRequired,
-            totalRemainingAmount: totalAmount - totalDepositRequired,
           },
           paymentInstructions: {
             description: "Please make payment to secure your bookings",
@@ -1579,7 +1588,7 @@ export class EventController {
                 )
               )
             ),
-            paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY"],
+            paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY", "PayPal"],
           },
         },
       });
@@ -2099,6 +2108,68 @@ export class EventController {
         bookingApprovals: approvalResults,
         message: `Successfully created PRIVATE event(s) for user and approved booking(s)`,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async purchaseTicket(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { recipientEmail, ticketsToPurchase, paymentDetails } = req.body;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: "Unauthorized: User ID not found.",
+        });
+        return;
+      }
+
+      if (
+        !recipientEmail ||
+        !ticketsToPurchase ||
+        !Array.isArray(ticketsToPurchase) ||
+        ticketsToPurchase.length === 0 ||
+        !paymentDetails
+      ) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Missing required fields: recipientEmail, ticketsToPurchase (array of {ticketTypeId, attendeeName}), paymentDetails.",
+        });
+        return;
+      }
+
+      // Basic validation for each ticket in the array
+      for (const ticket of ticketsToPurchase) {
+        if (!ticket.ticketTypeId || !ticket.attendeeName) {
+          res.status(400).json({
+            success: false,
+            message:
+              "Each ticket in 'ticketsToPurchase' must have a 'ticketTypeId' and 'attendeeName'.",
+          });
+          return;
+        }
+      }
+
+      const result = await TicketPurchaseService.purchaseTicket(
+        userId, // buyerUserId
+        recipientEmail,
+        ticketsToPurchase,
+        paymentDetails
+      );
+
+      if (result.success) {
+        res.status(200).json(result);
+      } else {
+        res.status(400).json(result);
+      }
     } catch (error) {
       next(error);
     }

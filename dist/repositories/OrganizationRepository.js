@@ -33,9 +33,6 @@ class OrganizationRepository {
                     .leftJoinAndSelect("user.role", "role")
                     .leftJoinAndSelect("organization.venues", "venue")
                     .where("organization.deletedAt IS NULL")
-                    .andWhere("LOWER(organization.organizationType) != :independent", {
-                    independent: "independent",
-                })
                     .orderBy("organization.organizationName", "ASC")
                     .getMany();
                 // For each organization, fetch all events linked to any of its venues

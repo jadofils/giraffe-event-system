@@ -3,7 +3,7 @@ import { AppDataSource } from "../../config/Database";
 import { User } from "../../models/User";
 import * as bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import PasswordService from "../../services/emails/EmailService";
+import { EmailService } from "../../services/emails/EmailService";
 import { CacheService } from "../../services/CacheService";
 
 const SECRET_KEY = process.env.JWT_SECRET || "sdbgvkghdfcnmfxdxdfggj";
@@ -153,7 +153,7 @@ export class LoginController {
 
       // Send reset link to user's email
       try {
-        await PasswordService.sendPasswordResetEmail(
+        await EmailService.sendPasswordResetEmail(
           user.email,
           resetLink,
           user.username

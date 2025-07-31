@@ -3,6 +3,8 @@ import { EventController } from "../controller/eventController";
 import { authenticate } from "../middlewares/AuthMiddleware";
 import multer from "multer";
 import { isAdmin } from "../middlewares/IsAdmin";
+import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
+import { RegistrationController } from "../controller/RegistrationController";
 
 const router = Router();
 const upload = multer();
@@ -10,6 +12,7 @@ const upload = multer();
 // 📂 Public Event Routes
 router.get("/all", EventController.getAllApprovedEvents);
 router.get("/public/:id", EventController.getEventById);
+router.post("/tickets/check-in", RegistrationController.checkInTicket);
 
 router.use(authenticate);
 
@@ -37,7 +40,7 @@ router.get(
   EventController.getGroupPaymentDetails
 );
 router.post(
-  "/bookings/payment-details",
+  "/bookings/payment-detail",
   EventController.getPaymentDetailsForSelectedBookings
 );
 router.post(
@@ -60,5 +63,38 @@ router.post(
   authenticate,
   EventController.createEventForExternalUser
 );
+
+// Ticket purchase route
+router.post("/tickets/purchase", authenticate, EventController.purchaseTicket);
+
+// QR Code Validation Route
+router.post(
+  "/tickets/validate-qr",
+  authenticate,
+  RegistrationController.validateTicketQrCode
+);
+
+// Get tickets by User ID Route
+router.get(
+  "/tickets/user/:userId",
+  authenticate,
+  RegistrationController.getTicketsByUserId
+);
+
+// Mark ticket as attended Route (Admin/Staff only)
+// router.patch(
+//   "/tickets/:registrationId/mark-attended",
+//   authenticate,
+//   isAdmin,
+//   RegistrationController.markTicketAttended
+// );
+
+// Unified Ticket Check-in Endpoint (Admin/Staff only)
+// router.post(
+//   "/tickets/check-in",
+//   authenticate,
+//   isAdmin,
+//   RegistrationController.checkInTicket
+// );
 
 export default router;

@@ -8,9 +8,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueBookingController = void 0;
 const VenueBookingRepository_1 = require("../repositories/VenueBookingRepository");
@@ -24,7 +21,7 @@ const VenueBookingPaymentService_1 = require("../services/payments/VenueBookingP
 const Venue_1 = require("../models/Venue Tables/Venue");
 const VenueBookingPayment_1 = require("../models/VenueBookingPayment");
 const SimpleNotificationService_1 = require("../services/notifications/SimpleNotificationService");
-const EmailService_1 = __importDefault(require("../services/emails/EmailService"));
+const EmailService_1 = require("../services/emails/EmailService");
 const VenueBooking_2 = require("../models/VenueBooking");
 const EventStatusEnum_1 = require("../interfaces/Enums/EventStatusEnum");
 class VenueBookingController {
@@ -65,6 +62,8 @@ class VenueBookingController {
                                 totalVenues: 0,
                                 totalBookings: 0,
                                 totalAmount: 0,
+                                totalPaid: 0,
+                                totalRemaining: 0,
                                 pendingBookings: 0,
                                 approvedBookings: 0,
                                 cancelledBookings: 0,
@@ -77,6 +76,7 @@ class VenueBookingController {
                 const venueIds = managedVenues.map((vv) => vv.venue.venueId);
                 // Get all bookings for these venues with necessary relations
                 const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
                 const bookings = yield bookingRepo.find({
                     where: { venueId: (0, typeorm_1.In)(venueIds) },
                     relations: [
@@ -91,7 +91,6 @@ class VenueBookingController {
                     },
                 });
                 // Get payment details for each booking
-                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
                 const enrichedBookings = yield Promise.all(bookings.map((booking) => __awaiter(this, void 0, void 0, function* () {
                     var _a;
                     const venue = booking.venue;
@@ -103,9 +102,16 @@ class VenueBookingController {
                         return sum + (((_a = date.hours) === null || _a === void 0 ? void 0 : _a.length) || 1);
                     }, 0);
                     const baseVenueAmount = ((_a = venue.venueVariables[0]) === null || _a === void 0 ? void 0 : _a.venueAmount) || 0;
-                    const totalVenueAmount = venue.bookingType === "HOURLY"
-                        ? baseVenueAmount * totalHours
-                        : baseVenueAmount;
+                    let totalVenueAmount = 0;
+                    if (venue.bookingType === "HOURLY") {
+                        totalVenueAmount = baseVenueAmount * totalHours;
+                    }
+                    else if (venue.bookingType === "DAILY") {
+                        totalVenueAmount = baseVenueAmount * booking.bookingDates.length;
+                    }
+                    else {
+                        totalVenueAmount = baseVenueAmount;
+                    }
                     const depositAmount = (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent)
                         ? (totalVenueAmount * bookingCondition.depositRequiredPercent) / 100
                         : totalVenueAmount;
@@ -140,6 +146,27 @@ class VenueBookingController {
                             notes: payment.notes,
                         };
                     });
+                    // Payment status logic
+                    let paymentStatus = "PENDING";
+                    if (booking.isPaid || totalPaid >= totalVenueAmount) {
+                        paymentStatus = "PAID";
+                    }
+                    else if (totalPaid >= depositAmount) {
+                        paymentStatus = "DEPOSIT_PAID";
+                    }
+                    // Deposit status
+                    const depositStatus = totalPaid >= depositAmount ? "FULFILLED" : "PENDING";
+                    // Deposit description for clarity
+                    let depositDescription = "";
+                    if (venue.bookingType === "HOURLY") {
+                        depositDescription = `Initial deposit required (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount ${totalVenueAmount} for ${totalHours} hours)`;
+                    }
+                    else if (venue.bookingType === "DAILY") {
+                        depositDescription = `Initial deposit required (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount ${baseVenueAmount} x ${booking.bookingDates.length} days = ${totalVenueAmount})`;
+                    }
+                    else {
+                        depositDescription = `Initial deposit required (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount ${totalVenueAmount})`;
+                    }
                     return {
                         bookingId: booking.bookingId,
                         eventDetails: {
@@ -159,13 +186,10 @@ class VenueBookingController {
                             depositRequired: {
                                 percentage: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent) || 100,
                                 amount: depositAmount,
-                                description: venue.bookingType === "HOURLY"
-                                    ? `Initial deposit required (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount ${totalVenueAmount} for ${totalHours} hours)`
-                                    : `Initial deposit required (${bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.depositRequiredPercent}% of total amount ${totalVenueAmount})`,
+                                description: depositDescription,
                             },
                             paymentCompletionRequired: {
                                 daysBeforeEvent: (bookingCondition === null || bookingCondition === void 0 ? void 0 : bookingCondition.paymentComplementTimeBeforeEvent) || 0,
-                                amount: totalVenueAmount - depositAmount,
                                 deadline: paymentDeadline,
                             },
                         },
@@ -187,13 +211,9 @@ class VenueBookingController {
                             depositAmount: depositAmount,
                             totalPaid: totalPaid,
                             remainingAmount: totalVenueAmount - totalPaid,
-                            paymentStatus: booking.isPaid
-                                ? "PAID"
-                                : totalPaid >= depositAmount
-                                    ? "DEPOSIT_PAID"
-                                    : "PENDING",
+                            paymentStatus: paymentStatus,
                             paymentProgress: ((totalPaid / totalVenueAmount) * 100).toFixed(2) + "%",
-                            depositStatus: totalPaid >= depositAmount ? "FULFILLED" : "PENDING",
+                            depositStatus: depositStatus,
                             paymentHistory: paymentHistory,
                             nextPaymentDue: totalPaid < totalVenueAmount ? totalVenueAmount - totalPaid : 0,
                             paymentDeadline: paymentDeadline,
@@ -845,7 +865,7 @@ class VenueBookingController {
                 // Email notification
                 try {
                     if (booking.user && booking.user.email) {
-                        yield EmailService_1.default.sendBookingCancellationEmail({
+                        yield EmailService_1.EmailService.sendBookingCancellationEmail({
                             to: booking.user.email,
                             userName: booking.user.firstName || booking.user.username || "User",
                             venueName: booking.venue.venueName,
@@ -917,7 +937,7 @@ class VenueBookingController {
                     return;
                 }
                 // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
-                if (!["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
+                if (!["PENDING", "APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
                     res.status(400).json({
                         success: false,
                         message: "Only approved bookings can be cancelled by manager.",
@@ -959,7 +979,7 @@ class VenueBookingController {
                 // Email notification
                 try {
                     if (booking.user && booking.user.email) {
-                        yield EmailService_1.default.sendBookingCancellationEmail({
+                        yield EmailService_1.EmailService.sendBookingCancellationEmail({
                             to: booking.user.email,
                             userName: booking.user.firstName || booking.user.username || "User",
                             venueName: booking.venue.venueName,
@@ -978,7 +998,7 @@ class VenueBookingController {
                 }
                 res.status(200).json({
                     success: true,
-                    message: "Booking, event, and slots cancelled/deleted.",
+                    message: "Booking and event cancelled (slots not deleted).",
                     booking,
                     event: booking.event,
                 });
@@ -1030,7 +1050,7 @@ class VenueBookingController {
                     return;
                 }
                 // Only allow if status is APPROVED_PAID or APPROVED_NOT_PAID
-                if (!["APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
+                if (!["PENDING", "APPROVED_PAID", "APPROVED_NOT_PAID"].includes(booking.bookingStatus)) {
                     res.status(400).json({
                         success: false,
                         message: "Only approved bookings can be cancelled by manager.",
@@ -1050,7 +1070,7 @@ class VenueBookingController {
                 // Email notification
                 try {
                     if (booking.user && booking.user.email) {
-                        yield EmailService_1.default.sendBookingCancellationEmail({
+                        yield EmailService_1.EmailService.sendBookingCancellationEmail({
                             to: booking.user.email,
                             userName: booking.user.firstName || booking.user.username || "User",
                             venueName: booking.venue.venueName,
@@ -1270,6 +1290,7 @@ class VenueBookingController {
                     return;
                 }
                 const bookingRepo = Database_1.AppDataSource.getRepository(VenueBooking_1.VenueBooking);
+                const paymentRepo = Database_1.AppDataSource.getRepository(VenueBookingPayment_1.VenueBookingPayment);
                 const bookings = yield bookingRepo.find({
                     where: { venueId },
                     order: { createdAt: "DESC" },
@@ -1281,26 +1302,35 @@ class VenueBookingController {
                 // Enhanced venue summary with payment stats
                 let venueSummary = null;
                 if (venue) {
-                    // Calculate payment stats
                     let fullPaidCount = 0;
-                    let partialPaidCount = 0; // Not available without payment history
+                    let partialPaidCount = 0;
                     let unpaidCount = 0;
                     let totalRevenue = 0;
                     let totalExpectedRevenue = 0;
                     let totalPaidBookings = 0;
                     let totalUnpaidAmount = 0;
+                    // For each booking, fetch payments and calculate payment status
                     for (const booking of bookings) {
+                        const payments = yield paymentRepo.find({
+                            where: { bookingId: booking.bookingId },
+                        });
+                        const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
                         totalExpectedRevenue += Number(booking.amountToBePaid || 0);
-                        if (booking.isPaid) {
+                        if (totalPaid >= Number(booking.amountToBePaid || 0)) {
                             fullPaidCount++;
                             totalRevenue += Number(booking.amountToBePaid || 0);
                             totalPaidBookings++;
+                        }
+                        else if (totalPaid > 0) {
+                            partialPaidCount++;
+                            totalRevenue += totalPaid;
+                            totalUnpaidAmount +=
+                                Number(booking.amountToBePaid || 0) - totalPaid;
                         }
                         else {
                             unpaidCount++;
                             totalUnpaidAmount += Number(booking.amountToBePaid || 0);
                         }
-                        // To support partialPaidCount, you would need to sum payments for each booking
                     }
                     venueSummary = {
                         venueId: venue.venueId,
@@ -1309,7 +1339,7 @@ class VenueBookingController {
                         location: venue.venueLocation,
                         totalBookings: bookings.length,
                         fullPaidCount,
-                        partialPaidCount, // Always 0 unless payment history is added
+                        partialPaidCount,
                         unpaidCount,
                         totalRevenue,
                         totalExpectedRevenue,
@@ -1349,7 +1379,14 @@ class VenueBookingController {
                                 };
                             }
                         }
-                        return Object.assign(Object.assign({}, booking), { user: userInfo });
+                        // Calculate totalPaid and remainingAmount for this booking
+                        const payments = yield paymentRepo.find({
+                            where: { bookingId: booking.bookingId },
+                        });
+                        const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
+                        const remainingAmount = Number(booking.amountToBePaid || 0) - totalPaid;
+                        return Object.assign(Object.assign({}, booking), { user: userInfo, totalPaid,
+                            remainingAmount });
                     }))),
                 });
             }

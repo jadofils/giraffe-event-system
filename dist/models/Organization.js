@@ -15,7 +15,6 @@ const class_validator_1 = require("class-validator");
 const User_1 = require("./User");
 const Venue_1 = require("./Venue Tables/Venue");
 const VenueInvoice_1 = require("./VenueInvoice");
-const TicketType_1 = require("./TicketType");
 const OrganizationStatusEnum_1 = require("../interfaces/Enums/OrganizationStatusEnum");
 let Organization = class Organization {
 };
@@ -144,10 +143,6 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => VenueInvoice_1.VenueInvoice, (venueInvoice) => venueInvoice.organization),
     __metadata("design:type", Array)
 ], Organization.prototype, "venueInvoices", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => TicketType_1.TicketType, (ticketType) => ticketType.organization),
-    __metadata("design:type", Array)
-], Organization.prototype, "ticketTypes", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "integer", default: 0 }),
     (0, class_validator_1.IsOptional)(),

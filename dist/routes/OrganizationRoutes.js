@@ -36,7 +36,8 @@ router.patch("/:id/reject", AuthMiddleware_1.authenticate, OrganizationControlle
 // Add PATCH /organizations/:id/logo for updating only the logo
 router.patch("/:id/logo", AuthMiddleware_1.authenticate, upload_1.default.single("logo"), OrganizationController_1.OrganizationController.updateLogo);
 // Add PATCH /organizations/:id/supporting-document for updating only the supporting document
-router.patch("/:id/supporting-document", AuthMiddleware_1.authenticate, upload_1.default.single("supportingDocument"), OrganizationController_1.OrganizationController.updateSupportingDocument);
+router.patch("/:id/supporting-document", AuthMiddleware_1.authenticate, upload_1.default.array("supportingDocument", 3), // Changed from upload.single to upload.array with maxCount
+OrganizationController_1.OrganizationController.updateSupportingDocument);
 router.patch("/:id/enable-status", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.enableStatus);
 router.patch("/:id/disable-status", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.disableStatus);
 router.patch("/:id/query", AuthMiddleware_1.authenticate, OrganizationController_1.OrganizationController.queryOrganization);

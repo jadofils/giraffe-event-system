@@ -12,10 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EmailService = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-class PasswordService {
+class EmailService {
+    /**
+     * @deprecated Use sendTicketsEmail for multiple tickets or if you need a more structured single ticket email.
+     */
     static sendTicketEmail(_a) {
         return __awaiter(this, arguments, void 0, function* ({ to, subject, eventName, eventDate, venueName, ticketPdf, qrCode, }) {
             try {
@@ -52,6 +56,57 @@ class PasswordService {
             }
             catch (error) {
                 console.error("Error sending ticket email:", error);
+                return false;
+            }
+        });
+    }
+    static sendTicketsEmail(_a) {
+        return __awaiter(this, arguments, void 0, function* ({ to, subject, eventName, eventDate, venueName, tickets, venueGoogleMapsLink, // New parameter
+         }) {
+            try {
+                const transporter = EmailService.getTransporter();
+                const ticketHtml = tickets
+                    .map((ticket) => `
+        <div style="border: 1px solid #eee; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+          <h3>Ticket: ${ticket.ticketName}</h3>
+          <p><strong>Attendee:</strong> ${ticket.attendeeName}</p>
+          <p><strong>Date for this ticket:</strong> ${new Date(ticket.attendedDate).toDateString()}</p>
+          <p>Please present this QR code at the event entrance:</p>
+          <img src="${ticket.qrCodeUrl}" alt="QR Code" width="150" style="display: block; margin: 10px 0;"/>
+        </div>
+      `)
+                    .join("");
+                const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px;">
+          <h2 style="color: #003087;">Your Tickets for ${eventName}</h2>
+          <p><strong>Event Date:</strong> ${eventDate.toDateString()}</p>
+          <p><strong>Venue:</strong> ${venueName}
+          ${venueGoogleMapsLink
+                    ? ` (<a href="${venueGoogleMapsLink}" target="_blank">View on Map</a>)`
+                    : ""}
+          </p>
+          <p>Here are your tickets. Please find the details and QR codes below for each ticket.</p>
+          ${ticketHtml}
+          <p>Thank you for your purchase!</p>
+          <div style="margin-top: 32px; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px;">
+            Best regards,<br/>
+            <b>Giraffe Event System Team</b>
+          </div>
+        </div>
+      `;
+                const mailOptions = {
+                    from: `"Event Tickets" <${process.env.EMAIL_USER}>`,
+                    to,
+                    subject,
+                    html: htmlContent,
+                    // Attachments can be added here if you generate PDFs for each ticket dynamically
+                };
+                yield transporter.sendMail(mailOptions);
+                console.log(`Tickets email sent successfully to ${to} for ${tickets.length} tickets.`);
+                return true;
+            }
+            catch (error) {
+                console.error("Error sending tickets email:", error);
                 return false;
             }
         });
@@ -305,7 +360,7 @@ Need help? <a href="mailto:support@ur.ac.rw">Contact Support</a>
         });
     }
 }
-PasswordService.PASSWORD_LENGTH = 12;
-PasswordService.EXPIRY_HOURS = 24;
-PasswordService.SALT_ROUNDS = 10;
-exports.default = PasswordService;
+exports.EmailService = EmailService;
+EmailService.PASSWORD_LENGTH = 12;
+EmailService.EXPIRY_HOURS = 24;
+EmailService.SALT_ROUNDS = 10;
