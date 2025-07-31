@@ -512,8 +512,7 @@ export class EventController {
     // Check all venue bookings
     const allApproved = event.venueBookings.every(
       (b) =>
-        b.bookingStatus === "APPROVED_NOT_PAID" ||
-        b.bookingStatus === "APPROVED_PAID"
+        b.bookingStatus === "PARTIAL" || b.bookingStatus === "APPROVED_PAID"
     );
     if (!allApproved) {
       res.status(400).json({

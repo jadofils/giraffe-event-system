@@ -30,7 +30,7 @@ app.use(
       const allowedOrigins = [
         "http://localhost:3001",
         "http://localhost:3000",
-        "https://venue-and-event-management-front-si-tau.vercel.app",
+        "https://giraffe-dev.vercel.app",
         AppConfig.CORS_ORIGIN, // fallback to env/config
       ];
       if (!origin || allowedOrigins.includes(origin)) {
