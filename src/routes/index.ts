@@ -5,6 +5,7 @@ import path from "path";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
 import { userRoutes } from "./UserRoutes";
+import healthRoutes from "./Health";
 import roleRoutes from "./RoleRoutes";
 import { organizationRoutes } from "./OrganizationRoutes";
 // import tickets from "./TicketTyeRoutes"; // Ensure tickets is exported from TicketType
@@ -29,8 +30,9 @@ router.use(
 ); // Adjust path as needed
 
 // Use versioned routes
-
+router.use("/health", healthRoutes);
 router.use("/users", userRoutes);
+
 router.use("/roles", roleRoutes);
 router.use("/organizations", organizationRoutes); // This makes `/api/v1/organizations/*` available
 // router.use("/tickets", tickets); // This makes `/api/v1/tickets-type/*` available
