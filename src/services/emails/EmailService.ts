@@ -27,8 +27,12 @@ export class EmailService {
       attendeeName: string;
       ticketName: string;
       attendedDate: string;
+      barcodeUrl: string; // Add barcode URL
+      sevenDigitCode: string; // Add 7-digit code
+      pdfUrl?: string; // Add pdfUrl to individual ticket object
     }>;
     venueGoogleMapsLink?: string;
+    // pdfUrl?: string; // This is no longer needed, individual PDFs are on each ticket
   }): Promise<boolean> {
     try {
       const transporter = EmailService.getTransporter();
@@ -93,10 +97,48 @@ export class EmailService {
                      width: 120px; 
                      height: 120px; 
                      display: block; 
-                     margin: 0 auto;
+                     margin: 0 auto 10px;
                      border-radius: 8px;
                      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                    "/>
+              <p style="margin: 0 0 12px 0; color: #4285F4; font-weight: 600; font-size: 14px;">
+                 OR SCAN BARCODE
+              </p>
+              <img src="${ticket.barcodeUrl}" alt="Barcode for ${
+            ticket.attendeeName
+          }" 
+                   style="
+                     width: 180px; 
+                     height: 60px; 
+                     display: block; 
+                     margin: 0 auto 10px;
+                     border-radius: 8px;
+                     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                   "/>
+              <p style="margin: 0 0 0px 0; color: #4285F4; font-weight: 600; font-size: 14px;">
+                 OR ENTER CODE: <strong style="font-size: 16px;">${
+                   ticket.sevenDigitCode
+                 }</strong>
+              </p>
+              ${
+                ticket.pdfUrl
+                  ? `<div style="margin-top: 20px; ">
+                      <a href="${ticket.pdfUrl}" style="
+                        background: #1a73e8;
+                        color: white;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        text-decoration: none;
+                        font-weight: 600;
+                        display: inline-block;
+                        font-size: 12px;
+                        box-shadow: 0 2px 8px rgba(26, 115, 232, 0.2);
+                      ">
+                        Download PDF Ticket
+                      </a>
+                    </div>`
+                  : ""
+              }
             </div>
           </div>
         `
@@ -110,33 +152,45 @@ export class EmailService {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Your Event Tickets - Giraffe Space</title>
-          <style>
-            .header { 
-            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%); 
-            color: #FFFFFF; 
-            padding: 40px 30px; 
-            text-align: center; 
-          }
-          .header h1 {
-            font-size: 28px; 
-            margin: 0;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-          }
-          .header p {
-            margin: 8px 0 0 0;
-            opacity: 0.9;
-            font-size: 16px;
-          }
-          </style>
+    
         </head>
         <body style="margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;">
           <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
             
             <!-- Header -->
-             <div class="header">
-            <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space Logo" class="logo" />
-            <h1> Your Event Tickets</h1>
+          <div style="
+              background: linear-gradient(135deg, #347ff8ff 0%, #2a7eedff 100%);
+              color: #FFFFFF;
+              padding: 40px 30px;
+              text-align: center;
+              border-radius: 12px 12px 0 0;
+            ">
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" 
+              alt="Giraffe Space Logo" style="
+                display: block;
+                margin: 0 auto 20px;
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.1);
+                padding: 12px;
+              " />
+              <h1 style="
+                font-size: 28px;
+                margin: 0;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+              ">
+                 Your Event Tickets
+              </h1>
+              <p style="
+                margin: 8px 0 0 0;
+                opacity: 0.9;
+                font-size: 16px;
+              ">
+                Ready for your amazing event!
+              </p>
+            </div>
           </div>
 
             <!-- Main Content -->

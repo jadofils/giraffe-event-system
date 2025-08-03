@@ -13,6 +13,10 @@ import {
   VenueBookingPaymentStatus,
 } from "../../models/VenueBookingPayment"; // Reusing PaymentMethod and PaymentStatus
 import { TicketCategory } from "../../interfaces/Enums/TicketEnums"; // Import TicketCategory
+import { BarcodeService } from "../registrations/BarcodeService";
+import { SevenDigitCodeService } from "../registrations/SevenDigitCodeService";
+import { TicketPdfService } from "./TicketPdfService"; // NEW IMPORT
+import { CloudinaryUploadService } from "../CloudinaryUploadService"; // NEW IMPORT
 
 interface PurchaseTicketResponse {
   success: boolean;
@@ -24,10 +28,16 @@ interface PurchaseTicketResponse {
     ticketTypeName: string;
     eventId: string;
     eventName: string;
-    qrCodeUrl?: string;
-    attendedDate?: string; // New field for the date the ticket is valid for
+    qrCodeUrl: string; // Ensure this is always a string
+    barcodeUrl: string; // Ensure this is always a string
+    sevenDigitCode: string; // Ensure this is always a string
+    attendedDate: string;
+    pdfUrl?: string;
   }[];
   qrCodeUrls?: string[];
+  barcodeUrls?: string[];
+  sevenDigitCodes?: string[];
+  pdfUrls?: string[];
   paymentStatus?: string;
 }
 
@@ -39,8 +49,8 @@ export class TicketPurchaseService {
       ticketTypeId: string;
       attendeeName: string;
       selectedDate: string;
-      category?: string; // Add optional category for discount application
-    }>, // selectedDate is now mandatory
+      category?: string;
+    }>,
     paymentDetails: {
       amountPaid: number;
       paymentMethod: PaymentMethod;
@@ -57,7 +67,7 @@ export class TicketPurchaseService {
       const userRepo = queryRunner.manager.getRepository(User);
       const eventRepo = queryRunner.manager.getRepository(Event);
       const ticketPaymentRepo =
-        queryRunner.manager.getRepository(TicketPayment); // Get new TicketPayment repository
+        queryRunner.manager.getRepository(TicketPayment);
 
       // Fetch buyer user (the one making the purchase)
       const buyerUser = await userRepo.findOne({
@@ -71,6 +81,9 @@ export class TicketPurchaseService {
       const purchasedRegistrations: Registration[] = [];
       let totalTicketsCost = 0;
       const qrCodeUrls: string[] = [];
+      const barcodeUrls: string[] = [];
+      const sevenDigitCodes: string[] = [];
+      const pdfUrls: string[] = [];
 
       // Process each ticket individually
       for (const ticketPurchase of ticketsToPurchase) {
@@ -78,7 +91,7 @@ export class TicketPurchaseService {
 
         // New: Use provided category for discount, or default to general if not provided
         const purchaseCategory =
-          ticketPurchase.category || TicketCategory.GENERAL; // Default to GENERAL enum value
+          ticketPurchase.category || TicketCategory.GENERAL;
 
         const ticketType = await ticketTypeRepo.findOne({
           where: { ticketTypeId },
@@ -142,7 +155,7 @@ export class TicketPurchaseService {
         }
 
         // Calculate actual price after discount (if any), keeping everything in cents
-        let actualPriceInCents = ticketPriceInCents; // Start with base price in cents
+        let actualPriceInCents = ticketPriceInCents;
         let discountAppliedAmountInCents = 0;
         let appliedDiscountDescription: string | undefined;
 
@@ -154,7 +167,6 @@ export class TicketPurchaseService {
           const discount =
             ticketType.categoryDiscounts[purchaseCategory as TicketCategory];
           if (discount?.percent !== undefined && discount.percent > 0) {
-            // Calculate discount amount in cents
             discountAppliedAmountInCents = Math.round(
               (ticketPriceInCents * discount.percent) / 100
             );
@@ -163,8 +175,6 @@ export class TicketPurchaseService {
             appliedDiscountDescription = discount.description;
           }
         } else if (purchaseCategory !== TicketCategory.GENERAL) {
-          // Use enum value for comparison
-          // If a specific category was requested but no discount found for it, log or handle as needed
           console.warn(
             `No specific discount found for category '${purchaseCategory}' on ticket type '${ticketType.name}'. Using base price.`
           );
@@ -179,7 +189,7 @@ export class TicketPurchaseService {
         );
 
         // Accumulate total cost (in cents)
-        totalTicketsCost += actualPriceInCents; // Accumulate in cents
+        totalTicketsCost += actualPriceInCents;
 
         // Decrease available quantity for this ticket type
         ticketType.quantitySold += 1;
@@ -189,29 +199,28 @@ export class TicketPurchaseService {
         // Create individual registration entry
         const registration = registrationRepo.create({
           eventId: event.eventId,
-          userId: buyerUser.userId, // Buyer is the user who initiated the purchase
+          userId: buyerUser.userId,
           buyerId: buyerUser.userId,
-          attendeeName: attendeeName, // The specific attendee's name for this ticket
+          attendeeName: attendeeName,
           ticketTypeId: ticketType.ticketTypeId,
-          venueId: event.eventVenues[0]?.venueId, // Get venueId from the first associated venue
-          noOfTickets: 1, // Always 1 for individual ticket registration
-          totalCost: actualPriceInCents / 100, // Convert to dollars for storage in DB
-          paymentStatus: "PENDING", // Set to PENDING initially for each registration
+          venueId: event.eventVenues[0]?.venueId,
+          noOfTickets: 1,
+          totalCost: actualPriceInCents / 100,
+          paymentStatus: "PENDING",
           registrationStatus: "active",
           event,
           user: buyerUser,
           buyer: buyerUser,
           ticketType,
-          attendedDate: selectedDate, // Set the specific date for this ticket from mandatory selectedDate
+          attendedDate: selectedDate,
+          isUsed: false,
         });
         await registrationRepo.save(registration);
         purchasedRegistrations.push(registration);
       }
 
       // 3. Validate total cost against amount paid (after processing all tickets)
-      // Perform comparison using rounded cents to avoid floating-point issues
       const amountPaidInCents = Math.round(paymentDetails.amountPaid * 100);
-      // totalTicketsCost is already in cents, so no rounding needed here.
       if (amountPaidInCents < totalTicketsCost) {
         await queryRunner.rollbackTransaction();
         return {
@@ -227,18 +236,14 @@ export class TicketPurchaseService {
             totalTicketsCost / 100
           }. No refund processed.`
         );
-        // You might want to handle refunds or store overpayment details here
       }
 
       // 4. Process Payment (once for the total amount)
-      // Create a single TicketPayment record for the entire purchase
-      // For simplicity, we'll associate it with the first registration.
-      // In a more complex scenario, you might have a separate Purchase or Order model.
       const firstRegistration = purchasedRegistrations[0];
       const ticketPayment = ticketPaymentRepo.create({
         amountPaid: paymentDetails.amountPaid,
         paymentMethod: paymentDetails.paymentMethod,
-        paymentStatus: VenueBookingPaymentStatus.PAID, // Assume completed if amount is sufficient
+        paymentStatus: VenueBookingPaymentStatus.PAID,
         paymentReference: paymentDetails.paymentReference,
         payerId: buyerUser.userId,
         payerType: "USER",
@@ -249,46 +254,62 @@ export class TicketPurchaseService {
       // Update all purchased registrations with the new paymentId and status
       for (const reg of purchasedRegistrations) {
         reg.paymentId = ticketPayment.paymentId;
-        reg.paymentStatus = VenueBookingPaymentStatus.PAID; // Mark as PAID
+        reg.paymentStatus = VenueBookingPaymentStatus.PAID;
         await registrationRepo.save(reg);
-      }
 
-      // 5. Generate QR codes for all purchased tickets and send consolidated email
-      const emailTicketDetails: Array<{
-        qrCodeUrl: string;
-        attendeeName: string;
-        ticketName: string;
-        attendedDate: string; // Include attended date in email details
-      }> = [];
-      for (const registration of purchasedRegistrations) {
-        // Re-fetch event with venue details if not already loaded consistently
-        const eventForEmail = await eventRepo.findOne({
-          where: { eventId: registration.eventId },
-          relations: ["eventVenues", "eventVenues.venue"],
-        });
-        if (!eventForEmail) continue; // Should not happen
-
+        // Generate QR, Barcode, SevenDigitCode, and upload PDF for EACH registration
         const qrCodeUrl = await QrCodeService.generateQrCode(
-          registration.registrationId,
-          registration.userId,
-          registration.eventId
+          reg.registrationId,
+          reg.userId,
+          reg.eventId
         );
-        registration.qrCode = qrCodeUrl;
-        await registrationRepo.save(registration);
-        qrCodeUrls.push(qrCodeUrl);
+        reg.qrCode = qrCodeUrl;
 
-        emailTicketDetails.push({
-          qrCodeUrl,
-          attendeeName: registration.attendeeName || "",
-          ticketName: registration.ticketType.name,
-          attendedDate: registration.attendedDate || "", // Pass the attended date
+        const sevenDigitCode =
+          await SevenDigitCodeService.generateUniqueSevenDigitCode();
+        reg.sevenDigitCode = sevenDigitCode;
+
+        const barcodeUrl = await BarcodeService.generateBarcode(
+          reg.sevenDigitCode!,
+          reg.registrationId
+        );
+        reg.barcode = barcodeUrl;
+
+        // The following lines are moved from inside the loop to ensure they are available for PDF generation
+        const eventForPdf = reg.event;
+        const venueForPdf = eventForPdf?.eventVenues?.[0]?.venue;
+
+        const pdfBuffer = await TicketPdfService.generateTicketPdf({
+          registrationId: reg.registrationId,
+          attendeeName: reg.attendeeName || "",
+          ticketTypeName: reg.ticketType.name,
+          eventName: eventForPdf?.eventName || "",
+          eventDate: eventForPdf?.bookingDates?.[0]?.date || "",
+          venueName: venueForPdf?.venueName || "",
+          qrCodeUrl: reg.qrCode || "",
+          barcodeUrl: reg.barcode || "",
+          sevenDigitCode: reg.sevenDigitCode || "",
+          venueGoogleMapsLink: venueForPdf?.googleMapsLink,
         });
+
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          pdfBuffer,
+          "tickets/pdfs",
+          `ticket-${reg.registrationId}.pdf`,
+          "raw"
+        );
+        reg.pdfUrl = uploadResult.url;
+        await registrationRepo.save(reg);
+        pdfUrls.push(uploadResult.url);
+        qrCodeUrls.push(qrCodeUrl);
+        barcodeUrls.push(barcodeUrl);
+        sevenDigitCodes.push(sevenDigitCode);
       }
 
       // Send Ticket Email (consolidated)
       try {
-        const eventForEmail = purchasedRegistrations[0].event; // Assuming all tickets are for the same event
-        const venueForEmail = eventForEmail?.eventVenues?.[0]?.venue; // Safely get venue details
+        const eventForEmail = purchasedRegistrations[0].event;
+        const venueForEmail = eventForEmail?.eventVenues?.[0]?.venue;
         await EmailService.sendTicketsEmail({
           to: recipientEmail,
           subject: `Your Tickets for ${
@@ -297,14 +318,21 @@ export class TicketPurchaseService {
           eventName: eventForEmail?.eventName || "Your Event",
           eventDate: eventForEmail?.bookingDates[0]?.date
             ? new Date(eventForEmail.bookingDates[0].date)
-            : new Date(), // Using first overall event date for email header
+            : new Date(),
           venueName: venueForEmail?.venueName || "N/A",
-          venueGoogleMapsLink: venueForEmail?.googleMapsLink || undefined, // Pass the Google Maps link
-          tickets: emailTicketDetails,
+          venueGoogleMapsLink: venueForEmail?.googleMapsLink || undefined,
+          tickets: purchasedRegistrations.map((reg) => ({
+            qrCodeUrl: reg.qrCode || "",
+            barcodeUrl: reg.barcode || "",
+            sevenDigitCode: reg.sevenDigitCode || "",
+            attendeeName: reg.attendeeName || "",
+            ticketName: reg.ticketType.name,
+            attendedDate: reg.attendedDate || "",
+            pdfUrl: reg.pdfUrl,
+          })),
         });
       } catch (emailError) {
         console.error("Failed to send ticket email:", emailError);
-        // Do not roll back transaction for email failure, but log it
       }
 
       await queryRunner.commitTransaction();
@@ -319,10 +347,16 @@ export class TicketPurchaseService {
           ticketTypeName: reg.ticketType.name,
           eventId: reg.eventId,
           eventName: reg.event.eventName,
-          qrCodeUrl: reg.qrCode,
-          attendedDate: reg.attendedDate, // Include attendedDate in the response
+          qrCodeUrl: reg.qrCode || "",
+          barcodeUrl: reg.barcode || "",
+          sevenDigitCode: reg.sevenDigitCode || "",
+          attendedDate: reg.attendedDate || "",
+          pdfUrl: reg.pdfUrl,
         })),
         qrCodeUrls: qrCodeUrls,
+        barcodeUrls: barcodeUrls,
+        sevenDigitCodes: sevenDigitCodes,
+        pdfUrls: pdfUrls,
         paymentStatus: VenueBookingPaymentStatus.PAID,
       };
     } catch (error) {

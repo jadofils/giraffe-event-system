@@ -602,433 +602,6 @@ export class EventController {
     return;
   }
 
-  //   static async approveEvent(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { id } = req.params;
-  //       // Fetch event with all relations needed
-  //       const eventResult = await EventRepository.getById(id);
-  //       if (!eventResult.success || !eventResult.data) {
-  //         res.status(404).json({ message: eventResult.message });
-  //         return;
-  //       }
-  //       // Approve the event
-  //       const updateResult = await EventRepository.update(id, {
-  //         status: EventStatus.APPROVED,
-  //       });
-  //       if (!updateResult.success || !updateResult.data) {
-  //         res.status(500).json({ message: updateResult.message });
-  //         return;
-  //       }
-  //       // Refetch event with all relations (including venueBookings, venues, organizer, organization)
-  //       const event = (await EventRepository.getById(id)).data!;
-
-  //       // === REJECT/CANCEL CONFLICTING PENDING EVENTS ===
-  //       const { rejectConflictingPendingEvents } = await import(
-  //         "../middlewares/rejectConflictingPendingEvents"
-  //       );
-  //       await rejectConflictingPendingEvents(event);
-  //       // Eager-load venueBookings with venue, user, organization, and venue.organization
-  //       const bookings = await AppDataSource.getRepository(VenueBooking).find({
-  //         where: { eventId: id },
-  //         relations: ["venue", "venue.organization", "user", "organization"],
-  //       });
-  //       // Approve all venue bookings for this event
-  //       for (const booking of bookings) {
-  //         if (booking.approvalStatus !== ApprovalStatus.APPROVED) {
-  //           booking.approvalStatus = ApprovalStatus.APPROVED;
-  //           await AppDataSource.getRepository(VenueBooking).save(booking);
-  //         }
-  //       }
-  //       // Approve all venues for this event
-  //       if (event.venues && event.venues.length > 0) {
-  //         const venueRepo = AppDataSource.getRepository("Venue");
-  //         for (const venue of event.venues) {
-  //           const dbVenue = await venueRepo.findOne({
-  //             where: { venueId: venue.venueId },
-  //           });
-  //           if (dbVenue && dbVenue.status !== VenueStatus.APPROVED) {
-  //             dbVenue.status = VenueStatus.APPROVED;
-  //             await venueRepo.save(dbVenue);
-  //           }
-  //         }
-  //       }
-  //       // Create invoices for each booking (if not already invoiced)
-  //       const invoices = [];
-  //       for (const booking of bookings) {
-  //         // Only create invoice if not already linked
-  //         if (!booking.invoice) {
-  //           const invoice = await InvoiceService.createInvoice({
-  //             userId: booking.userId,
-  //             eventId: booking.eventId,
-  //             venueId: booking.venueId,
-  //             totalAmount: booking.totalAmountDue,
-  //             invoiceDate: new Date(),
-  //             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  //             status: InvoiceStatus.PENDING,
-  //           });
-  //           // Optionally, update booking to reference the invoice
-  //           booking.venueInvoiceId = invoice.invoiceId;
-  //           await AppDataSource.getRepository(VenueBooking).save(booking);
-  //           // Attach details for response
-  //           invoices.push({
-  //             ...invoice,
-  //             venue: {
-  //               venueId: booking.venue.venueId,
-  //               venueName: booking.venue.venueName,
-  //               amount: booking.venue.venueVariables,
-  //               location: booking.venue.venueLocation,
-  //               organization: booking.venue.organization
-  //                 ? {
-  //                     organizationId: booking.venue.organization.organizationId,
-  //                     organizationName:
-  //                       booking.venue.organization.organizationName,
-  //                     contactEmail: booking.venue.organization.contactEmail,
-  //                     contactPhone: booking.venue.organization.contactPhone,
-  //                   }
-  //                 : null,
-  //             },
-  //             requester: booking.user
-  //               ? {
-  //                   userId: booking.user.userId,
-  //                   username: booking.user.username,
-  //                   firstName: booking.user.firstName,
-  //                   lastName: booking.user.lastName,
-  //                   email: booking.user.email,
-  //                   phoneNumber: booking.user.phoneNumber,
-  //                 }
-  //               : null,
-  //             bookingOrganization: booking.organization
-  //               ? {
-  //                   organizationId: booking.organization.organizationId,
-  //                   organizationName: booking.organization.organizationName,
-  //                   contactEmail: booking.organization.contactEmail,
-  //                   contactPhone: booking.organization.contactPhone,
-  //                 }
-  //               : null,
-  //           });
-  //         }
-  //       }
-  //       res.status(200).json({
-  //         success: true,
-  //         message: "Event approved and invoices generated.",
-  //         data: {
-  //           event: {
-  //             eventId: event.eventId,
-  //             eventTitle: event.eventTitle,
-  //             startDate: event.startDate,
-  //             endDate: event.endDate,
-  //             organizer: event.organizer,
-  //             organization: event.organization,
-  //           },
-  //           invoices,
-  //         },
-  //       });
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async getEventById(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { id } = req.params;
-  //       const result = await EventRepository.getById(id);
-  //       if (!result.success || !result.data) {
-  //         res.status(404).json({ message: result.message });
-  //         return;
-  //       }
-  //       res.json(result.data);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async getAllEvents(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const result = await EventRepository.getAll();
-  //       if (!result.success || !result.data) {
-  //         res.status(500).json({ message: result.message });
-  //         return;
-  //       }
-  //       res.json(result.data);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async updateEvent(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { id } = req.params;
-  //       const eventData: Partial<EventInterface> = {
-  //         ...req.body,
-  //         status: EventStatus.PENDING,
-  //       };
-
-  //       const updateResult = await EventRepository.update(id, eventData);
-  //       if (!updateResult.success || !updateResult.data) {
-  //         res.status(500).json({ message: updateResult.message });
-  //         return;
-  //       }
-  //       res.json(updateResult.data);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async deleteEvent(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { id } = req.params;
-  //       const result = await EventRepository.delete(id);
-  //       if (!result.success) {
-  //         res.status(500).json({ message: result.message });
-  //         return;
-  //       }
-  //       res.json({ message: "Event deleted" });
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async bulkCreateVenueBookings(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { organizationId, bookings } = req.body;
-  //       const userId = req.user?.userId; // From AuthMiddleware
-  //       const eventId = req.params.eventId;
-
-  //       if (!userId) {
-  //         res.status(401).json({
-  //           success: false,
-  //           message: "Unauthorized: User ID not found in token",
-  //         });
-  //         return;
-  //       }
-
-  //       if (!organizationId) {
-  //         res
-  //           .status(400)
-  //           .json({ success: false, message: "organizationId is required" });
-  //         return;
-  //       }
-
-  //       if (!Array.isArray(bookings) || bookings.length === 0) {
-  //         res
-  //           .status(400)
-  //           .json({ success: false, message: "Booking array is required" });
-  //         return;
-  //       }
-
-  //       // Validate venues exist
-  //       const venueRepo = AppDataSource.getRepository(Venue);
-  //       const venueIds = bookings.map((b) => b.venueId);
-  //       const venues = await venueRepo.find({
-  //         where: { venueId: In(venueIds) },
-  //         relations: ["organization"],
-  //       });
-
-  //       if (venues.length !== bookings.length) {
-  //         res
-  //           .status(404)
-  //           .json({ success: false, message: "One or more venues not found" });
-  //         return;
-  //       }
-
-  //       const result = await EventRepository.bulkCreateVenueBookings(
-  //         bookings.map((b) => ({
-  //           ...b,
-  //           organizationId,
-  //           approvalStatus: ApprovalStatus.PENDING,
-  //         })),
-  //         userId,
-  //         eventId,
-  //         organizationId
-  //       );
-
-  //       if (!result.success) {
-  //         res.status(400).json({ success: false, message: result.message });
-  //         return;
-  //       }
-
-  //       // Format response with full venue data
-  //       const formattedBookings = result.data?.map((booking) => ({
-  //         bookingId: booking.bookingId,
-  //         venue: {
-  //           venueId: booking.venue.venueId,
-  //           venueName: booking.venue.venueName,
-  //           location: booking.venue.venueLocation,
-  //           capacity: booking.venue.capacity,
-  //           amount: booking.venue.venueVariables,
-  //           latitude: booking.venue.latitude,
-  //           longitude: booking.venue.longitude,
-  //           googleMapsLink: booking.venue.googleMapsLink,
-  //           managerId: booking.venue.venueVariables,
-  //           organizationId: booking.venue.organizationId,
-  //           amenities: booking.venue.amenities,
-  //           venueType: booking.venue.venueTypeId,
-  //           createdAt: booking.venue.createdAt,
-  //           updatedAt: booking.venue.updatedAt,
-  //           deletedAt: booking.venue.deletedAt,
-  //         },
-  //         eventId: booking.eventId,
-  //         userId: booking.userId,
-  //         organizationId: booking.organizationId,
-  //         totalAmountDue: booking.totalAmountDue,
-  //         venueInvoiceId: booking.venueInvoiceId,
-  //         approvalStatus: booking.approvalStatus,
-  //         notes: booking.notes,
-  //         createdAt: booking.createdAt,
-  //         updatedAt: booking.updatedAt,
-  //         deletedAt: booking.deletedAt,
-  //       }));
-
-  //       res.status(201).json({
-  //         success: true,
-  //         message: "Bookings created",
-  //         data: formattedBookings,
-  //       });
-  //     } catch (error) {
-  //       console.error("Error in bulkCreateVenueBookings:", error);
-  //       next(error);
-  //     }
-  //   }
-  //   static async approveVenueBooking(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { bookingId } = req.params;
-  //       const updateResult = await EventRepository.updateVenueBooking(bookingId, {
-  //         approvalStatus: ApprovalStatus.APPROVED,
-  //       });
-  //       if (!updateResult.success || !updateResult.data) {
-  //         res.status(500).json({ message: updateResult.message });
-  //         return;
-  //       }
-
-  //       res.json(updateResult.data);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async getVenueBookings(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { eventId } = req.params;
-  //       const eventResult = await EventRepository.getById(eventId);
-  //       if (!eventResult.success || !eventResult.data) {
-  //         res.status(404).json({ message: eventResult.message });
-  //         return;
-  //       }
-  //       res.json(eventResult.data.venueBookings || []);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async updateVenueBooking(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { bookingId } = req.params;
-  //       const bookingData: Partial<VenueBookingInterface> = {
-  //         ...req.body,
-  //         approvalStatus: ApprovalStatus.PENDING,
-  //       };
-
-  //       const updateResult = await EventRepository.updateVenueBooking(
-  //         bookingId,
-  //         bookingData
-  //       );
-  //       if (!updateResult.success || !updateResult.data) {
-  //         res.status(500).json({ message: updateResult.message });
-  //         return;
-  //       }
-  //       res.json(updateResult.data);
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static async deleteVenueBooking(
-  //     req: Request,
-  //     res: Response,
-  //     next: NextFunction
-  //   ): Promise<void> {
-  //     try {
-  //       const { eventId, bookingId } = req.params;
-  //       const removeResult = await EventRepository.removeVenueBookings(eventId, [
-  //         bookingId,
-  //       ]);
-  //       if (!removeResult.success) {
-  //         res.status(500).json({ message: removeResult.message });
-  //         return;
-  //       }
-
-  //       const deleteResult = await EventRepository.deleteVenueBooking(bookingId);
-  //       if (!deleteResult.success) {
-  //         res.status(500).json({ message: deleteResult.message });
-  //         return;
-  //       }
-  //       res.json({ message: "Venue booking deleted" });
-  //     } catch (error) {
-  //       next(error);
-  //     }
-  //   }
-
-  //   static validate(data: Partial<VenueBookingInterface>): string[] {
-  //     const errors: string[] = [];
-  //     if (!data.eventId) errors.push("eventId is required");
-  //     if (!data.venueId) errors.push("venueId is required");
-  //     // organizerId is set from the token, not required in request body
-  //     if (!data.organizationId) errors.push("organizationId is required");
-  //     return errors;
-  //   }
-  // }
-  // function sanitizeVenue(venue: any) {
-  //   if (!venue) return venue;
-  //   const { events, ...venueWithoutEvents } = venue;
-  //   return venueWithoutEvents;
-  // }
-
-  // function sanitizeEvent(event: any) {
-  //   if (!event) return event;
-  //   // Remove circular references for venues
-  //   const sanitizedVenues = event.venues?.map(sanitizeVenue);
-  //   return {
-  //     ...event,
-  //     venues: sanitizedVenues,
-  //   };
-  // }
-
   static async getGroupPaymentDetails(
     req: Request,
     res: Response,
@@ -1870,12 +1443,70 @@ export class EventController {
     }
   }
 
+  static async updateEventPhoto(req: Request, res: Response): Promise<void> {
+    const { eventId } = req.params;
+    try {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({ where: { eventId } });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found" });
+        return;
+      }
+
+      let newPhotoUrl: string | undefined = undefined;
+      const file = (req as any).file;
+
+      if (file && file.buffer) {
+        // Upload new photo
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          file.buffer,
+          "events/photos"
+        );
+        newPhotoUrl = uploadResult.url;
+      }
+
+      // Delete old photo from Cloudinary if it exists and a new one was uploaded
+      if (event.eventPhoto && newPhotoUrl) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            event.eventPhoto,
+            "image"
+          );
+        } catch (e) {
+          console.error(
+            "Failed to delete old event photo from Cloudinary:",
+            event.eventPhoto,
+            e
+          );
+        }
+      }
+
+      // Update event with new photo URL
+      event.eventPhoto = newPhotoUrl;
+      await eventRepo.save(event);
+
+      res.status(200).json({ success: true, data: event });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update event photo.",
+      });
+    }
+  }
+
   static async getEventsByUserId(req: Request, res: Response): Promise<void> {
     const { userId } = req.params;
     try {
       const eventRepo = AppDataSource.getRepository(Event);
       const events = await eventRepo.find({
-        where: { eventOrganizerId: userId },
+        where: {
+          eventOrganizerId: userId,
+          visibilityScope: "PUBLIC",
+        },
         relations: ["venueBookings", "venueBookings.venue"],
         order: { createdAt: "DESC" },
       });
@@ -2170,6 +1801,282 @@ export class EventController {
         res.status(400).json(result);
       }
     } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updatePrivateEvent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    const uploadedCloudinaryUrls: string[] = [];
+    try {
+      const { eventId } = req.params;
+      if (!req.body) {
+        res.status(400).json({ success: false, message: "No body provided" });
+        return;
+      }
+
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId },
+        relations: ["eventGuests"], // Eager load guests to check existing IDs
+      });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found" });
+        return;
+      }
+
+      let { dates, guests, eventStatus, eventName, ...otherFields } = req.body;
+
+      // Prevent updating eventName
+      if (eventName) {
+        res.status(400).json({
+          success: false,
+          message: "Event name cannot be updated for events.",
+        });
+        return;
+      }
+
+      // Prevent updating dates
+      if (dates) {
+        res.status(400).json({
+          success: false,
+          message: "Booking dates cannot be updated for events.",
+        });
+        return;
+      }
+
+      // Handle eventPhoto upload
+      const eventPhotoFile = (req as any).files?.eventPhoto?.[0];
+      if (eventPhotoFile && eventPhotoFile.buffer) {
+        if (event.eventPhoto) {
+          await CloudinaryUploadService.deleteFromCloudinary(
+            event.eventPhoto,
+            "image"
+          );
+        }
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          eventPhotoFile.buffer,
+          "events/photos"
+        );
+        event.eventPhoto = uploadResult.url;
+        uploadedCloudinaryUrls.push(event.eventPhoto);
+      }
+
+      // Parse guests and dates if sent as JSON strings (from form-data)
+      let parsedGuests: any[] = guests;
+      if (typeof guests === "string") {
+        try {
+          parsedGuests = JSON.parse(guests);
+        } catch (e) {
+          parsedGuests = [];
+        }
+      }
+
+      if (Array.isArray(parsedGuests)) {
+        const guestRepo = AppDataSource.getRepository(EventGuest);
+        const existingGuests = event.eventGuests || [];
+        const incomingGuestIds = new Set(
+          parsedGuests.map((g: any) => g.id).filter(Boolean)
+        );
+
+        // 1. Identify and delete guests that are no longer in the request
+        for (const existingGuest of existingGuests) {
+          if (!incomingGuestIds.has(existingGuest.id)) {
+            // Delete photo from Cloudinary if exists
+            if (existingGuest.guestPhoto) {
+              try {
+                await CloudinaryUploadService.deleteFromCloudinary(
+                  existingGuest.guestPhoto,
+                  "image"
+                );
+              } catch (e) {
+                console.error(
+                  "Failed to delete old guest photo from Cloudinary:",
+                  existingGuest.guestPhoto,
+                  e
+                );
+              }
+            }
+            await guestRepo.remove(existingGuest); // Delete from database
+          }
+        }
+
+        // 2. Process new and updated guests
+        const guestPhotoFiles = (req as any).files?.guestPhotos;
+        const newAndUpdatedGuests = await Promise.all(
+          parsedGuests.map(async (guest, index) => {
+            let guestPhotoUrl = guest.guestPhoto;
+            const file = guestPhotoFiles && guestPhotoFiles[index];
+
+            if (file && file.buffer) {
+              // If updating an existing guest with a new photo, delete the old one first
+              if (
+                guest.id &&
+                existingGuests.some((g) => g.id === guest.id && g.guestPhoto)
+              ) {
+                const oldGuest = existingGuests.find((g) => g.id === guest.id);
+                if (oldGuest?.guestPhoto) {
+                  try {
+                    await CloudinaryUploadService.deleteFromCloudinary(
+                      oldGuest.guestPhoto,
+                      "image"
+                    );
+                  } catch (e) {
+                    console.error(
+                      "Failed to delete old guest photo on update:",
+                      oldGuest.guestPhoto,
+                      e
+                    );
+                  }
+                }
+              }
+              const uploadResult = await CloudinaryUploadService.uploadBuffer(
+                file.buffer,
+                "events/guests"
+              );
+              guestPhotoUrl = uploadResult.url;
+              uploadedCloudinaryUrls.push(guestPhotoUrl);
+            }
+
+            if (guest.id && incomingGuestIds.has(guest.id)) {
+              // Update existing guest: only update the photo if a new one was uploaded via file
+              const updateData: any = { guestName: guest.guestName };
+              if (guestPhotoUrl) {
+                updateData.guestPhoto = guestPhotoUrl;
+              }
+              await guestRepo.update({ id: guest.id, eventId }, updateData);
+              return {
+                id: guest.id,
+                guestName: guest.guestName,
+                guestPhoto:
+                  guestPhotoUrl ||
+                  existingGuests.find((g) => g.id === guest.id)?.guestPhoto,
+              };
+            } else {
+              // Create new guest
+              const newGuest = guestRepo.create({
+                eventId,
+                guestName: guest.guestName,
+                guestPhoto: guestPhotoUrl,
+              });
+              await guestRepo.save(newGuest);
+              return newGuest;
+            }
+          })
+        );
+
+        // Reload guests to reflect all changes (deletions, creations, updates)
+        event.eventGuests = await guestRepo.find({ where: { eventId } });
+      }
+
+      // Handle dates update
+      let bookingDates = event.bookingDates; // default to existing
+      if (dates) {
+        if (typeof dates === "string") {
+          try {
+            dates = JSON.parse(dates);
+          } catch (e) {
+            dates = [];
+          }
+        }
+        if (!Array.isArray(dates) || dates.length === 0) {
+          res.status(400).json({
+            success: false,
+            message: "No valid dates provided for update",
+          });
+          return;
+        }
+
+        // Revalidate all venue bookings for the event with the new dates
+        const venueRepo = AppDataSource.getRepository(Venue);
+        const venueBookings = await AppDataSource.getRepository(
+          VenueBooking
+        ).find({
+          where: { eventId },
+        });
+
+        for (const vb of venueBookings) {
+          const venue = await venueRepo.findOne({
+            where: { venueId: vb.venueId },
+            relations: ["venueVariables", "bookingConditions"],
+          });
+          if (!venue) {
+            continue; // Should not happen
+          }
+          const validation =
+            await BookingValidationService.validateBookingDates(venue, dates);
+          if (!validation.isAvailable) {
+            res.status(400).json({
+              success: false,
+              message: `New dates are not available for venue ${venue.venueName}`,
+              unavailableDates: validation.unavailableDates,
+            });
+            return;
+          }
+        }
+        bookingDates = dates;
+      }
+
+      // Update other text fields
+      const allowedFields = [
+        "eventType",
+        "eventDescription",
+        "maxAttendees",
+        "socialMediaLinks",
+        "isEntryPaid",
+        "expectedGuests",
+        "specialNotes",
+        "cancellationReason",
+        "visibilityScope", // Allow updating visibilityScope
+      ];
+      for (const key of Object.keys(otherFields)) {
+        if (allowedFields.includes(key)) {
+          (event as any)[key] = otherFields[key];
+        }
+      }
+
+      // Logic to handle visibilityScope and eventStatus interaction
+      if (event.visibilityScope === "PUBLIC") {
+        // If visibility becomes PUBLIC, set status based on user input or default to DRAFTED
+        if (eventStatus) {
+          event.eventStatus = eventStatus; // Use user-provided status
+        } else {
+          event.eventStatus = EventStatus.DRAFTED; // Default to DRAFTED if not provided
+        }
+        event.cancellationReason = undefined; // Clear cancellation reason
+      } else if (eventStatus) {
+        // If event remains PRIVATE, allow DRAFTED or REQUESTED status
+        const allowedPrivateStatuses = [
+          EventStatus.DRAFTED,
+          EventStatus.REQUESTED,
+        ];
+        if (!allowedPrivateStatuses.includes(eventStatus)) {
+          res.status(400).json({
+            success: false,
+            message: `Event status can only be updated to DRAFTED or REQUESTED for private events.`,
+          });
+          return;
+        }
+        event.eventStatus = eventStatus;
+      }
+
+      // Ensure bookingDates is updated on the event object
+      event.bookingDates = bookingDates;
+
+      await eventRepo.save(event);
+      res.status(200).json({ success: true, data: event });
+    } catch (error) {
+      for (const url of uploadedCloudinaryUrls) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(url, "image");
+        } catch (e) {
+          console.error("Failed to delete Cloudinary image on error:", url, e);
+        }
+      }
       next(error);
     }
   }

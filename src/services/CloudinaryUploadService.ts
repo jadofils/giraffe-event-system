@@ -12,14 +12,15 @@ export class CloudinaryUploadService {
   static async uploadBuffer(
     fileBuffer: Buffer,
     folder?: string,
-    fileName?: string
+    fileName?: string,
+    resourceType: "image" | "video" | "raw" | "auto" = "auto" // Add resourceType parameter
   ): Promise<{ url: string; public_id: string }> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder,
           public_id: fileName,
-          resource_type: "auto",
+          resource_type: resourceType, // Use the passed resourceType
         },
         (error: any, result: any) => {
           if (error) return reject(error);

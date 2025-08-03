@@ -876,8 +876,8 @@ export class VenueController {
         notaBene,
         transitionTime,
         depositRequiredPercent,
-        depositRequiredTime,
         paymentComplementTimeBeforeEvent,
+        bookingPaymentTimeoutMinutes,
       } = req.body;
       if (descriptionCondition !== undefined)
         condition.descriptionCondition = descriptionCondition;
@@ -889,6 +889,8 @@ export class VenueController {
       if (paymentComplementTimeBeforeEvent !== undefined)
         condition.paymentComplementTimeBeforeEvent =
           paymentComplementTimeBeforeEvent;
+      if (bookingPaymentTimeoutMinutes !== undefined)
+        condition.bookingPaymentTimeoutMinutes = bookingPaymentTimeoutMinutes;
       await bcRepo.save(condition);
       // Exclude the venue property from the response
       const { venue, ...conditionData } = condition;
@@ -1428,6 +1430,7 @@ export class VenueController {
           depositRequiredPercent: condition.depositRequiredPercent,
           paymentComplementTimeBeforeEvent:
             condition.paymentComplementTimeBeforeEvent,
+          bookingPaymentTimeoutMinutes: condition.bookingPaymentTimeoutMinutes,
         })),
 
         amenities: venue.amenities?.map((amenity) => ({

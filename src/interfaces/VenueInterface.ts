@@ -42,6 +42,8 @@ export interface VenueRequest {
   bookingConditions: BookingConditionRequest[];
   venueVariable: VenueVariableRequest;
   venueAmenities?: VenueAmenityRequest[];
+  bookingPaymentTimeoutMinutes?: number;
+  depositRequiredPercent?: number;
 }
 
 export class VenueInterface {

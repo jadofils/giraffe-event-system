@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
-import { QrCodeService } from "../services/registrations/QrCodeService";
 import { AppDataSource } from "../config/Database";
 import { Registration } from "../models/Registration";
 import { EventVenue } from "../models/Event Tables/EventVenue";
+import { TicketValidationService } from "../services/registrations/TicketValidationService"; // NEW IMPORT
+import { BarcodeService } from "../services/registrations/BarcodeService"; // Import BarcodeService
+import { SevenDigitCodeService } from "../services/registrations/SevenDigitCodeService"; // Import SevenDigitCodeService
 
 export class RegistrationController {
   static async validateTicketQrCode(
@@ -20,7 +22,9 @@ export class RegistrationController {
       }
 
       // The qrCodeData from the scanned QR code is the Base64 encoded payload
-      const validationResult = await QrCodeService.validateQrCode(qrCodeData);
+      const validationResult = await TicketValidationService.validateQrCode(
+        qrCodeData
+      );
 
       if (!validationResult.success || !validationResult.data) {
         res
@@ -134,8 +138,11 @@ export class RegistrationController {
         checkDate: ticket.checkDate || "N/A",
         paymentStatus: ticket.paymentStatus,
         qrCode: ticket.qrCode,
+        barcode: ticket.barcode, // Include barcode
+        sevenDigitCode: ticket.sevenDigitCode, // Include 7-digit code
         buyerId: ticket.buyerId,
         attended: ticket.attended,
+        isUsed: ticket.isUsed, // Include isUsed
         ticketTypeDetails: {
           ticketTypeId: ticket.ticketType?.ticketTypeId,
           name: ticket.ticketType?.name,
@@ -243,40 +250,97 @@ export class RegistrationController {
 
   static async checkInTicket(req: Request, res: Response): Promise<void> {
     try {
-      const { qrCodeData, eventId: requestedEventId } = req.body; // eventId is optional for extra context
+      const { ticketCode, codeType, eventId: requestedEventId } = req.body; // New: ticketCode and codeType
 
-      if (!qrCodeData) {
-        res
-          .status(400)
-          .json({ success: false, message: "QR code data is required." });
-        return;
-      }
-
-      // 1. Decode QR Code
-      const validationResult = await QrCodeService.validateQrCode(qrCodeData);
-
-      if (!validationResult.success || !validationResult.data) {
+      if (!ticketCode || !codeType) {
         res.status(400).json({
           success: false,
-          message: validationResult.message,
-          alertType: "error",
+          message:
+            "Ticket code and code type (QR_CODE, BARCODE, or SEVEN_DIGIT_CODE) are required.",
         });
         return;
       }
 
-      const { registrationId, eventId: qrEventId } = validationResult.data;
-
-      // 2. Fetch Ticket Details
+      let registration: Registration | null = null;
       const registrationRepo = AppDataSource.getRepository(Registration);
-      const ticket = await registrationRepo.findOne({
-        where: { registrationId },
-        relations: ["event", "ticketType", "venue", "payment"], // Load all necessary relations
-      });
 
-      if (!ticket) {
+      switch (codeType) {
+        case "QR_CODE":
+          const qrValidationResult =
+            await TicketValidationService.validateQrCode(ticketCode);
+          if (!qrValidationResult.success || !qrValidationResult.data) {
+            res.status(400).json({
+              success: false,
+              message: qrValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: { registrationId: qrValidationResult.data.registrationId },
+            relations: ["event", "ticketType", "venue", "payment"],
+          });
+          break;
+
+        case "BARCODE":
+          const barcodeValidationResult =
+            await TicketValidationService.validateBarcode(ticketCode);
+          if (
+            !barcodeValidationResult.success ||
+            !barcodeValidationResult.data
+          ) {
+            res.status(400).json({
+              success: false,
+              message: barcodeValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: {
+              registrationId: barcodeValidationResult.data.registrationId,
+            },
+            relations: ["event", "ticketType", "venue", "payment"],
+          });
+          break;
+
+        case "SEVEN_DIGIT_CODE":
+          const sevenDigitCodeValidationResult =
+            await TicketValidationService.validateSevenDigitCode(ticketCode);
+          if (
+            !sevenDigitCodeValidationResult.success ||
+            !sevenDigitCodeValidationResult.data
+          ) {
+            res.status(400).json({
+              success: false,
+              message: sevenDigitCodeValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: {
+              registrationId:
+                sevenDigitCodeValidationResult.data.registrationId,
+            },
+            relations: ["event", "ticketType", "venue", "payment"],
+          });
+          break;
+
+        default:
+          res.status(400).json({
+            success: false,
+            message:
+              "Invalid code type provided. Must be QR_CODE, BARCODE, or SEVEN_DIGIT_CODE.",
+            alertType: "error",
+          });
+          return;
+      }
+
+      if (!registration) {
         res.status(404).json({
           success: false,
-          message: "Ticket not found in system.",
+          message: "Ticket not found in system with the provided code.",
           alertType: "error",
         });
         return;
@@ -285,40 +349,41 @@ export class RegistrationController {
       // Explicitly fetch EventVenues for the event to ensure venue details are loaded
       const eventVenueRepo = AppDataSource.getRepository(EventVenue);
       const eventVenues = await eventVenueRepo.find({
-        where: { eventId: ticket.eventId },
+        where: { eventId: registration.eventId },
         relations: ["venue"], // Load the venue for each EventVenue
       });
 
       // 3. Security & Context Validation
       // Ensure the ticket is for the event being checked in (if eventId is provided by scanner app)
-      if (requestedEventId && requestedEventId !== ticket.eventId) {
+      if (requestedEventId && requestedEventId !== registration.eventId) {
         res.status(400).json({
           success: false,
           message: "Ticket is for a different event.",
           alertType: "error",
-          data: { eventName: ticket.event?.eventName || "Unknown Event" },
+          data: { eventName: registration.event?.eventName || "Unknown Event" },
         });
         return;
       }
 
       // Check payment status
-      if (ticket.paymentStatus !== "PAID") {
+      if (registration.paymentStatus !== "PAID") {
         res.status(400).json({
           success: false,
-          message: `Ticket payment status is '${ticket.paymentStatus}'. Payment required.`, // Customize message
+          message: `Ticket payment status is '${registration.paymentStatus}'. Payment required.`, // Customize message
           alertType: "warning",
-          data: { paymentStatus: ticket.paymentStatus },
+          data: { paymentStatus: registration.paymentStatus },
         });
         return;
       }
 
       // 4. Attendance Status Check (already used?)
-      if (ticket.attended) {
+      if (registration.isUsed) {
+        // Check the new isUsed field
         res.status(400).json({
           success: false,
           message: "Ticket has already been used.",
           alertType: "warning",
-          data: { checkDate: ticket.checkDate?.toISOString() }, // Show when it was used
+          data: { checkDate: registration.checkDate?.toISOString() }, // Show when it was used
         });
         return;
       }
@@ -341,10 +406,11 @@ export class RegistrationController {
       //   return;
       // }
 
-      // 6. Mark Attended (if all checks pass)
-      ticket.attended = true;
-      ticket.checkDate = new Date();
-      await registrationRepo.save(ticket);
+      // 6. Mark Attended and Used (if all checks pass)
+      registration.attended = true;
+      registration.isUsed = true; // Mark as used
+      registration.checkDate = new Date();
+      await registrationRepo.save(registration);
 
       // 7. Comprehensive Success Response
       res.status(200).json({
@@ -352,18 +418,21 @@ export class RegistrationController {
         message: "Check-in successful!",
         alertType: "success",
         data: {
-          registrationId: ticket.registrationId,
-          attendeeName: ticket.attendeeName,
-          ticketTypeName: ticket.ticketType?.name || "N/A",
-          eventName: ticket.event?.eventName || "N/A",
-          ticketAttendedDate: ticket.attendedDate, // The specific date this ticket is valid for
-          allEventBookingDates: ticket.event?.bookingDates || [], // All event dates
+          registrationId: registration.registrationId,
+          attendeeName: registration.attendeeName,
+          ticketTypeName: registration.ticketType?.name || "N/A",
+          eventName: registration.event?.eventName || "N/A",
+          ticketAttendedDate: registration.attendedDate, // The specific date this ticket is valid for
+          allEventBookingDates: registration.event?.bookingDates || [], // All event dates
           venueName: eventVenues[0]?.venue?.venueName || "N/A",
           venueGoogleMapsLink:
             eventVenues[0]?.venue?.googleMapsLink || undefined,
-          paymentStatus: ticket.paymentStatus,
-          currentAttendanceStatus: ticket.attended, // Should be true
-          checkInTimestamp: ticket.checkDate?.toISOString(),
+          paymentStatus: registration.paymentStatus,
+          currentAttendanceStatus: registration.attended, // Should be true
+          checkInTimestamp: registration.checkDate?.toISOString(),
+          qrCode: registration.qrCode, // Include QR code in response
+          barcode: registration.barcode, // Include barcode in response
+          sevenDigitCode: registration.sevenDigitCode, // Include 7-digit code in response
         },
       });
     } catch (error) {

@@ -1,6 +1,8 @@
+import { AppDataSource } from "../../config/Database";
+import { Registration } from "../../models/Registration";
 import { v4 as uuidv4 } from "uuid";
+import { CloudinaryUploadService } from "../CloudinaryUploadService";
 import QRCode from "qrcode";
-import { CloudinaryUploadService } from "../../services/CloudinaryUploadService";
 
 export class QrCodeService {
   static async generateQrCode(
@@ -40,43 +42,6 @@ export class QrCodeService {
         error
       );
       throw new Error("Failed to generate and save QR code image.");
-    }
-  }
-
-  static async validateQrCode(
-    qrCodeData: string
-  ): Promise<{ success: boolean; message: string; data?: any }> {
-    try {
-      // QR code data is Base64 encoded JSON payload
-      const decodedString = Buffer.from(qrCodeData, "base64").toString("utf8");
-      const qrPayload = JSON.parse(decodedString);
-
-      // Basic validation of payload structure
-      if (
-        !qrPayload.registrationId ||
-        !qrPayload.userId ||
-        !qrPayload.eventId ||
-        !qrPayload.uniqueHash
-      ) {
-        return { success: false, message: "Invalid QR code data structure." };
-      }
-
-      // You can add more complex validation here:
-      // - Check if registrationId exists in your database
-      // - Check if the ticket is still valid (not expired, not used)
-      // - Check if userId and eventId match the registration record
-
-      return {
-        success: true,
-        message: "QR Code data is valid.",
-        data: qrPayload,
-      };
-    } catch (error) {
-      console.error("Error validating QR code:", error);
-      return {
-        success: false,
-        message: "Failed to parse or validate QR code data.",
-      };
     }
   }
 }

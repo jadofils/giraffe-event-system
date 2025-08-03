@@ -212,6 +212,9 @@ components:
         paymentComplementTimeBeforeEvent:
           type: integer
           example: 3
+        bookingPaymentTimeoutMinutes:
+          type: integer
+          example: 30
       required:
         - id
         - descriptionCondition

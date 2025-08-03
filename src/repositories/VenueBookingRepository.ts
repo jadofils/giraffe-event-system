@@ -406,8 +406,10 @@ export class VenueBookingRepository {
       // 6. Generate invoice
       const invoiceDate = new Date();
       const dueDate = new Date(invoiceDate);
-      if (condition?.depositRequiredTime) {
-        dueDate.setDate(dueDate.getDate() + condition.depositRequiredTime);
+      if (condition?.bookingPaymentTimeoutMinutes) {
+        dueDate.setDate(
+          dueDate.getDate() + condition.bookingPaymentTimeoutMinutes
+        );
       }
       await invoiceRepo.save({
         eventId: booking.eventId,
@@ -751,7 +753,7 @@ export class VenueBookingRepository {
     const depositFulfilled =
       totalPaid >= requiredDeposit &&
       hoursSinceBooking !== null &&
-      hoursSinceBooking <= (condition.depositRequiredTime || 0);
+      hoursSinceBooking <= (condition.bookingPaymentTimeoutMinutes || 0);
 
     // 6. If deposit fulfilled, update booking status
     if (depositFulfilled) {

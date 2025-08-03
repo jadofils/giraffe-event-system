@@ -501,7 +501,7 @@ export class VenueBookingController {
       const depositFulfilled =
         totalPaid >= requiredDeposit &&
         hoursSinceBooking !== null &&
-        hoursSinceBooking <= (condition?.depositRequiredTime || 0);
+        hoursSinceBooking <= (condition?.bookingPaymentTimeoutMinutes || 0);
       // Enrich payments with payer info
       const enrichedPayments = await Promise.all(
         payments.map(async (payment: any) => {

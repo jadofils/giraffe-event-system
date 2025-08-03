@@ -52,6 +52,8 @@ export class VenueRepository {
       cancellationReason: data.cancellationReason,
       visitPurposeOnly: data.visitPurposeOnly,
       bookingType: data.bookingType,
+      bookingPaymentTimeoutMinutes: data.bookingPaymentTimeoutMinutes,
+      depositRequiredPercent: data.depositRequiredPercent,
     });
     return { success: true, data: venue };
   }

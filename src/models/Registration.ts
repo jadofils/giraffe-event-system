@@ -146,6 +146,14 @@ export class Registration {
   @Column("varchar", { length: 255, nullable: true })
   qrCode?: string;
 
+  @Column("varchar", { length: 255, nullable: true })
+  barcode?: string;
+
+  @Column({ type: "varchar", length: 7, nullable: true, unique: true })
+  @IsOptional()
+  @Length(7, 7, { message: "sevenDigitCode must be exactly 7 characters" })
+  sevenDigitCode?: string;
+
   @Column({ type: "timestamptz", nullable: true })
   @IsOptional()
   @IsDateString(
@@ -157,6 +165,10 @@ export class Registration {
   @Column({ type: "boolean", default: false })
   @IsBoolean({ message: "attended must be a boolean value" })
   attended!: boolean;
+
+  @Column({ type: "boolean", default: false })
+  @IsBoolean({ message: "isUsed must be a boolean value" })
+  isUsed!: boolean;
 
   @Column({ type: "varchar", length: 50, default: "active" })
   registrationStatus!: string;
@@ -175,6 +187,9 @@ export class Registration {
 
   @Column({ type: "uuid", nullable: true })
   paymentId?: string;
+
+  @Column("varchar", { length: 255, nullable: true })
+  pdfUrl?: string; // New field for PDF ticket URL
 
   @OneToOne(() => Invoice, (invoice) => invoice.registration, {
     cascade: true,

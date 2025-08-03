@@ -31,6 +31,11 @@ router.patch("/:id/text-fields", EventController.updateEventTextFields);
 router.patch("/:id/query", isAdmin, EventController.queryEvent);
 router.patch("/:id/reject", isAdmin, EventController.rejectEvent);
 router.patch("/:id/approve", isAdmin, EventController.approveEvent);
+router.patch(
+  "/:eventId/photo",
+  upload.single("eventPhoto"),
+  EventController.updateEventPhoto
+);
 router.get(
   "/booking/:bookingId/payment-details",
   EventController.getBookingPaymentDetails
@@ -56,6 +61,15 @@ router.patch(
   EventController.updateEventGuestPhoto
 );
 router.get("/user/:userId", EventController.getEventsByUserId);
+
+router.patch(
+  "/:eventId/private",
+  upload.fields([
+    { name: "eventPhoto", maxCount: 1 },
+    { name: "guestPhotos", maxCount: 5 },
+  ]),
+  EventController.updatePrivateEvent
+);
 
 // Add manager endpoint for creating event for external user
 router.post(
