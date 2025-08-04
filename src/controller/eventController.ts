@@ -55,6 +55,17 @@ export class EventController {
         ignoreTransitionWarnings = false, // New parameter to allow proceeding despite warnings
       } = req.body;
 
+      const authenticatedReq = req as any;
+      const currentUserId = authenticatedReq.user?.userId; // Get userId from authenticated request
+
+      if (!currentUserId) {
+        res.status(401).json({
+          success: false,
+          message: "Unauthorized: User ID not found in token.",
+        });
+        return;
+      }
+
       // Parse guests and dates if sent as JSON strings (from form-data)
       let parsedGuests = guests;
       if (typeof guests === "string") {
@@ -333,6 +344,42 @@ export class EventController {
         eventOrganizerType,
       };
 
+      // Authorization checks
+      if (eventOrganizerType === "USER") {
+        if (eventOrganizerId !== currentUserId) {
+          res.status(403).json({
+            success: false,
+            message: "Forbidden: You can only create events for yourself.",
+          });
+          return;
+        }
+      } else if (eventOrganizerType === "ORGANIZATION") {
+        const currentUser = await userRepo.findOne({
+          where: { userId: currentUserId },
+          relations: ["organizations"], // Eager load organizations
+        });
+
+        if (!currentUser) {
+          res
+            .status(404)
+            .json({ success: false, message: "Authenticated user not found." });
+          return;
+        }
+
+        const belongsToOrg = currentUser.organizations.some(
+          (org) => org.organizationId === eventOrganizerId
+        );
+
+        if (!belongsToOrg) {
+          res.status(403).json({
+            success: false,
+            message:
+              "Forbidden: You do not belong to the specified organization.",
+          });
+          return;
+        }
+      }
+
       // Add fields based on visibility scope
       if (visibilityScope === "PUBLIC") {
         Object.assign(eventData, {
@@ -352,7 +399,8 @@ export class EventController {
         visibilityScope === "PUBLIC" && Array.isArray(finalGuests)
           ? finalGuests
           : [],
-        bookingDates
+        bookingDates,
+        currentUserId // Pass the current authenticated user's ID
       );
 
       // After event creation
@@ -1696,7 +1744,8 @@ export class EventController {
         eventData,
         selectedVenues,
         [], // No guests for private event
-        bookingDates
+        bookingDates,
+        user.userId // Pass the current authenticated user's ID
       );
       if (!result.success) {
         res.status(400).json({ success: false, message: result.message });

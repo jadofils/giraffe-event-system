@@ -6,6 +6,7 @@ import { initializeRedis } from "./config/redis"; // <-- Import the Redis initia
 import { seedDefaultRoles } from "./seed";
 import { AdminRoleSeeder } from "./seeds/AdminRoleSeeder"; // <-- Import the AdminRoleSeeder
 import { PermissionSeeder } from "./seeds/PermissionSeeder";
+import { BookingSchedulerService } from "./services/BookingSchedulerService";
 
 // Bootstrap function to start the application
 async function bootstrap() {
@@ -33,6 +34,9 @@ async function bootstrap() {
     // Initialize Redis connection
     await initializeRedis(); // <-- Await Redis connection
     console.log("Redis initialized successfully."); // Add a success log
+
+    // Start booking scheduler
+    BookingSchedulerService.startScheduling();
 
     // Start the server
     app.listen(AppConfig.PORT, () => {

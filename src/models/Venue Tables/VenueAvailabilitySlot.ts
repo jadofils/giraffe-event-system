@@ -11,6 +11,7 @@ import { Venue } from "./Venue";
 export enum SlotStatus {
   AVAILABLE = "AVAILABLE",
   BOOKED = "BOOKED",
+  HOLDING = "HOLDING", // New status for temporarily held slots
   TRANSITION = "TRANSITION", // For transition time between events
   PARTIALLY_AVAILABLE = "PARTIALLY_AVAILABLE", // When only some hours are available
 }

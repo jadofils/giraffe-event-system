@@ -6,7 +6,9 @@ import { CacheService } from "../services/CacheService";
 import {
   VenueAvailabilitySlot,
   SlotStatus,
+  SlotType,
 } from "../models/Venue Tables/VenueAvailabilitySlot";
+import { BookingStatus } from "../models/VenueBooking";
 
 export class VenueBookingRepository {
   static async getAllBookings() {
@@ -463,24 +465,47 @@ export class VenueBookingRepository {
       if (!booking) throw new Error("Booking not found");
       const venue = await venueRepo.findOne({
         where: { venueId: booking.venueId },
+        relations: ["bookingConditions"], // Ensure bookingConditions are loaded for transitionTime
       });
       if (!venue) throw new Error("Venue not found");
-      const condition = await conditionRepo.findOne({
-        where: { venue: { venueId: venue.venueId } },
-      });
+      const condition = venue.bookingConditions?.[0];
       const transitionTime = condition?.transitionTime || 0;
+
       // Check for slot conflicts before approving
       if (venue.bookingType === "DAILY") {
         for (const dateObj of booking.bookingDates) {
+          // Check for conflicts with already BOOKED slots (not HOLDING slots as we are converting them)
           const existingSlot = await slotRepo.findOne({
             where: {
               venueId: venue.venueId,
               Date: new Date(dateObj.date),
-              status: "BOOKED",
+              status: "BOOKED", // Only check against already BOOKED slots
             },
           });
           if (existingSlot) {
             throw new Error(`Slot for date ${dateObj.date} is already booked.`);
+          }
+        }
+        // Check transition days for conflicts
+        if (transitionTime > 0 && booking.bookingDates.length > 0) {
+          const firstDate = new Date(booking.bookingDates[0].date);
+          for (let i = 1; i <= transitionTime; i++) {
+            const transitionDate = new Date(firstDate);
+            transitionDate.setDate(transitionDate.getDate() - i);
+            const existing = await slotRepo.findOne({
+              where: {
+                venueId: venue.venueId,
+                Date: transitionDate,
+                status: "BOOKED",
+              },
+            });
+            if (existing) {
+              throw new Error(
+                `Transition slot for date ${transitionDate
+                  .toISOString()
+                  .slice(0, 10)} is already booked.`
+              );
+            }
           }
         }
       } else if (venue.bookingType === "HOURLY") {
@@ -501,104 +526,99 @@ export class VenueBookingRepository {
                 );
               }
             }
-          }
-        }
-      }
-      // 1. Set booking status to APPROVED_NOT_PAID
-      booking.bookingStatus = "APPROVED_NOT_PAID";
-      await bookingRepo.save(booking);
-      // 2. Create slots for booking dates
-      const slotsToCreate = [];
-      if (venue.bookingType === "DAILY") {
-        // Assume booking.bookingDates is an array of { date: string }
-        for (const dateObj of booking.bookingDates) {
-          const slot = slotRepo.create({
-            venueId: venue.venueId,
-            Date: new Date(dateObj.date),
-            status: "BOOKED",
-            eventId: booking.eventId,
-            notes: `Booked for event ${booking.eventId}`,
-          });
-          slotsToCreate.push(slot);
-        }
-        // Add transition days before the first booked date
-        if (transitionTime > 0 && booking.bookingDates.length > 0) {
-          const firstDate = new Date(booking.bookingDates[0].date);
-          for (let i = 1; i <= transitionTime; i++) {
-            const transitionDate = new Date(firstDate);
-            transitionDate.setDate(transitionDate.getDate() - i);
-            // Check if slot is available
-            const existing = await slotRepo.findOne({
-              where: { venueId: venue.venueId, Date: transitionDate },
-            });
-            if (!existing) {
-              const transitionSlot = slotRepo.create({
-                venueId: venue.venueId,
-                Date: transitionDate,
-                status: "BOOKED",
-                eventId: null,
-                slotType: "TRANSITION",
-                notes: `Transition time for event ${booking.eventId}`,
-              });
-              slotsToCreate.push(transitionSlot);
+            // Check for hourly transition conflicts
+            const sortedHours = [...dateObj.hours].sort((a, b) => a - b);
+            const firstHour = sortedHours[0];
+            const lastHour = sortedHours[sortedHours.length - 1];
+
+            // Before hours
+            for (let i = 1; i <= transitionTime; i++) {
+              const transitionHour = firstHour - i;
+              if (transitionHour >= 0) {
+                const existing = await slotRepo.findOne({
+                  where: {
+                    venueId: venue.venueId,
+                    Date: new Date(dateObj.date),
+                    bookedHours: [transitionHour],
+                    status: "BOOKED",
+                  },
+                });
+                if (existing) {
+                  throw new Error(
+                    `Transition slot for ${dateObj.date} hour ${transitionHour} is already booked.`
+                  );
+                }
+              }
             }
-          }
-        }
-      } else if (venue.bookingType === "HOURLY") {
-        // Assume booking.bookingDates is an array of { date: string, hours: number[] }
-        for (const dateObj of booking.bookingDates) {
-          if (Array.isArray(dateObj.hours)) {
-            for (const hour of dateObj.hours) {
-              const slot = slotRepo.create({
-                venueId: venue.venueId,
-                Date: new Date(dateObj.date),
-                bookedHours: [hour],
-                status: "BOOKED",
-                eventId: booking.eventId,
-                notes: `Booked for event ${booking.eventId}`,
-              });
-              slotsToCreate.push(slot);
-              // Add transition hour before if required
-              if (transitionTime > 0) {
-                for (let t = 1; t <= transitionTime; t++) {
-                  const transitionHour = hour - t;
-                  if (transitionHour >= 0) {
-                    // Check if slot for this hour is available
-                    const existing = await slotRepo.findOne({
-                      where: {
-                        venueId: venue.venueId,
-                        Date: new Date(dateObj.date),
-                        bookedHours: [transitionHour],
-                      },
-                    });
-                    if (!existing) {
-                      const transitionSlot = slotRepo.create({
-                        venueId: venue.venueId,
-                        Date: new Date(dateObj.date),
-                        bookedHours: [transitionHour],
-                        status: "BOOKED",
-                        eventId: null,
-                        slotType: "TRANSITION",
-                        notes: `Transition hour for event ${booking.eventId}`,
-                      });
-                      slotsToCreate.push(transitionSlot);
-                    }
-                  }
+            // After hours
+            for (let i = 1; i <= transitionTime; i++) {
+              const transitionHour = lastHour + i;
+              if (transitionHour <= 23) {
+                const existing = await slotRepo.findOne({
+                  where: {
+                    venueId: venue.venueId,
+                    Date: new Date(dateObj.date),
+                    bookedHours: [transitionHour],
+                    status: "BOOKED",
+                  },
+                });
+                if (existing) {
+                  throw new Error(
+                    `Transition slot for ${dateObj.date} hour ${transitionHour} is already booked.`
+                  );
                 }
               }
             }
           }
         }
       }
-      for (const slot of slotsToCreate) {
-        await slotRepo.save(slot);
+
+      // 1. Set booking status to APPROVED_NOT_PAID (or APPROVED_PAID if already fully paid?)
+      // For now, assume it's APPROVED_NOT_PAID, payment service will handle APPROVED_PAID
+      booking.bookingStatus = BookingStatus.APPROVED_NOT_PAID;
+      await bookingRepo.save(booking);
+
+      // Now, update all associated HOLDING VenueAvailabilitySlots to BOOKED
+      const relatedSlots = await slotRepo.find({
+        where: {
+          eventId: booking.eventId, // Find all slots related to this event
+          status: SlotStatus.HOLDING, // Only target holding slots
+          venueId: booking.venueId, // Ensure it's for the correct venue
+        },
+      });
+
+      console.log("Found related slots for booking:", relatedSlots.length);
+
+      for (const slot of relatedSlots) {
+        slot.Date = new Date(slot.Date); // Ensure it's a Date object
+        console.log(
+          `Processing slot ID: ${
+            slot.id
+          }, Date: ${slot.Date.toISOString().slice(0, 10)}, Current Status: ${
+            slot.status
+          }, Slot Type: ${slot.slotType}`
+        );
+        slot.eventId = booking.eventId; // Ensure eventId is explicitly set
+        if (slot.slotType === SlotType.TRANSITION) {
+          slot.status = SlotStatus.TRANSITION; // Set to TRANSITION for transition slots
+          if (!slot.metadata) slot.metadata = {};
+          slot.metadata.relatedEventId = booking.eventId;
+        } else {
+          slot.status = SlotStatus.BOOKED; // Keep BOOKED for event slots
+          slot.slotType = SlotType.EVENT; // Explicitly mark as event slot
+        }
+        await queryRunner.manager.save(slot);
+        console.log(`After save - Slot ID: ${slot.id}, Status: ${slot.status}`);
+        const reloadedSlot = await queryRunner.manager
+          .getRepository(VenueAvailabilitySlot)
+          .findOne({ where: { id: slot.id } });
+        console.log(
+          `After reload - Slot ID: ${reloadedSlot?.id}, Status: ${reloadedSlot?.status}`
+        );
       }
+
       await queryRunner.commitTransaction();
-      return {
-        success: true,
-        message:
-          "Booking approved, slots and transition time set where available.",
-      };
+      return { success: true, message: "Booking approved successfully." };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       return {

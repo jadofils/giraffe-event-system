@@ -194,9 +194,10 @@ export class VenueBookingPaymentService {
         ...paymentData,
         remainingAmount: booking.amountToBePaid - newTotalPaid,
         isFullPayment,
-        paymentStatus: isFullPayment
-          ? VenueBookingPaymentStatus.PAID
-          : VenueBookingPaymentStatus.PARTIAL,
+        paymentStatus:
+          paymentData.amountPaid <= 0
+            ? VenueBookingPaymentStatus.FAILED
+            : VenueBookingPaymentStatus.COMPLETED, // Set to COMPLETED or FAILED for individual payment
       });
 
       await queryRunner.manager.save(payment);

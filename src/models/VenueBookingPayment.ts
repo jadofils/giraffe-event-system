@@ -19,13 +19,13 @@ import {
 
 export enum VenueBookingPaymentStatus {
   PENDING = "PENDING",
-  PARTIAL = "PARTIAL", // Partial payment (e.g., deposit) made, but not full
-  PAID = "PAID",
+  COMPLETED = "COMPLETED", // New status for successful individual payments
+  PARTIAL = "PARTIAL", // Temporarily re-added for migration purposes
+  PAID = "PAID", // Temporarily re-added for migration purposes
   FAILED = "FAILED",
   CANCELLED = "CANCELLED",
   REFUNDED = "REFUNDED",
   REFUND_IN_PROGRESS = "REFUND_IN_PROGRESS",
-
 }
 
 export enum PayerType {
@@ -37,7 +37,7 @@ export enum PaymentMethod {
   CARD = "CARD",
   BANK_TRANSFER = "BANK_TRANSFER",
   MOBILE_MONEY = "MOBILE_MONEY",
-  PAYPAL = "PAYPAL"
+  PAYPAL = "PAYPAL",
 }
 
 @Entity("venue_booking_payments")

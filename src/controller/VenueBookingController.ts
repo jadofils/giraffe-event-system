@@ -21,6 +21,12 @@ import { SimpleNotificationService } from "../services/notifications/SimpleNotif
 import { EmailService } from "../services/emails/EmailService";
 import { BookingStatus } from "../models/VenueBooking";
 import { EventStatus } from "../interfaces/Enums/EventStatusEnum";
+import {
+  VenueAvailabilitySlot,
+  SlotStatus,
+  SlotType,
+} from "../models/Venue Tables/VenueAvailabilitySlot";
+import { Organization } from "../models/Organization";
 
 export class VenueBookingController {
   static async getAllBookings(req: Request, res: Response): Promise<void> {
@@ -102,20 +108,17 @@ export class VenueBookingController {
           const event = booking.event;
           const bookingCondition = venue.bookingConditions[0];
 
-          // Calculate total hours and amount for hourly venues
-          const totalHours = booking.bookingDates.reduce((sum, date) => {
-            return sum + (date.hours?.length || 1);
-          }, 0);
+          const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0; // Needed for response
+          const totalHours = booking.bookingDates.reduce(
+            (sum: any, date: any) => {
+              // Needed for hourly venue display
+              return sum + (date.hours?.length || 1);
+            },
+            0
+          );
 
-          const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0;
-          let totalVenueAmount = 0;
-          if (venue.bookingType === "HOURLY") {
-            totalVenueAmount = baseVenueAmount * totalHours;
-          } else if (venue.bookingType === "DAILY") {
-            totalVenueAmount = baseVenueAmount * booking.bookingDates.length;
-          } else {
-            totalVenueAmount = baseVenueAmount;
-          }
+          // Use the stored amountToBePaid from the booking entity as the source of truth
+          const totalVenueAmount = booking.amountToBePaid || 0;
 
           const depositAmount = bookingCondition?.depositRequiredPercent
             ? (totalVenueAmount * bookingCondition.depositRequiredPercent) / 100
@@ -338,12 +341,203 @@ export class VenueBookingController {
   static async getBookingById(req: Request, res: Response): Promise<void> {
     try {
       const { bookingId } = req.params;
-      const result = await VenueBookingRepository.getBookingById(bookingId);
-      if (!result.success) {
-        res.status(404).json({ success: false, message: result.message });
+      const bookingRepo = AppDataSource.getRepository(VenueBooking);
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+
+      const booking = await bookingRepo.findOne({
+        where: { bookingId },
+        relations: [
+          "venue",
+          "venue.bookingConditions",
+          "venue.venueVariables",
+          "event",
+          "user",
+        ],
+      });
+
+      if (!booking) {
+        res.status(404).json({ success: false, message: "Booking not found." });
         return;
       }
-      res.status(200).json({ success: true, data: result.data });
+
+      const venue = booking.venue;
+      const event = booking.event;
+      const bookingCondition = venue.bookingConditions[0];
+
+      const baseVenueAmount = venue.venueVariables[0]?.venueAmount || 0; // Needed for response
+      const totalHours = booking.bookingDates.reduce((sum: any, date: any) => {
+        // Needed for hourly venue display
+        return sum + (date.hours?.length || 1);
+      }, 0);
+
+      // Use the stored amountToBePaid from the booking entity as the source of truth
+      const totalVenueAmount = booking.amountToBePaid || 0;
+
+      const depositAmount = bookingCondition?.depositRequiredPercent
+        ? (totalVenueAmount * bookingCondition.depositRequiredPercent) / 100
+        : totalVenueAmount;
+
+      // Get all payments for this booking
+      const payments = await paymentRepo.find({
+        where: { bookingId: booking.bookingId },
+        order: { paymentDate: "ASC" },
+      });
+
+      const totalPaid = payments.reduce(
+        (sum, p) => sum + Number(p.amountPaid),
+        0
+      );
+
+      // Get earliest booking date
+      const earliestDate = new Date(
+        Math.min(
+          ...booking.bookingDates.map((d: any) => new Date(d.date).getTime())
+        )
+      );
+      const paymentDeadline = bookingCondition?.paymentComplementTimeBeforeEvent
+        ? new Date(
+            earliestDate.getTime() -
+              bookingCondition.paymentComplementTimeBeforeEvent *
+                24 *
+                60 *
+                60 *
+                1000
+          )
+        : earliestDate;
+
+      // Get payer details based on event organizer type
+      let payerDetails = null;
+      if (event) {
+        if (event.eventOrganizerType === "USER") {
+          const userRepo = AppDataSource.getRepository(User);
+          const user = await userRepo.findOne({
+            where: { userId: event.eventOrganizerId },
+          });
+          if (user) {
+            payerDetails = {
+              payerId: user.userId,
+              payerType: "USER",
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+            };
+          }
+        } else if (event.eventOrganizerType === "ORGANIZATION") {
+          const orgRepo = AppDataSource.getRepository(Organization);
+          const organization = await orgRepo.findOne({
+            where: { organizationId: event.eventOrganizerId },
+          });
+          if (organization) {
+            payerDetails = {
+              payerId: organization.organizationId,
+              payerType: "ORGANIZATION",
+              organizationName: organization.organizationName,
+              contactEmail: organization.contactEmail,
+              contactPhone: organization.contactPhone,
+              address: organization.address,
+            };
+          }
+        }
+      }
+
+      // Format payment history with running balance
+      let runningBalance = totalVenueAmount;
+      const paymentHistory = payments.map((p) => {
+        runningBalance -= Number(p.amountPaid);
+        return {
+          paymentId: p.paymentId,
+          amountPaid: p.amountPaid,
+          paymentDate: p.paymentDate,
+          paymentMethod: p.paymentMethod,
+          paymentStatus: p.paymentStatus,
+          paymentReference: p.paymentReference,
+          balanceAfterPayment: runningBalance,
+          notes: p.notes,
+        };
+      });
+
+      // Payment status logic
+      let paymentStatus = "PENDING";
+      if (booking.isPaid || totalPaid >= totalVenueAmount) {
+        paymentStatus = "PAID";
+      } else if (totalPaid >= depositAmount) {
+        paymentStatus = "DEPOSIT_PAID";
+      }
+
+      // Deposit status
+      const depositStatus =
+        totalPaid >= depositAmount ? "FULFILLED" : "PENDING";
+
+      // Deposit description for clarity
+      let depositDescription = "";
+      if (venue.bookingType === "HOURLY") {
+        depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount} for ${totalHours} hours)`;
+      } else if (venue.bookingType === "DAILY") {
+        depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${baseVenueAmount} x ${booking.bookingDates.length} days = ${totalVenueAmount})`;
+      } else {
+        depositDescription = `Initial deposit required (${bookingCondition?.depositRequiredPercent}% of total amount ${totalVenueAmount})`;
+      }
+
+      const enrichedBooking = {
+        bookingId: booking.bookingId,
+        eventDetails: {
+          eventId: event?.eventId,
+          eventName: event?.eventName,
+          eventType: event?.eventType,
+          eventDescription: event?.eventDescription,
+        },
+        venue: {
+          venueId: venue.venueId,
+          venueName: venue.venueName,
+          location: venue.venueLocation,
+          bookingType: venue.bookingType,
+          baseAmount: baseVenueAmount,
+          totalHours: venue.bookingType === "HOURLY" ? totalHours : null,
+          totalAmount: totalVenueAmount,
+          mainPhotoUrl: venue.mainPhotoUrl, // Added venue main photo
+          photoGallery: venue.photoGallery, // Added venue photo gallery
+          depositRequired: {
+            percentage: bookingCondition?.depositRequiredPercent || 100,
+            amount: depositAmount,
+            description: depositDescription,
+          },
+          paymentCompletionRequired: {
+            daysBeforeEvent:
+              bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+            deadline: paymentDeadline,
+          },
+        },
+        bookingDates: booking.bookingDates,
+        bookingStatus: booking.bookingStatus,
+        isPaid: booking.isPaid,
+        createdAt: booking.createdAt,
+        requester: booking.user
+          ? {
+              userId: booking.user.userId,
+              firstName: booking.user.firstName,
+              lastName: booking.user.lastName,
+              email: booking.user.email,
+              phoneNumber: booking.user.phoneNumber,
+            }
+          : null,
+        payer: payerDetails, // Added payer details here
+        paymentSummary: {
+          totalAmount: totalVenueAmount,
+          depositAmount: depositAmount,
+          totalPaid: totalPaid,
+          remainingAmount: totalVenueAmount - totalPaid,
+          paymentStatus: paymentStatus,
+          paymentProgress:
+            ((totalPaid / totalVenueAmount) * 100).toFixed(2) + "%",
+          depositStatus: depositStatus,
+          paymentHistory: paymentHistory,
+          nextPaymentDue:
+            totalPaid < totalVenueAmount ? totalVenueAmount - totalPaid : 0,
+          paymentDeadline: paymentDeadline,
+        },
+      };
+      res.status(200).json({ success: true, data: enrichedBooking });
     } catch (error) {
       res.status(500).json({ success: false, message: "Server error." });
     }
@@ -518,6 +712,18 @@ export class VenueBookingController {
           return { ...payment, payer };
         })
       );
+      // Deposit status
+      const depositStatus =
+        totalPaid >= requiredDeposit ? "FULFILLED" : "PENDING";
+
+      // Needed for deposit description and venue details
+      const baseVenueAmount = booking.venue.venueVariables[0]?.venueAmount || 0;
+      const totalHours = booking.bookingDates.reduce((sum: any, date: any) => {
+        return sum + (date.hours?.length || 1);
+      }, 0);
+
+      // Calculate totalVenueAmount from booking.amountToBePaid
+      const totalVenueAmount = booking.amountToBePaid || 0; // Use booking.amountToBePaid as source of truth
       res.status(200).json({
         success: true,
         payments: enrichedPayments,
@@ -610,6 +816,14 @@ export class VenueBookingController {
           const bookingCondition = venue.bookingConditions[0];
           const venueAmount = venue.venueVariables[0]?.venueAmount || 0;
 
+          // Calculate total hours across all booking dates (needed for hourly venue display)
+          const totalHours = booking.bookingDates.reduce(
+            (sum: any, date: any) => {
+              return sum + (date.hours?.length || 1);
+            },
+            0
+          );
+
           // Calculate deposit amount
           const depositAmount = bookingCondition?.depositRequiredPercent
             ? (venueAmount * bookingCondition.depositRequiredPercent) / 100
@@ -618,7 +832,9 @@ export class VenueBookingController {
           // Get earliest booking date
           const earliestDate = new Date(
             Math.min(
-              ...booking.bookingDates.map((d) => new Date(d.date).getTime())
+              ...booking.bookingDates.map((d: any) =>
+                new Date(d.date).getTime()
+              )
             )
           );
           const paymentDeadline =
@@ -689,7 +905,7 @@ export class VenueBookingController {
             bookingStatus: booking.bookingStatus,
             isPaid: booking.isPaid,
             createdAt: booking.createdAt,
-            payments: payments.map((p) => ({
+            payments: payments.map((p: any) => ({
               paymentId: p.paymentId,
               amountPaid: Number(p.amountPaid),
               paymentDate: p.paymentDate,
@@ -714,7 +930,7 @@ export class VenueBookingController {
 
       // Calculate totals across all bookings
       const totals = enrichedBookings.reduce(
-        (acc, booking) => {
+        (acc: any, booking: any) => {
           acc.totalBookings += 1;
           acc.totalAmount += booking.paymentSummary.totalAmount;
           acc.totalDepositRequired += booking.paymentSummary.depositAmount;
@@ -795,11 +1011,41 @@ export class VenueBookingController {
         paymentData
       );
 
-      res.status(200).json({
-        success: true,
-        data: result.data,
-        message: result.message,
-      });
+      if (result.success) {
+        const previousBookingStatus = booking.bookingStatus; // Capture status BEFORE update
+
+        // Update VenueBooking status to PARTIAL and set transactionDate
+        booking.bookingStatus = BookingStatus.PARTIAL;
+        booking.isPaid = true; // Mark as paid
+        booking.transactionDate = new Date();
+        await bookingRepo.save(booking);
+
+        // Only call approveBookingWithTransition if the booking was previously HOLDING or PENDING
+        if (
+          previousBookingStatus === BookingStatus.HOLDING ||
+          previousBookingStatus === BookingStatus.PENDING
+        ) {
+          const approvalResult =
+            await VenueBookingRepository.approveBookingWithTransition(
+              bookingId
+            ); // Corrected static call
+
+          if (!approvalResult.success) {
+            throw new Error(
+              `Failed to update availability slots after payment: ${approvalResult.message}`
+            );
+          }
+        }
+
+        res.status(200).json({
+          success: true,
+          data: result.data,
+          message: result.message,
+        });
+      } else {
+        // If payment processing failed, return the error from the service
+        res.status(400).json(result);
+      }
     } catch (error) {
       const errorResponse: PaymentServiceError = {
         success: false,
@@ -843,7 +1089,7 @@ export class VenueBookingController {
 
     if (venue.bookingType === "HOURLY") {
       // Calculate total hours across all booking dates
-      const totalHours = bookingDates.reduce((sum, date) => {
+      const totalHours = bookingDates.reduce((sum: any, date: any) => {
         return sum + (date.hours?.length || 1); // If no hours specified, count as 1
       }, 0);
       return baseAmount * totalHours;

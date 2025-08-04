@@ -73,6 +73,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "multer-storage-cloudinary": "^4.0.0",
+    "node-cron": "^4.2.1",
     "node-ts": "^8.0.4",
     "nodemailer": "^7.0.3",
     "path": "^0.12.7",

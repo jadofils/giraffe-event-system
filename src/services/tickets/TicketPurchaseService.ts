@@ -243,7 +243,7 @@ export class TicketPurchaseService {
       const ticketPayment = ticketPaymentRepo.create({
         amountPaid: paymentDetails.amountPaid,
         paymentMethod: paymentDetails.paymentMethod,
-        paymentStatus: VenueBookingPaymentStatus.PAID,
+        paymentStatus: VenueBookingPaymentStatus.COMPLETED,
         paymentReference: paymentDetails.paymentReference,
         payerId: buyerUser.userId,
         payerType: "USER",
@@ -254,7 +254,7 @@ export class TicketPurchaseService {
       // Update all purchased registrations with the new paymentId and status
       for (const reg of purchasedRegistrations) {
         reg.paymentId = ticketPayment.paymentId;
-        reg.paymentStatus = VenueBookingPaymentStatus.PAID;
+        reg.paymentStatus = VenueBookingPaymentStatus.COMPLETED;
         await registrationRepo.save(reg);
 
         // Generate QR, Barcode, SevenDigitCode, and upload PDF for EACH registration
@@ -357,7 +357,7 @@ export class TicketPurchaseService {
         barcodeUrls: barcodeUrls,
         sevenDigitCodes: sevenDigitCodes,
         pdfUrls: pdfUrls,
-        paymentStatus: VenueBookingPaymentStatus.PAID,
+        paymentStatus: VenueBookingPaymentStatus.COMPLETED,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();

@@ -7,7 +7,7 @@ import { EventInterface } from "../interfaces/EventInterface";
 import { VenueInterface } from "../interfaces/VenueInterface";
 import { VenueBookingInterface } from "../interfaces/VenueBookingInterface";
 import { EventStatus, EventType } from "../interfaces/Index";
-import { In, Between, Not } from "typeorm";
+import { In, Between, Not, IsNull, Raw } from "typeorm";
 import { User } from "../models/User";
 import { Organization } from "../models/Organization";
 import { UUID_REGEX } from "../utils/constants";
@@ -16,6 +16,12 @@ import { EventGuest } from "../models/Event Tables/EventGuest";
 import { BookingDateDTO } from "../interfaces/BookingDateInterface";
 import { BookingValidationService } from "../services/bookings/BookingValidationService";
 import { v4 as uuidv4 } from "uuid";
+import {
+  VenueAvailabilitySlot,
+  SlotStatus,
+  SlotType,
+} from "../models/Venue Tables/VenueAvailabilitySlot";
+import { BookingType } from "../models/Venue Tables/Venue"; // Correct import path for BookingType
 
 export class EventRepository {
   private static readonly CACHE_PREFIX = "event:";
@@ -25,7 +31,8 @@ export class EventRepository {
     eventData: any,
     venues: Venue[],
     guests: any[],
-    dates: BookingDateDTO[]
+    dates: BookingDateDTO[],
+    currentUserId: string // New parameter for the authenticated user's ID
   ) {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -33,19 +40,21 @@ export class EventRepository {
 
     try {
       // 1. Create one event for all dates and venues
-      const createdByUserId = eventData.eventOrganizerId;
-      const createdBy = createdByUserId
-        ? await queryRunner.manager
-            .getRepository(User)
-            .findOne({ where: { userId: createdByUserId } })
-        : undefined;
+      // createdByUserId should be the authenticated user making the request
+      const createdByUser = await queryRunner.manager
+        .getRepository(User)
+        .findOne({ where: { userId: currentUserId } });
+
+      if (!createdByUser) {
+        throw new Error("Authenticated user not found.");
+      }
 
       const event = queryRunner.manager.create(Event, {
         ...eventData,
         bookingDates: dates, // all dates
         groupId: venues.length > 1 ? uuidv4() : undefined,
-        createdByUserId,
-        createdBy,
+        createdByUserId: currentUserId, // Use the authenticated user's ID for event creation
+        createdBy: createdByUser,
       });
       await queryRunner.manager.save(event);
 
@@ -65,27 +74,255 @@ export class EventRepository {
               : baseVenueAmount;
         }
 
+        // Get bookingPaymentTimeoutMinutes from venue's booking condition, or default to 15 minutes
+        const bookingCondition = venue.bookingConditions?.[0];
+        const bookingPaymentTimeoutMinutes =
+          bookingCondition?.bookingPaymentTimeoutMinutes || 15;
+
+        const holdingExpiresAt = new Date(
+          Date.now() + bookingPaymentTimeoutMinutes * 60 * 1000
+        );
+
         // Create booking
-        const userEntity = createdByUserId
-          ? await queryRunner.manager
-              .getRepository(User)
-              .findOne({ where: { userId: createdByUserId } })
-          : undefined;
+        // createdBy should be the authenticated user making the request
+        const userEntityForBooking = await queryRunner.manager
+          .getRepository(User)
+          .findOne({ where: { userId: currentUserId } });
+
+        if (!userEntityForBooking) {
+          throw new Error("Authenticated user not found for booking.");
+        }
+
         const venueBooking = queryRunner.manager.create(VenueBooking, {
           eventId: event.eventId,
           venueId: venue.venueId,
           venue: venue,
           bookingReason: eventData.eventType,
           bookingDates: dates, // all dates
-          bookingStatus: BookingStatus.PENDING,
+          bookingStatus: BookingStatus.HOLDING,
           isPaid: false,
           timezone: "UTC",
-          createdBy: createdByUserId,
-          user: userEntity || undefined,
+          createdBy: currentUserId, // Use the authenticated user's ID for booking creation
+          user: userEntityForBooking, // Link to User entity
           amountToBePaid: totalAmount,
+          holdingExpiresAt, // Set the expiration time
         });
         await queryRunner.manager.save(venueBooking);
         createdBookings.push(venueBooking);
+
+        // Create or update VenueAvailabilitySlots
+        const vaSlotRepo = queryRunner.manager.getRepository(
+          VenueAvailabilitySlot
+        );
+        for (const bookingDate of dates) {
+          const existingSlot = await vaSlotRepo.findOne({
+            where: {
+              venueId: venue.venueId,
+              Date: new Date(bookingDate.date), // Compare by date only
+              eventId: IsNull(), // Only consider slots not yet associated with an event
+            },
+          });
+
+          if (existingSlot) {
+            // Update existing slot to HOLDING
+            if (venue.bookingType === BookingType.HOURLY && bookingDate.hours) {
+              existingSlot.bookedHours = [
+                ...(existingSlot.bookedHours || []),
+                ...bookingDate.hours,
+              ];
+              existingSlot.status = SlotStatus.HOLDING;
+              existingSlot.eventId = event.eventId;
+              existingSlot.slotType = SlotType.EVENT;
+            } else if (venue.bookingType === BookingType.DAILY) {
+              existingSlot.status = SlotStatus.HOLDING;
+              existingSlot.eventId = event.eventId;
+              existingSlot.slotType = SlotType.EVENT;
+            }
+            await queryRunner.manager.save(existingSlot);
+          } else {
+            // Create new slot as HOLDING
+            const newSlot = vaSlotRepo.create({
+              venueId: venue.venueId,
+              Date: new Date(bookingDate.date),
+              bookedHours:
+                venue.bookingType === BookingType.HOURLY
+                  ? bookingDate.hours
+                  : undefined,
+              status: SlotStatus.HOLDING,
+              eventId: event.eventId,
+              slotType: SlotType.EVENT,
+              notes: "Held for new event creation",
+            });
+            await queryRunner.manager.save(newSlot);
+          }
+        }
+
+        // Create HOLDING transition slots
+        const transitionTime = bookingCondition?.transitionTime || 0;
+        if (transitionTime > 0) {
+          if (venue.bookingType === BookingType.DAILY) {
+            // For DAILY, add transition days before the first booking date
+            const firstBookingDate = new Date(
+              Math.min(...dates.map((d) => new Date(d.date).getTime()))
+            );
+            for (let i = 1; i <= transitionTime; i++) {
+              const transitionDate = new Date(firstBookingDate);
+              transitionDate.setDate(transitionDate.getDate() - i);
+
+              // Check if a slot already exists for this transition date
+              const existingTransitionSlot = await vaSlotRepo.findOne({
+                where: {
+                  venueId: venue.venueId,
+                  Date: transitionDate,
+                  eventId: IsNull(), // Only consider truly available slots
+                },
+              });
+
+              if (!existingTransitionSlot) {
+                const newTransitionSlot = vaSlotRepo.create({
+                  venueId: venue.venueId,
+                  Date: transitionDate,
+                  status: SlotStatus.HOLDING,
+                  slotType: SlotType.TRANSITION,
+                  eventId: event.eventId, // Link transition slot to the event
+                  notes: `Transition time for event ${event.eventId}`,
+                  metadata: {
+                    relatedEventId: event.eventId,
+                    transitionDirection: "before",
+                  },
+                });
+                await queryRunner.manager.save(newTransitionSlot);
+              } else {
+                // If a slot exists, update it to HOLDING if it's available
+                if (existingTransitionSlot.status === SlotStatus.AVAILABLE) {
+                  existingTransitionSlot.status = SlotStatus.HOLDING;
+                  existingTransitionSlot.eventId = event.eventId; // Correctly link to the event
+                  existingTransitionSlot.slotType = SlotType.TRANSITION;
+                  existingTransitionSlot.notes = `Transition time for event ${event.eventId}`;
+                  existingTransitionSlot.metadata = {
+                    relatedEventId: event.eventId,
+                    transitionDirection: "before",
+                  };
+                  await queryRunner.manager.save(existingTransitionSlot);
+                } else {
+                  // This implies a conflict. For now, we'll log a warning.
+                  console.warn(
+                    `Conflict detected for transition slot at ${transitionDate
+                      .toISOString()
+                      .slice(0, 10)} for venue ${venue.venueId}. Already ${
+                      existingTransitionSlot.status
+                    }`
+                  );
+                }
+              }
+            }
+          } else if (venue.bookingType === BookingType.HOURLY) {
+            // For HOURLY, add transition hours around each booked block of hours per day
+            for (const bookingDate of dates) {
+              if (bookingDate.hours && bookingDate.hours.length > 0) {
+                const sortedHours = [...bookingDate.hours].sort(
+                  (a, b) => a - b
+                );
+                const firstHour = sortedHours[0];
+                const lastHour = sortedHours[sortedHours.length - 1];
+
+                // Transition hours BEFORE the first booked hour
+                for (let i = 1; i <= transitionTime; i++) {
+                  const transitionHour = firstHour - i;
+                  if (transitionHour >= 0) {
+                    // Assuming hours are 0-23
+                    const transitionDate = new Date(bookingDate.date);
+                    const existingTransitionSlot = await vaSlotRepo.findOne({
+                      where: {
+                        venueId: venue.venueId,
+                        Date: transitionDate,
+                        bookedHours: Raw(
+                          (alias) => `${alias} @> ARRAY[${transitionHour}]`
+                        ), // Check if array contains the hour
+                        eventId: IsNull(),
+                      },
+                    });
+                    if (!existingTransitionSlot) {
+                      const newTransitionSlot = vaSlotRepo.create({
+                        venueId: venue.venueId,
+                        Date: transitionDate,
+                        bookedHours: [transitionHour],
+                        status: SlotStatus.HOLDING,
+                        slotType: SlotType.TRANSITION,
+                        eventId: event.eventId, // Link transition slot to the event
+                        notes: `Transition time for event ${event.eventId}`,
+                        metadata: {
+                          relatedEventId: event.eventId,
+                          transitionDirection: "before",
+                        },
+                      });
+                      await queryRunner.manager.save(newTransitionSlot);
+                    } else if (
+                      existingTransitionSlot.status === SlotStatus.AVAILABLE
+                    ) {
+                      existingTransitionSlot.status = SlotStatus.HOLDING;
+                      existingTransitionSlot.eventId = event.eventId; // Correctly link to the event
+                      existingTransitionSlot.slotType = SlotType.TRANSITION;
+                      existingTransitionSlot.notes = `Transition time for event ${event.eventId}`;
+                      existingTransitionSlot.metadata = {
+                        relatedEventId: event.eventId,
+                        transitionDirection: "before",
+                      };
+                      await queryRunner.manager.save(existingTransitionSlot);
+                    }
+                  }
+                }
+
+                // Transition hours AFTER the last booked hour
+                for (let i = 1; i <= transitionTime; i++) {
+                  const transitionHour = lastHour + i;
+                  if (transitionHour <= 23) {
+                    // Assuming hours are 0-23
+                    const transitionDate = new Date(bookingDate.date);
+                    const existingTransitionSlot = await vaSlotRepo.findOne({
+                      where: {
+                        venueId: venue.venueId,
+                        Date: transitionDate,
+                        bookedHours: Raw(
+                          (alias) => `${alias} @> ARRAY[${transitionHour}]`
+                        ), // Check if array contains the hour
+                        eventId: IsNull(),
+                      },
+                    });
+                    if (!existingTransitionSlot) {
+                      const newTransitionSlot = vaSlotRepo.create({
+                        venueId: venue.venueId,
+                        Date: transitionDate,
+                        bookedHours: [transitionHour],
+                        status: SlotStatus.HOLDING,
+                        slotType: SlotType.TRANSITION,
+                        eventId: event.eventId, // Link transition slot to the event
+                        notes: `Transition time for event ${event.eventId}`,
+                        metadata: {
+                          relatedEventId: event.eventId,
+                          transitionDirection: "after",
+                        },
+                      });
+                      await queryRunner.manager.save(newTransitionSlot);
+                    } else if (
+                      existingTransitionSlot.status === SlotStatus.AVAILABLE
+                    ) {
+                      existingTransitionSlot.status = SlotStatus.HOLDING;
+                      existingTransitionSlot.eventId = event.eventId; // Correctly link to the event
+                      existingTransitionSlot.slotType = SlotType.TRANSITION;
+                      existingTransitionSlot.notes = `Transition time for event ${event.eventId}`;
+                      existingTransitionSlot.metadata = {
+                        relatedEventId: event.eventId,
+                        transitionDirection: "after",
+                      };
+                      await queryRunner.manager.save(existingTransitionSlot);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
 
         // Create eventVenue
         const eventVenue = queryRunner.manager.create(EventVenue, {

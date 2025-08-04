@@ -23,7 +23,9 @@ export enum BookingStatus {
   APPROVED_NOT_PAID = "APPROVED_NOT_PAID",
   PARTIAL = "PARTIAL", // Added for partial payment
   PENDING = "PENDING",
+  HOLDING = "HOLDING", // New status for temporary holds
   CANCELLED = "CANCELLED",
+  FAILED = "FAILED", // New status for expired/unpaid bookings
 }
 
 @Entity("venue_bookings")
@@ -84,6 +86,12 @@ export class VenueBooking {
   @Column({ type: "enum", enum: BookingStatus, default: BookingStatus.PENDING })
   @IsEnum(BookingStatus)
   bookingStatus!: BookingStatus;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  holdingExpiresAt?: Date;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  transactionDate?: Date;
 
   @Column({ type: "float", nullable: true })
   amountToBePaid?: number;
