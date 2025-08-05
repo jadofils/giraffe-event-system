@@ -1012,38 +1012,12 @@ export class VenueBookingController {
       );
 
       if (result.success) {
-        const previousBookingStatus = booking.bookingStatus; // Capture status BEFORE update
-
-        // Update VenueBooking status to PARTIAL and set transactionDate
-        booking.bookingStatus = BookingStatus.PARTIAL;
-        booking.isPaid = true; // Mark as paid
-        booking.transactionDate = new Date();
-        await bookingRepo.save(booking);
-
-        // Only call approveBookingWithTransition if the booking was previously HOLDING or PENDING
-        if (
-          previousBookingStatus === BookingStatus.HOLDING ||
-          previousBookingStatus === BookingStatus.PENDING
-        ) {
-          const approvalResult =
-            await VenueBookingRepository.approveBookingWithTransition(
-              bookingId
-            ); // Corrected static call
-
-          if (!approvalResult.success) {
-            throw new Error(
-              `Failed to update availability slots after payment: ${approvalResult.message}`
-            );
-          }
-        }
-
         res.status(200).json({
           success: true,
           data: result.data,
           message: result.message,
         });
       } else {
-        // If payment processing failed, return the error from the service
         res.status(400).json(result);
       }
     } catch (error) {

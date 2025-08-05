@@ -139,22 +139,41 @@ export class VenueBookingPaymentService {
         0
       );
 
-      // Calculate total amount based on booking type and dates
+      // Calculate total amount based on booking type and dates for validation
       const baseVenueAmount = booking.venue.venueVariables[0]?.venueAmount || 0;
-      const totalBookingDays = booking.bookingDates.length;
-      const totalVenueAmount =
-        booking.venue.bookingType === "DAILY"
-          ? baseVenueAmount * totalBookingDays
-          : baseVenueAmount;
+      let totalHoursCalculated = 0; // Initialize
+      let totalDaysCalculated = 0; // Initialize
 
-      // Verify total amount matches booking
-      if (totalVenueAmount !== booking.amountToBePaid) {
+      if (booking.venue.bookingType === "HOURLY") {
+        totalHoursCalculated = booking.bookingDates.reduce(
+          (sum: number, date: any) => {
+            return sum + (date.hours?.length || 0);
+          },
+          0
+        );
+      } else if (booking.venue.bookingType === "DAILY") {
+        totalDaysCalculated = booking.bookingDates.length;
+      }
+
+      const calculatedTotalVenueAmount = // Use a distinct name to avoid confusion with stored amount
+        booking.venue.bookingType === "HOURLY"
+          ? baseVenueAmount * totalHoursCalculated
+          : baseVenueAmount * totalDaysCalculated; // Use totalDaysCalculated for daily
+
+      // Verify calculated amount matches stored booking amount (with tolerance for floats)
+      if (
+        Math.abs(calculatedTotalVenueAmount - (booking.amountToBePaid ?? 0)) >
+        0.01
+      ) {
         throw new Error(
-          `Payment amount mismatch. Expected: ${booking.amountToBePaid}, Calculated: ${totalVenueAmount}`
+          `Payment amount mismatch. Expected: ${
+            booking.amountToBePaid ?? 0
+          }, Calculated: ${calculatedTotalVenueAmount}. This indicates an inconsistency between event creation and current venue pricing.`
         );
       }
 
-      const remainingAmountToPay = booking.amountToBePaid - totalPaidSoFar;
+      const remainingAmountToPay =
+        (booking.amountToBePaid ?? 0) - totalPaidSoFar;
 
       // 3. Validate payment amount
       if (paymentData.amountPaid <= 0) {
@@ -175,24 +194,27 @@ export class VenueBookingPaymentService {
         );
       }
 
-      const depositRequired = (booking.amountToBePaid * depositPercent) / 100;
+      const depositRequired =
+        ((booking.amountToBePaid ?? 0) * depositPercent) / 100;
 
       // If this is first payment, it must meet minimum deposit requirement
       if (totalPaidSoFar === 0 && paymentData.amountPaid < depositRequired) {
         throw new Error(
-          `First payment must be at least the required deposit amount: ${depositRequired} (${depositPercent}% of total amount ${booking.amountToBePaid})`
+          `First payment must be at least the required deposit amount: ${depositRequired} (${depositPercent}% of total amount ${
+            booking.amountToBePaid ?? 0
+          })`
         );
       }
 
       // Allow for small floating point differences
       const newTotalPaid = totalPaidSoFar + paymentData.amountPaid;
       const isFullPayment =
-        Math.abs(newTotalPaid - booking.amountToBePaid) < 0.01;
+        Math.abs(newTotalPaid - (booking.amountToBePaid ?? 0)) < 0.01;
 
       // 4. Create payment record
       const payment = queryRunner.manager.create(VenueBookingPayment, {
         ...paymentData,
-        remainingAmount: booking.amountToBePaid - newTotalPaid,
+        remainingAmount: (booking.amountToBePaid ?? 0) - newTotalPaid,
         isFullPayment,
         paymentStatus:
           paymentData.amountPaid <= 0
@@ -207,17 +229,23 @@ export class VenueBookingPaymentService {
         totalPaidSoFar < depositRequired && newTotalPaid >= depositRequired;
 
       // 6. Update booking status
+      // Capture previous status to determine if slot updates are needed
+      const previousBookingStatus = booking.bookingStatus;
       booking.bookingStatus =
-        newTotalPaid >= booking.amountToBePaid
+        newTotalPaid >= (booking.amountToBePaid ?? 0)
           ? BookingStatus.APPROVED_PAID
           : newTotalPaid > 0
           ? BookingStatus.PARTIAL
-          : BookingStatus.APPROVED_NOT_PAID;
-      booking.isPaid = newTotalPaid >= booking.amountToBePaid;
+          : BookingStatus.PENDING; // Keep PENDING if no payment made yet or partial is not applied
+      booking.isPaid = newTotalPaid > 0;
+      booking.paymentConfirmationDate = new Date(); // Update transaction date on any payment
       await queryRunner.manager.save(booking);
 
-      // Handle venue availability slots ONLY on first deposit payment
-      if (isFirstDepositPayment) {
+      // Handle venue availability slots ONLY if booking was previously HOLDING or PENDING
+      if (
+        previousBookingStatus === BookingStatus.HOLDING ||
+        previousBookingStatus === BookingStatus.PENDING
+      ) {
         const transitionTime = bookingCondition?.transitionTime || 0;
         const availabilitySlotRepo = queryRunner.manager.getRepository(
           VenueAvailabilitySlot
@@ -232,47 +260,64 @@ export class VenueBookingPaymentService {
               where: {
                 venueId: booking.venue.venueId,
                 Date: eventDate,
+                status: SlotStatus.HOLDING, // Only consider holding slots for update
+                eventId: booking.eventId, // Ensure it's for this event
               },
             });
 
-            if (!existingEventSlot) {
-              // Create slot for the event date
-              await this.createDailySlot(
-                queryRunner,
-                booking.venue.venueId,
-                eventDate,
-                booking.eventId,
-                SlotType.EVENT,
-                `Booked for event ${booking.eventId}`
+            if (existingEventSlot) {
+              // Update existing holding slot to BOOKED
+              existingEventSlot.status = SlotStatus.BOOKED;
+              await queryRunner.manager.save(existingEventSlot);
+            } else {
+              // This scenario should ideally not happen if HOLDING slots are created correctly,
+              // but as a fallback, ensure it's BOOKED if it was somehow skipped.
+              // Or, if it's already BOOKED by this event, then no action needed.
+              // For now, let's log a warning if an event slot is not found as HOLDING.
+              console.warn(
+                `Event slot for ${
+                  eventDate.toISOString().split("T")[0]
+                } not found as HOLDING for venue ${
+                  booking.venue.venueId
+                } for event ${
+                  booking.eventId
+                }. It might already be BOOKED or AVAILABLE.`
+              );
+            }
+
+            // If there's transition time, update slot for the day BEFORE
+            if (transitionTime > 0) {
+              const transitionDate = new Date(eventDate);
+              transitionDate.setDate(transitionDate.getDate() - 1); // One day before
+
+              // Check if transition slot is HOLDING
+              const existingTransitionSlot = await availabilitySlotRepo.findOne(
+                {
+                  where: {
+                    venueId: booking.venue.venueId,
+                    Date: transitionDate,
+                    status: SlotStatus.HOLDING, // Only consider holding slots for update
+                    eventId: booking.eventId, // Ensure it's for this event
+                    slotType: SlotType.TRANSITION,
+                  },
+                }
               );
 
-              // If there's transition time, try to create slot for the day BEFORE
-              if (transitionTime > 0) {
-                const transitionDate = new Date(eventDate);
-                transitionDate.setDate(transitionDate.getDate() - 1); // One day before
-
-                // Check if transition slot is available
-                const existingTransitionSlot =
-                  await availabilitySlotRepo.findOne({
-                    where: {
-                      venueId: booking.venue.venueId,
-                      Date: transitionDate,
-                    },
-                  });
-
-                // Only create transition slot if the day before is available
-                if (!existingTransitionSlot) {
-                  await this.createDailySlot(
-                    queryRunner,
-                    booking.venue.venueId,
-                    transitionDate,
-                    booking.eventId,
-                    SlotType.TRANSITION,
-                    `Transition time for event on ${
-                      eventDate.toISOString().split("T")[0]
-                    }`
-                  );
-                }
+              if (existingTransitionSlot) {
+                // Update existing holding transition slot to TRANSITION
+                existingTransitionSlot.status = SlotStatus.TRANSITION;
+                await queryRunner.manager.save(existingTransitionSlot);
+              } else {
+                // Log a warning if a transition slot is not found as HOLDING.
+                console.warn(
+                  `Transition slot for ${
+                    transitionDate.toISOString().split("T")[0]
+                  } not found as HOLDING for venue ${
+                    booking.venue.venueId
+                  } for event ${
+                    booking.eventId
+                  }. It might already be TRANSITION or AVAILABLE.`
+                );
               }
             }
           }
@@ -284,120 +329,31 @@ export class VenueBookingPaymentService {
               ? bookingDate.hours
               : [];
 
-            // Check if slot already exists for this date
+            // Find the holding slot for this date and event
             const existingSlot = await availabilitySlotRepo.findOne({
               where: {
                 venueId: booking.venue.venueId,
                 Date: date,
+                status: SlotStatus.HOLDING,
+                eventId: booking.eventId,
               },
             });
 
-            // For hourly bookings, check if any of the hours are already booked
             if (existingSlot) {
-              const existingHours = existingSlot.bookedHours || [];
-              const hasConflict = hours.some((hour) =>
-                existingHours.includes(hour)
-              );
-              if (hasConflict) {
-                throw new Error(
-                  `Some hours are already booked for date ${
-                    date.toISOString().split("T")[0]
-                  }`
-                );
-              }
-            }
-
-            if (!existingSlot) {
-              await this.createHourlySlot(
-                queryRunner,
-                booking.venue.venueId,
-                date,
-                hours,
-                transitionTime,
-                booking.eventId,
-                `Booked for event ${booking.eventId}`
-              );
+              // Update status to BOOKED and TRANSITION (for relevant hours)
+              existingSlot.status = SlotStatus.BOOKED;
+              await queryRunner.manager.save(existingSlot);
             } else {
-              // Update existing slot with new hours
-              existingSlot.bookedHours = [
-                ...new Set([...(existingSlot.bookedHours || []), ...hours]),
-              ];
-              await availabilitySlotRepo.save(existingSlot);
-            }
-          }
-        }
-
-        // Cancel conflicting bookings
-        const conflictingBookings = await queryRunner.manager.find(
-          VenueBooking,
-          {
-            where: {
-              venueId: booking.venue.venueId,
-              bookingId: Not(booking.bookingId),
-              bookingStatus: In([
-                BookingStatus.PENDING,
-                BookingStatus.APPROVED_NOT_PAID,
-              ]),
-            },
-            relations: ["event"],
-          }
-        );
-
-        // Filter conflicting bookings
-        const filteredConflictingBookings = conflictingBookings.filter(
-          (conflictBooking) => {
-            return conflictBooking.bookingDates.some((conflictDate) => {
-              const bookingDate = new Date(conflictDate.date);
-
-              // Check if this date is now marked as unavailable
-              const isDateConflicting = booking.bookingDates.some(
-                (bookedDate) => {
-                  const currentBookingDate = new Date(bookedDate.date);
-                  return bookingDate.getTime() === currentBookingDate.getTime();
-                }
+              console.warn(
+                `Hourly slot for ${
+                  date.toISOString().split("T")[0]
+                } not found as HOLDING for venue ${
+                  booking.venue.venueId
+                } for event ${
+                  booking.eventId
+                }. It might already be BOOKED or AVAILABLE.`
               );
-
-              if (!isDateConflicting) return false;
-
-              // For hourly bookings, check hour overlap
-              if (booking.venue.bookingType === "HOURLY") {
-                const conflictHours = conflictDate.hours || [];
-                if (conflictHours.length > 0) {
-                  return booking.bookingDates.some((bookedDate) => {
-                    const bookedHours = bookedDate.hours || [];
-                    if (bookedHours.length === 0) return false;
-
-                    // Get all hours including transition time
-                    const bookedHoursWithTransition = [
-                      ...this.generateTransitionHours(
-                        bookedHours,
-                        Math.ceil(transitionTime / 60)
-                      ),
-                      ...bookedHours,
-                    ];
-
-                    return conflictHours.some((hour) =>
-                      bookedHoursWithTransition.includes(hour)
-                    );
-                  });
-                }
-              }
-
-              return true;
-            });
-          }
-        );
-
-        // Cancel conflicting bookings
-        for (const conflictBooking of filteredConflictingBookings) {
-          conflictBooking.bookingStatus = BookingStatus.CANCELLED;
-          conflictBooking.cancellationReason =
-            "Venue has been booked by another event";
-          await queryRunner.manager.save(conflictBooking);
-
-          if (conflictBooking.event) {
-            conflictBooking.event.eventStatus = EventStatus.CANCELLED;
-            await queryRunner.manager.save(conflictBooking.event);
+            }
           }
         }
       }
@@ -405,13 +361,27 @@ export class VenueBookingPaymentService {
       await queryRunner.commitTransaction();
 
       // Create response with booking details
+      const baseVenueAmountForDisplay =
+        booking.venue.venueVariables[0]?.venueAmount || 0;
+      let displayHours = undefined;
+      let displayDays = undefined;
+
+      if (booking.venue.bookingType === "HOURLY") {
+        displayHours = booking.bookingDates.reduce((sum: number, date: any) => {
+          return sum + (date.hours?.length || 0);
+        }, 0);
+      } else if (booking.venue.bookingType === "DAILY") {
+        displayDays = booking.bookingDates.length;
+      }
+
       const bookingDetails: BookingPaymentDetails = {
         ...booking,
         totalAmount: booking.amountToBePaid,
-        totalHours:
-          booking.venue.bookingType === "HOURLY" ? undefined : totalBookingDays,
+        totalHours: displayHours,
         pricePerHour:
-          booking.venue.bookingType === "HOURLY" ? baseVenueAmount : undefined,
+          booking.venue.bookingType === "HOURLY"
+            ? baseVenueAmountForDisplay
+            : undefined,
       };
 
       return {
@@ -425,9 +395,11 @@ export class VenueBookingPaymentService {
           : isFirstDepositPayment
           ? `Deposit payment received (${
               bookingCondition?.depositRequiredPercent
-            }% of total amount ${booking.amountToBePaid}${
+            }% of total amount ${booking.amountToBePaid ?? 0}${
               booking.venue.bookingType === "HOURLY"
-                ? ` for ${totalBookingDays} days`
+                ? ` for ${displayHours} hours`
+                : booking.venue.bookingType === "DAILY"
+                ? ` for ${displayDays} days`
                 : ""
             }) and venue slots reserved`
           : "Partial payment processed successfully",

@@ -20,8 +20,6 @@ import {
 export enum VenueBookingPaymentStatus {
   PENDING = "PENDING",
   COMPLETED = "COMPLETED", // New status for successful individual payments
-  PARTIAL = "PARTIAL", // Temporarily re-added for migration purposes
-  PAID = "PAID", // Temporarily re-added for migration purposes
   FAILED = "FAILED",
   CANCELLED = "CANCELLED",
   REFUNDED = "REFUNDED",

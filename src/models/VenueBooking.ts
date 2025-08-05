@@ -91,7 +91,7 @@ export class VenueBooking {
   holdingExpiresAt?: Date;
 
   @Column({ type: "timestamp with time zone", nullable: true })
-  transactionDate?: Date;
+  paymentConfirmationDate?: Date;
 
   @Column({ type: "float", nullable: true })
   amountToBePaid?: number;

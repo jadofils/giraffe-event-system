@@ -217,107 +217,69 @@ export class EventRepository {
               }
             }
           } else if (venue.bookingType === BookingType.HOURLY) {
-            // For HOURLY, add transition hours around each booked block of hours per day
             for (const bookingDate of dates) {
               if (bookingDate.hours && bookingDate.hours.length > 0) {
-                const sortedHours = [...bookingDate.hours].sort(
+                const sortedEventHours = [...bookingDate.hours].sort(
                   (a, b) => a - b
                 );
-                const firstHour = sortedHours[0];
-                const lastHour = sortedHours[sortedHours.length - 1];
+                const firstEventHour = sortedEventHours[0];
 
-                // Transition hours BEFORE the first booked hour
+                const transitionHoursToHold: number[] = [];
                 for (let i = 1; i <= transitionTime; i++) {
-                  const transitionHour = firstHour - i;
-                  if (transitionHour >= 0) {
-                    // Assuming hours are 0-23
-                    const transitionDate = new Date(bookingDate.date);
-                    const existingTransitionSlot = await vaSlotRepo.findOne({
-                      where: {
-                        venueId: venue.venueId,
-                        Date: transitionDate,
-                        bookedHours: Raw(
-                          (alias) => `${alias} @> ARRAY[${transitionHour}]`
-                        ), // Check if array contains the hour
-                        eventId: IsNull(),
-                      },
-                    });
-                    if (!existingTransitionSlot) {
-                      const newTransitionSlot = vaSlotRepo.create({
-                        venueId: venue.venueId,
-                        Date: transitionDate,
-                        bookedHours: [transitionHour],
-                        status: SlotStatus.HOLDING,
-                        slotType: SlotType.TRANSITION,
-                        eventId: event.eventId, // Link transition slot to the event
-                        notes: `Transition time for event ${event.eventId}`,
-                        metadata: {
-                          relatedEventId: event.eventId,
-                          transitionDirection: "before",
-                        },
-                      });
-                      await queryRunner.manager.save(newTransitionSlot);
-                    } else if (
-                      existingTransitionSlot.status === SlotStatus.AVAILABLE
-                    ) {
-                      existingTransitionSlot.status = SlotStatus.HOLDING;
-                      existingTransitionSlot.eventId = event.eventId; // Correctly link to the event
-                      existingTransitionSlot.slotType = SlotType.TRANSITION;
-                      existingTransitionSlot.notes = `Transition time for event ${event.eventId}`;
-                      existingTransitionSlot.metadata = {
-                        relatedEventId: event.eventId,
-                        transitionDirection: "before",
-                      };
-                      await queryRunner.manager.save(existingTransitionSlot);
-                    }
+                  const tHour = firstEventHour - i;
+                  if (tHour >= 0) {
+                    transitionHoursToHold.unshift(tHour); // Add to the beginning
                   }
                 }
 
-                // Transition hours AFTER the last booked hour
-                for (let i = 1; i <= transitionTime; i++) {
-                  const transitionHour = lastHour + i;
-                  if (transitionHour <= 23) {
-                    // Assuming hours are 0-23
-                    const transitionDate = new Date(bookingDate.date);
-                    const existingTransitionSlot = await vaSlotRepo.findOne({
-                      where: {
-                        venueId: venue.venueId,
-                        Date: transitionDate,
-                        bookedHours: Raw(
-                          (alias) => `${alias} @> ARRAY[${transitionHour}]`
-                        ), // Check if array contains the hour
-                        eventId: IsNull(),
-                      },
-                    });
-                    if (!existingTransitionSlot) {
-                      const newTransitionSlot = vaSlotRepo.create({
-                        venueId: venue.venueId,
-                        Date: transitionDate,
-                        bookedHours: [transitionHour],
-                        status: SlotStatus.HOLDING,
-                        slotType: SlotType.TRANSITION,
-                        eventId: event.eventId, // Link transition slot to the event
-                        notes: `Transition time for event ${event.eventId}`,
-                        metadata: {
-                          relatedEventId: event.eventId,
-                          transitionDirection: "after",
-                        },
-                      });
-                      await queryRunner.manager.save(newTransitionSlot);
-                    } else if (
-                      existingTransitionSlot.status === SlotStatus.AVAILABLE
-                    ) {
-                      existingTransitionSlot.status = SlotStatus.HOLDING;
-                      existingTransitionSlot.eventId = event.eventId; // Correctly link to the event
-                      existingTransitionSlot.slotType = SlotType.TRANSITION;
-                      existingTransitionSlot.notes = `Transition time for event ${event.eventId}`;
-                      existingTransitionSlot.metadata = {
-                        relatedEventId: event.eventId,
-                        transitionDirection: "after",
-                      };
-                      await queryRunner.manager.save(existingTransitionSlot);
-                    }
-                  }
+                const allHoursToHold = [
+                  ...transitionHoursToHold,
+                  ...sortedEventHours,
+                ];
+
+                // Find an existing slot that is either AVAILABLE or already HOLDING for this specific event
+                const existingSlot = await vaSlotRepo.findOne({
+                  where: [
+                    {
+                      venueId: venue.venueId,
+                      Date: new Date(bookingDate.date),
+                      status: SlotStatus.AVAILABLE,
+                    },
+                    {
+                      venueId: venue.venueId,
+                      Date: new Date(bookingDate.date),
+                      status: SlotStatus.HOLDING,
+                      eventId: event.eventId, // Ensure it's for this event
+                      slotType: SlotType.EVENT, // It would be an event slot holding these hours
+                    },
+                  ],
+                });
+
+                if (existingSlot) {
+                  // Update existing slot to HOLDING and combine hours
+                  const currentBookedHours = existingSlot.bookedHours || [];
+                  const mergedHours = [
+                    ...new Set([...currentBookedHours, ...allHoursToHold]),
+                  ].sort((a, b) => a - b);
+
+                  existingSlot.bookedHours = mergedHours;
+                  existingSlot.status = SlotStatus.HOLDING;
+                  existingSlot.eventId = event.eventId;
+                  existingSlot.slotType = SlotType.EVENT; // Ensure it's marked as an EVENT slot
+                  existingSlot.notes = "Held for new event creation (hourly)";
+                  await queryRunner.manager.save(existingSlot);
+                } else {
+                  // Create new slot as HOLDING for combined hours
+                  const newSlot = vaSlotRepo.create({
+                    venueId: venue.venueId,
+                    Date: new Date(bookingDate.date),
+                    bookedHours: allHoursToHold,
+                    status: SlotStatus.HOLDING,
+                    eventId: event.eventId,
+                    slotType: SlotType.EVENT, // Mark as an EVENT slot
+                    notes: "Held for new event creation (hourly)",
+                  });
+                  await queryRunner.manager.save(newSlot);
                 }
               }
             }
