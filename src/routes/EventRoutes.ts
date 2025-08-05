@@ -71,6 +71,17 @@ router.patch(
   EventController.updatePrivateEvent
 );
 
+router.patch("/admin/:eventId/enable", isAdmin, EventController.enableEvent);
+router.patch(
+  "/admin/:eventId/disable-by-admin",
+  isAdmin,
+  EventController.disableEventByAdmin
+);
+
+// User accessible enable/disable routes
+router.patch("/:eventId/enable", EventController.enableEvent);
+router.patch("/:eventId/disable", EventController.disableEvent);
+
 // Add manager endpoint for creating event for external user
 router.post(
   "/manager/create-event-for-user",

@@ -146,7 +146,16 @@ export class Event {
   @Column({ type: "text", nullable: true })
   cancellationReason?: string;
 
-  // Relationships
+  @Column({
+    type: "enum",
+    enum: ["ENABLE", "DISABLE", "DISABLED_BY_ADMIN"],
+    default: "ENABLE",
+  })
+  @IsEnum(["ENABLE", "DISABLE", "DISABLED_BY_ADMIN"], {
+    message: "Enable status must be one of: ENABLE, DISABLE, DISABLED_BY_ADMIN",
+  })
+  enableStatus!: "ENABLE" | "DISABLE" | "DISABLED_BY_ADMIN";
+
   @ManyToOne(() => User, (user) => user.createdEvents)
   @JoinColumn({ name: "createdByUserId" })
   createdBy?: User;

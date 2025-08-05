@@ -2129,4 +2129,169 @@ export class EventController {
       next(error);
     }
   }
+
+  static async enableEvent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { eventId } = req.params;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+      const userRole = authenticatedReq.user?.role?.roleName; // Assuming role is available on user object
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId },
+      });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found." });
+        return;
+      }
+
+      const isOrganizer =
+        event.eventOrganizerType === "USER"
+          ? event.eventOrganizerId === userId
+          : false;
+
+      const isAdminUser = userRole === "ADMIN"; // Assuming 'ADMIN' is the role name for administrators
+
+      // Special handling for DISABLED_BY_ADMIN: only admin can re-enable
+      if (event.enableStatus === "DISABLED_BY_ADMIN" && !isAdminUser) {
+        res.status(403).json({
+          success: false,
+          message: "Only administrators can enable events disabled by admin.",
+        });
+        return;
+      }
+
+      // Allow organizer to enable their own event, or admin to enable any event not DISABLED_BY_ADMIN
+      if (!isOrganizer && !isAdminUser) {
+        res.status(403).json({
+          success: false,
+          message: "Forbidden: You are not authorized to enable this event.",
+        });
+        return;
+      }
+
+      const result = await EventRepository.updateEventEnableStatus(
+        eventId,
+        "ENABLE"
+      );
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: "Event enabled successfully.",
+          data: result.data,
+        });
+      } else {
+        res.status(404).json({ success: false, message: result.message });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async disableEvent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { eventId } = req.params;
+      const authenticatedReq = req as any;
+      const userId = authenticatedReq.user?.userId;
+      const userRole = authenticatedReq.user?.role?.roleName; // Assuming role is available on user object
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId },
+      });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found." });
+        return;
+      }
+
+      const isOrganizer =
+        event.eventOrganizerType === "USER"
+          ? event.eventOrganizerId === userId
+          : false;
+
+      const isAdminUser = userRole === "ADMIN";
+
+      // Only allow organizer or admin to disable. Admins can disable events that are already DISABLED_BY_ADMIN.
+      if (!isOrganizer && !isAdminUser) {
+        res.status(403).json({
+          success: false,
+          message: "Forbidden: You are not authorized to disable this event.",
+        });
+        return;
+      }
+
+      // Prevent organizer from disabling an event that was disabled by admin
+      if (event.enableStatus === "DISABLED_BY_ADMIN" && !isAdminUser) {
+        res.status(403).json({
+          success: false,
+          message:
+            "Only administrators can change the status of events disabled by admin.",
+        });
+        return;
+      }
+
+      const result = await EventRepository.updateEventEnableStatus(
+        eventId,
+        "DISABLE"
+      );
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: "Event disabled successfully.",
+          data: result.data,
+        });
+      } else {
+        res.status(404).json({ success: false, message: result.message });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async disableEventByAdmin(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { eventId } = req.params;
+      // isAdmin middleware already handles authorization for this route
+      const result = await EventRepository.updateEventEnableStatus(
+        eventId,
+        "DISABLED_BY_ADMIN"
+      );
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: "Event disabled by admin successfully.",
+          data: result.data,
+        });
+      } else {
+        res.status(404).json({ success: false, message: result.message });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
 }

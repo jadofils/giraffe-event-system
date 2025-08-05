@@ -409,4 +409,29 @@ export class EventRepository {
       };
     }
   }
+
+  static async updateEventEnableStatus(
+    eventId: string,
+    status: "ENABLE" | "DISABLE" | "DISABLED_BY_ADMIN"
+  ) {
+    try {
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({ where: { eventId } });
+
+      if (!event) {
+        return { success: false, message: "Event not found." };
+      }
+
+      event.enableStatus = status;
+      await eventRepo.save(event);
+
+      return { success: true, data: event };
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update event enable status.";
+      return { success: false, message };
+    }
+  }
 }
