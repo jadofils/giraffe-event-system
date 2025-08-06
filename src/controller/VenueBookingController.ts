@@ -1175,7 +1175,7 @@ export class VenueBookingController {
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
       const booking = await bookingRepo.findOne({
         where: { bookingId },
-        relations: ["venue", "event", "user"],
+        relations: ["venue", "event", "user", "venue.organization"],
       });
       if (!booking) {
         res.status(404).json({ success: false, message: "Booking not found." });
@@ -1270,6 +1270,10 @@ export class VenueBookingController {
               ? "Your payment will be refunded as soon as possible."
               : undefined,
             managerPhone: venueVariable?.manager?.phoneNumber,
+            organizationName:
+              booking.venue.organization?.organizationName || "Giraffe Space",
+            organizationLogoUrl: booking.venue.organization?.logo,
+            bookingDates: booking.bookingDates,
           });
         }
       } catch (e) {
@@ -1315,7 +1319,7 @@ export class VenueBookingController {
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
       const booking = await bookingRepo.findOne({
         where: { bookingId },
-        relations: ["venue", "event", "user"],
+        relations: ["venue", "event", "user", "venue.organization"],
       });
       if (!booking) {
         res.status(404).json({ success: false, message: "Booking not found." });
@@ -1399,6 +1403,10 @@ export class VenueBookingController {
               ? "Your payment will be refunded as soon as possible."
               : undefined,
             managerPhone: venueVariable?.manager?.phoneNumber,
+            organizationName:
+              booking.venue.organization?.organizationName || "Giraffe Space",
+            organizationLogoUrl: booking.venue.organization?.logo,
+            bookingDates: booking.bookingDates,
           });
         }
       } catch (e) {
@@ -1443,7 +1451,7 @@ export class VenueBookingController {
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
       const booking = await bookingRepo.findOne({
         where: { bookingId },
-        relations: ["venue", "event", "user"],
+        relations: ["venue", "event", "user", "venue.organization"],
       });
       if (!booking) {
         res.status(404).json({ success: false, message: "Booking not found." });
@@ -1502,6 +1510,10 @@ export class VenueBookingController {
               ? "Your payment will be refunded as soon as possible."
               : undefined,
             managerPhone: venueVariable?.manager?.phoneNumber,
+            organizationName:
+              booking.venue.organization?.organizationName || "Giraffe Space",
+            organizationLogoUrl: booking.venue.organization?.logo,
+            bookingDates: booking.bookingDates,
           });
         }
       } catch (e) {

@@ -804,6 +804,9 @@ export class EmailService {
     reason,
     refundInfo,
     managerPhone,
+    organizationName,
+    organizationLogoUrl,
+    bookingDates,
   }: {
     to: string;
     userName: string;
@@ -812,33 +815,136 @@ export class EmailService {
     reason: string;
     refundInfo?: string;
     managerPhone?: string;
+    organizationName: string;
+    organizationLogoUrl?: string;
+    bookingDates: Array<{ date: string; hours?: number[] }>;
   }): Promise<boolean> {
+    const formattedBookingDates = bookingDates
+      .map(
+        (b) =>
+          `${new Date(b.date).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}${
+            b.hours && b.hours.length > 0
+              ? ` (${b.hours.map((h) => `${h}:00-${h + 1}:00`).join(", ")})`
+              : ""
+          }`
+      )
+      .join("; ");
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #eee; padding: 32px;">
-        <h2 style="color: #d32f2f;">Booking Cancelled</h2>
-        <p>Dear <b>${userName}</b>,</p>
-        <p>We regret to inform you that your booking for the venue <b>${venueName}</b> (event: <b>${eventName}</b>) has been <span style="color: #d32f2f; font-weight: bold;">cancelled</span> by the venue manager.</p>
-        <p><b>Reason:</b> <span style="color: #333;">${reason}</span></p>
-        ${
-          refundInfo
-            ? `<p style=\"color: #388e3c;\"><b>Refund Info:</b> ${refundInfo}</p>`
-            : ""
-        }
-        ${
-          managerPhone
-            ? `<p><b>For more information, contact the venue manager at:</b> <a href='tel:${managerPhone}'>${managerPhone}</a></p>`
-            : ""
-        }
-        <p>If you have any questions or need further assistance, please contact our support team.</p>
-        <div style="margin-top: 32px; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px;">
-          Thank you for using our platform.<br/>
-          <b>Giraffe Event System Team</b>
-        </div>
-      </div>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Booking Cancellation - ${organizationName}</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;">
+          <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+            
+            <!-- Header -->
+            <div style="
+              background: linear-gradient(135deg, #347ff8ff 0%, #2a7eedff 100%);
+              color: #FFFFFF;
+              padding: 40px 30px;
+              text-align: center;
+              border-radius: 12px 12px 0 0;
+            ">
+              ${
+                organizationLogoUrl
+                  ? `<img src="${organizationLogoUrl}" alt="${organizationName} Logo" style="
+                display: block;
+                margin: 0 auto 20px;
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.1);
+                padding: 12px;
+              " />`
+                  : ""
+              }
+              <h1 style="
+                font-size: 28px;
+                margin: 0;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+              ">
+                 Booking Cancellation
+              </h1>
+              <p style="
+                margin: 8px 0 0 0;
+                opacity: 0.9;
+                font-size: 16px;
+              ">
+                ${organizationName}
+              </p>
+            </div>
+
+            <!-- Main Content -->
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #d32f2f; margin-bottom: 24px;">Booking Cancelled</h2>
+              <p style="font-size: 16px; color: #333;">Dear <b>${userName}</b>,</p>
+              <p style="font-size: 16px; color: #333;">We regret to inform you that your booking for the event <b>${eventName}</b> at venue <b>${venueName}</b> on <b>${formattedBookingDates}</b> has been <span style="color: #d32f2f; font-weight: bold;">cancelled</span>.</p>
+              <p style="font-size: 16px; color: #333;"><b>Reason for cancellation:</b> <span style="color: #333;">${reason}</span></p>
+              ${
+                refundInfo
+                  ? `<p style="color: #388e3c; font-size: 16px;"><b>Refund Information:</b> ${refundInfo}</p>`
+                  : ""
+              }
+              ${
+                managerPhone
+                  ? `<p style="font-size: 16px; color: #333;"><b>For more information, contact the venue manager at:</b> <a href='tel:${managerPhone}' style="color: #4285F4; text-decoration: none; font-weight: 600;">${managerPhone}</a></p>`
+                  : ""
+              }
+              <p style="font-size: 16px; color: #333;">If you have any questions or need further assistance, please contact our support team.</p>
+            </div>
+
+            <!-- Footer -->
+            <div style="
+              background: #f8f9fa;
+              padding: 24px;
+              text-align: center;
+              border-top: 1px solid #e9ecef;
+            ">
+              ${
+                organizationLogoUrl
+                  ? `<div style="margin-bottom: 16px;">
+                <img src="${organizationLogoUrl}" alt="${organizationName}" style="
+                  width: 40px;
+                  height: 40px;
+                  opacity: 0.7;
+                "/>
+              </div>`
+                  : ""
+              }
+              <p style="
+                margin: 0 0 8px 0;
+                color: #666;
+                font-size: 14px;
+                font-weight: 600;
+              ">
+                Thank you for choosing ${organizationName}! 🦒
+              </p>
+              <p style="
+                margin: 0;
+                color: #999;
+                font-size: 12px;
+                line-height: 1.4;
+              ">
+                This email was sent by ${organizationName} Event Management System.<br/>
+                Please keep this email for your records.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
     `;
     return await this.sendEmail({
       to,
-      subject: `Your Booking for ${venueName} Has Been Cancelled`,
+      subject: `Your Booking for ${eventName} at ${venueName} Has Been Cancelled`,
       html,
     });
   }

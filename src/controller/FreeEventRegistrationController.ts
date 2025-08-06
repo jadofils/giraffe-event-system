@@ -239,4 +239,69 @@ export class FreeEventRegistrationController {
       next(error);
     }
   }
+
+  static async getFreeEventAttendance(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        res
+          .status(400)
+          .json({ success: false, message: "Event ID is required." });
+        return;
+      }
+
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({
+        where: { eventId },
+        relations: ["freeRegistrations"], // Load free registrations
+      });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found." });
+        return;
+      }
+
+      const maxPossibleCheckIns =
+        event.bookingDates.length > 0 ? event.bookingDates.length : 1; // Default to 1 for single-day events or if no dates are explicitly listed
+
+      const attendees = event.freeRegistrations
+        .filter((registration) => registration.attendedTimes >= 1) // Filter for attended users
+        .map((registration) => ({
+          freeRegistrationId: registration.freeRegistrationId,
+          fullName: registration.fullName,
+          email: registration.email,
+          phoneNumber: registration.phoneNumber,
+          nationalId: registration.nationalId,
+          gender: registration.gender,
+          address: registration.address,
+          qrCode: registration.qrCode,
+          barcode: registration.barcode,
+          sevenDigitCode: registration.sevenDigitCode,
+          registrationDate: registration.registrationDate,
+          attended: registration.attended,
+          attendedTimes: registration.attendedTimes,
+          checkInHistory: registration.checkInHistory,
+          isUsed: registration.isUsed,
+          attendanceRatio: `${registration.attendedTimes}/${maxPossibleCheckIns}`,
+          isFullyAttended: registration.attendedTimes >= maxPossibleCheckIns,
+        }));
+
+      if (attendees.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: "No attendees found for this event.",
+        });
+        return;
+      }
+
+      res.status(200).json({ success: true, data: attendees });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -22,7 +22,12 @@ router.post(
   FreeEventRegistrationController.registerForFreeEvent
 );
 
-
+// 📂 Free Event Attendance Route (Public, for staff/scanners)
+router.get(
+  "/:eventId/attendance/free",
+  authenticate, // Assuming attendance info should be protected
+  FreeEventRegistrationController.getFreeEventAttendance
+);
 
 router.use(authenticate);
 
