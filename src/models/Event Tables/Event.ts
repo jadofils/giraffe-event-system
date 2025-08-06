@@ -34,6 +34,7 @@ import { EventStatus } from "../../interfaces/Enums/EventStatusEnum";
 import { EventTicketType } from "./EventTicketType";
 import { EventVenue } from "./EventVenue";
 import { EventGuest } from "./EventGuest";
+import { FreeEventRegistration } from "../FreeEventRegistration";
 
 @Entity("events")
 export class Event {
@@ -79,6 +80,12 @@ export class Event {
     date: string;
     hours?: number[];
   }[];
+
+  @Column({ type: "varchar", length: 50, nullable: true }) // e.g., "10:00 AM"
+  startTime?: string;
+
+  @Column({ type: "varchar", length: 50, nullable: true }) // e.g., "05:00 PM"
+  endTime?: string;
 
   @Column({ type: "int", nullable: true })
   @ValidateIf((o) => o.visibilityScope === "PUBLIC")
@@ -186,6 +193,13 @@ export class Event {
 
   @OneToMany(() => VenueBooking, (booking) => booking.event)
   venueBookings!: VenueBooking[];
+
+  @OneToMany(
+    () => FreeEventRegistration,
+    (freeEventRegistration) => freeEventRegistration.event,
+    { cascade: true }
+  )
+  freeRegistrations!: FreeEventRegistration[];
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

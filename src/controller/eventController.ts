@@ -1878,15 +1878,12 @@ export class EventController {
         return;
       }
 
-      let { dates, guests, eventStatus, eventName, ...otherFields } = req.body;
+      let { dates, guests, eventStatus, eventName, eventType, ...otherFields } =
+        req.body;
 
-      // Prevent updating eventName
-      if (eventName) {
-        res.status(400).json({
-          success: false,
-          message: "Event name cannot be updated for events.",
-        });
-        return;
+      // Handle eventName update explicitly
+      if (eventName !== undefined) {
+        event.eventName = eventName;
       }
 
       // Prevent updating dates
@@ -1894,6 +1891,15 @@ export class EventController {
         res.status(400).json({
           success: false,
           message: "Booking dates cannot be updated for events.",
+        });
+        return;
+      }
+
+      // Prevent updating eventType
+      if (eventType) {
+        res.status(400).json({
+          success: false,
+          message: "Event type cannot be updated for private events.",
         });
         return;
       }
@@ -2022,57 +2028,12 @@ export class EventController {
         event.eventGuests = await guestRepo.find({ where: { eventId } });
       }
 
-      // Handle dates update
+      // Handle dates update - kept as is per instruction that dates cannot be updated
       let bookingDates = event.bookingDates; // default to existing
-      if (dates) {
-        if (typeof dates === "string") {
-          try {
-            dates = JSON.parse(dates);
-          } catch (e) {
-            dates = [];
-          }
-        }
-        if (!Array.isArray(dates) || dates.length === 0) {
-          res.status(400).json({
-            success: false,
-            message: "No valid dates provided for update",
-          });
-          return;
-        }
-
-        // Revalidate all venue bookings for the event with the new dates
-        const venueRepo = AppDataSource.getRepository(Venue);
-        const venueBookings = await AppDataSource.getRepository(
-          VenueBooking
-        ).find({
-          where: { eventId },
-        });
-
-        for (const vb of venueBookings) {
-          const venue = await venueRepo.findOne({
-            where: { venueId: vb.venueId },
-            relations: ["venueVariables", "bookingConditions"],
-          });
-          if (!venue) {
-            continue; // Should not happen
-          }
-          const validation =
-            await BookingValidationService.validateBookingDates(venue, dates);
-          if (!validation.isAvailable) {
-            res.status(400).json({
-              success: false,
-              message: `New dates are not available for venue ${venue.venueName}`,
-              unavailableDates: validation.unavailableDates,
-            });
-            return;
-          }
-        }
-        bookingDates = dates;
-      }
+      // if (dates) { ... previous date update logic ... }
 
       // Update other text fields
       const allowedFields = [
-        "eventType",
         "eventDescription",
         "maxAttendees",
         "socialMediaLinks",
@@ -2080,7 +2041,9 @@ export class EventController {
         "expectedGuests",
         "specialNotes",
         "cancellationReason",
-        "visibilityScope", // Allow updating visibilityScope
+        "visibilityScope",
+        "startTime", // Allow updating startTime
+        "endTime", // Allow updating endTime
       ];
       for (const key of Object.keys(otherFields)) {
         if (allowedFields.includes(key)) {
@@ -2088,17 +2051,23 @@ export class EventController {
         }
       }
 
+      // If visibilityScope is not explicitly provided, default private events to PUBLIC
+      if (
+        event.visibilityScope === "PRIVATE" &&
+        !("visibilityScope" in req.body)
+      ) {
+        event.visibilityScope = "PUBLIC";
+      }
+
       // Logic to handle visibilityScope and eventStatus interaction
       if (event.visibilityScope === "PUBLIC") {
-        // If visibility becomes PUBLIC, set status based on user input or default to DRAFTED
         if (eventStatus) {
-          event.eventStatus = eventStatus; // Use user-provided status
+          event.eventStatus = eventStatus;
         } else {
-          event.eventStatus = EventStatus.DRAFTED; // Default to DRAFTED if not provided
+          event.eventStatus = EventStatus.DRAFTED;
         }
-        event.cancellationReason = undefined; // Clear cancellation reason
+        event.cancellationReason = undefined;
       } else if (eventStatus) {
-        // If event remains PRIVATE, allow DRAFTED or REQUESTED status
         const allowedPrivateStatuses = [
           EventStatus.DRAFTED,
           EventStatus.REQUESTED,
@@ -2113,7 +2082,7 @@ export class EventController {
         event.eventStatus = eventStatus;
       }
 
-      // Ensure bookingDates is updated on the event object
+      // Ensure bookingDates is updated on the event object (even if not from request body)
       event.bookingDates = bookingDates;
 
       await eventRepo.save(event);

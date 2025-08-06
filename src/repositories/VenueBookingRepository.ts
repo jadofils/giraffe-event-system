@@ -667,7 +667,7 @@ export class VenueBookingRepository {
         VenueBookingPayment
       ).find({
         where: { bookingId: In(bookingIds) },
-        relations: ["booking"],
+        relations: ["booking", "booking.venue"], // Include venue data
       });
       // 4. Enrich each payment with payer info
       const userRepo = AppDataSource.getRepository(
@@ -688,7 +688,11 @@ export class VenueBookingRepository {
               where: { organizationId: payment.payerId },
             });
           }
-          return { ...payment, payer };
+          return {
+            ...payment,
+            payer,
+            venueName: payment.booking?.venue?.venueName, // Add venueName here
+          };
         })
       );
       return {

@@ -842,4 +842,289 @@ export class EmailService {
       html,
     });
   }
+
+  static async sendFreeEventInvitationEmail({
+    to,
+    subject,
+    eventName,
+    eventDate,
+    venueName,
+    attendeeName,
+    qrCodeUrl,
+    barcodeUrl,
+    sevenDigitCode,
+    venueGoogleMapsLink,
+    startTime,
+    endTime,
+  }: {
+    to: string;
+    subject: string;
+    eventName: string;
+    eventDate: Date;
+    venueName: string;
+    attendeeName: string;
+    qrCodeUrl: string;
+    barcodeUrl: string;
+    sevenDigitCode: string;
+    venueGoogleMapsLink?: string;
+    startTime?: string;
+    endTime?: string;
+  }): Promise<boolean> {
+    try {
+      const transporter = EmailService.getTransporter();
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Your Event Invitation - Giraffe Space</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;">
+          <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+            
+            <!-- Header -->
+            <div style="
+              background: linear-gradient(135deg, #347ff8ff 0%, #2a7eedff 100%);
+              color: #FFFFFF;
+              padding: 40px 30px;
+              text-align: center;
+              border-radius: 12px 12px 0 0;
+            ">
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" 
+              alt="Giraffe Space Logo" style="
+                display: block;
+                margin: 0 auto 20px;
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.1);
+                padding: 12px;
+              " />
+              <h1 style="
+                font-size: 28px;
+                margin: 0;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+              ">
+                 Your Event Invitation
+              </h1>
+              <p style="
+                margin: 8px 0 0 0;
+                opacity: 0.9;
+                font-size: 16px;
+              ">
+                We look forward to seeing you there!
+              </p>
+            </div>
+
+            <!-- Main Content -->
+            <div style="padding: 32px 24px;">
+              
+              <!-- Event Info Card -->
+              <div style="
+                background: linear-gradient(135deg, #f8f9ff 0%, #e8f0fe 100%);
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 24px;
+                border-left: 4px solid #4285F4;
+              ">
+                <h2 style="
+                  color: #1a73e8;
+                  margin: 0 0 12px 0;
+                  font-size: 22px;
+                  font-weight: 600;
+                ">
+                   ${eventName}
+                </h2>
+                
+                <div style="gap: 12px;">
+                  <div style="min-width: 180px; margin-bottom: 12px;">
+                    <p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
+                      <strong style="color: #4285F4;">👤 Attendee:</strong> ${attendeeName}
+                    </p>
+                    <p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
+                      <strong style="color: #4285F4;">Event Date:</strong>
+                      <span style="font-size: 16px; font-weight: 600;">
+                        ${eventDate.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </p>
+                    ${
+                      startTime && endTime
+                        ? `<p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
+                            <strong style="color: #4285F4;">Time:</strong>
+                            <span style="font-size: 16px; font-weight: 600;">${startTime} - ${endTime}</span>
+                          </p>`
+                        : ""
+                    }
+                  </div>
+
+                  <div style="min-width: 180px;">
+                    <p style="margin: 0; color: #333; font-size: 15px;">
+                      <strong style="color: #4285F4;">Venue:</strong>
+                      <span style="font-size: 16px; font-weight: 600;">${venueName}</span>
+                      ${
+                        venueGoogleMapsLink
+                          ? `<br/>
+                             <a href="${venueGoogleMapsLink}" target="_blank" style="
+                               color: #4285F4;
+                               text-decoration: none;
+                               font-size: 13px;
+                               font-weight: 500;
+                             ">
+                               View on Google Maps →
+                             </a>`
+                          : ""
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Instructions -->
+              <div style="
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                border-radius: 8px;
+                padding: 16px;
+                margin-bottom: 24px;
+              ">
+                <p style="margin: 0; color: #856404; font-size: 14px; font-weight: 500;">
+                   <strong>Important:</strong> Please save this email and present the QR code/barcode/7-digit code below at the event entrance.
+                </p>
+              </div>
+
+              <!-- Codes Section -->
+              <h3 style="
+                color: #1a73e8;
+                margin: 0 0 20px 0;
+                font-size: 20px;
+                font-weight: 600;
+                border-bottom: 2px solid #e8f0fe;
+                padding-bottom: 8px;
+              ">
+                 Your Entry Codes
+              </h3>
+              
+              <div style="
+                background: #f8f9ff;
+                border-radius: 8px;
+                padding: 24px;
+                text-align: center;
+                border: 1px dashed #4285F4;
+              ">
+                <p style="margin: 0 0 12px 0; color: #4285F4; font-weight: 600; font-size: 14px;">
+                   SCAN AT ENTRANCE
+                </p>
+                <img src="${qrCodeUrl}" alt="QR Code for ${attendeeName}" 
+                     style="
+                       width: 120px; 
+                       height: 120px; 
+                       display: block; 
+                       margin: 0 auto 10px;
+                       border-radius: 8px;
+                       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                     "/>
+                <p style="margin: 0 0 12px 0; color: #4285F4; font-weight: 600; font-size: 14px;">
+                   OR SCAN BARCODE
+                </p>
+                <img src="${barcodeUrl}" alt="Barcode for ${attendeeName}" 
+                     style="
+                       width: 180px; 
+                       height: 60px; 
+                       display: block; 
+                       margin: 0 auto 10px;
+                       border-radius: 8px;
+                       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                     "/>
+                <p style="margin: 0 0 0px 0; color: #4285F4; font-weight: 600; font-size: 14px;">
+                   OR ENTER CODE: <strong style="font-size: 16px;">${sevenDigitCode}</strong>
+                </p>
+              </div>
+
+              <!-- Support Section -->
+              <div style="
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 20px;
+                margin-top: 32px;
+                text-align: center;
+                border: 1px solid #e9ecef;
+              ">
+                <h4 style="color: #4285F4; margin: 0 0 12px 0; font-size: 16px;">
+                  Need Help? 
+                </h4>
+                <p style="margin: 0; color: #666; font-size: 14px; line-height: 1.5;">
+                  If you have any questions about the event or your entry, please don't hesitate to contact our support team.
+                </p>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="
+              background: #f8f9fa;
+              padding: 24px;
+              text-align: center;
+              border-top: 1px solid #e9ecef;
+            ">
+              <div style="margin-bottom: 16px;">
+                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space" style="
+                  width: 40px;
+                  height: 40px;
+                  opacity: 0.7;
+                "/>
+              </div>
+              <p style="
+                margin: 0 0 8px 0;
+                color: #666;
+                font-size: 14px;
+                font-weight: 600;
+              ">
+                Thank you for choosing Giraffe Space! 🦒
+              </p>
+              <p style="
+                margin: 0;
+                color: #999;
+                font-size: 12px;
+                line-height: 1.4;
+              ">
+                This email was sent by Giraffe Space Event Management System.<br/>
+                Please keep this email for your records.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const mailOptions = {
+        from: `"Giraffe Space Events" <${process.env.EMAIL_USER}>`,
+        to,
+        subject: `${subject} - Giraffe Space`,
+        html: htmlContent,
+        attachments: [
+          {
+            filename: "giraffe-logo.png",
+            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg", // Adjust path as needed
+            cid: "giraffe-logo",
+          },
+        ],
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(
+        `✅ Free event invitation email sent successfully to ${to} for event ${eventName}.`
+      );
+      return true;
+    } catch (error) {
+      console.error("❌ Error sending free event invitation email:", error);
+      return false;
+    }
+  }
 }

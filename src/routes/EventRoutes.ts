@@ -5,6 +5,7 @@ import multer from "multer";
 import { isAdmin } from "../middlewares/IsAdmin";
 import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
 import { RegistrationController } from "../controller/RegistrationController";
+import { FreeEventRegistrationController } from "../controller/FreeEventRegistrationController";
 
 const router = Router();
 const upload = multer();
@@ -13,6 +14,12 @@ const upload = multer();
 router.get("/all", EventController.getAllApprovedEvents);
 router.get("/public/:id", EventController.getEventById);
 router.post("/tickets/check-in", RegistrationController.checkInTicket);
+
+// 📂 Free Event Registration Route
+router.post(
+  "/:eventId/register/free",
+  FreeEventRegistrationController.registerForFreeEvent
+);
 
 router.use(authenticate);
 
@@ -104,6 +111,11 @@ router.get(
   "/tickets/user/:userId",
   authenticate,
   RegistrationController.getTicketsByUserId
+);
+router.get(
+  "/:eventId/registrations/free",
+  authenticate,
+  FreeEventRegistrationController.getFreeRegistrationsByEventId
 );
 
 // Mark ticket as attended Route (Admin/Staff only)

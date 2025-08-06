@@ -25,6 +25,7 @@ import { EventVenue } from "../models/Event Tables/EventVenue";
 import { EventGuest } from "../models/Event Tables/EventGuest";
 import { VenueBookingPayment } from "../models/VenueBookingPayment";
 import { TicketPayment } from "../models/TicketPayment";
+import { FreeEventRegistration } from "../models/FreeEventRegistration";
 
 // Determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
@@ -61,6 +62,7 @@ export const AppDataSource = new DataSource({
     EventVenue,
     EventGuest,
     TicketPayment,
+    FreeEventRegistration,
   ],
   migrations: [
     isProduction ? "dist/models/migrations/.js" : "src/models/migrations/.ts",

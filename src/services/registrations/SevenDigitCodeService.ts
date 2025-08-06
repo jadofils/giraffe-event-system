@@ -10,10 +10,12 @@ export class SevenDigitCodeService {
     while (!isUnique) {
       // Generate a random 7-digit number
       code = Math.floor(1000000 + Math.random() * 9000000).toString();
+
       // Check if it exists in the database
       const existingRegistration = await registrationRepo.findOne({
         where: { sevenDigitCode: code },
       });
+
       if (!existingRegistration) {
         isUnique = true;
       }

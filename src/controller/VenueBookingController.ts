@@ -1561,6 +1561,7 @@ export class VenueBookingController {
           bookingId: b.bookingId,
           bookingReason: b.bookingReason,
           bookingDate: b.bookingDates?.[0]?.date || null,
+          venueName: payment.venueName, // Add venueName here
           amountToBePaid: b.amountToBePaid,
           totalAmountPaid: 0,
           remainingAmount: b.amountToBePaid,
