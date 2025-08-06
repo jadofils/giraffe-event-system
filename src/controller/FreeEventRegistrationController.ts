@@ -18,18 +18,18 @@ export class FreeEventRegistrationController {
   ): Promise<void> {
     try {
       const { eventId } = req.params;
-      const { fullName, email, phoneNumber, nationalId, gender, address } =
-        req.body;
+      let registrationsData = req.body; // Expect an array of registration objects
 
-      if (!fullName || !email || !eventId) {
+      if (!Array.isArray(registrationsData) || registrationsData.length === 0) {
         res.status(400).json({
           success: false,
-          message: "Full name, email, and event ID are required.",
+          message:
+            "Request body must be a non-empty array of registration objects.",
         });
         return;
       }
 
-      // 1. Check if event exists and is a free event
+      // 1. Check if event exists and is a free event (once for all registrations)
       const eventRepo = AppDataSource.getRepository(Event);
       const event = await eventRepo.findOne({
         where: { eventId },
@@ -58,110 +58,148 @@ export class FreeEventRegistrationController {
         return;
       }
 
-      // 2. Check for duplicate registrations
-      const existingRegistrationByEmail =
-        await FreeEventRegistrationRepository.getFreeRegistrationsByEmailAndEventId(
-          email,
-          eventId
-        );
-      if (existingRegistrationByEmail) {
-        res.status(409).json({
-          success: false,
-          message:
-            "You have already registered for this event with this email.",
-        });
-        return;
-      }
+      const results: {
+        success: boolean;
+        message: string;
+        data?: any;
+        email?: string;
+      }[] = [];
 
-      if (nationalId) {
-        const existingRegistrationByNationalId =
-          await FreeEventRegistrationRepository.getFreeRegistrationsByNationalIdAndEventId(
-            nationalId,
+      for (const registrationData of registrationsData) {
+        const { fullName, email, phoneNumber, nationalId, gender, address } =
+          registrationData;
+
+        if (!fullName || !email) {
+          results.push({
+            success: false,
+            message: "Full name and email are required for each registration.",
+            data: registrationData,
+          });
+          continue; // Skip to next registration
+        }
+
+        // 2. Check for duplicate registrations (per individual registration)
+        const existingRegistrationByEmail =
+          await FreeEventRegistrationRepository.getFreeRegistrationsByEmailAndEventId(
+            email,
             eventId
           );
-        if (existingRegistrationByNationalId) {
-          res.status(409).json({
+        if (existingRegistrationByEmail) {
+          results.push({
             success: false,
-            message:
-              "You have already registered for this event with this National ID.",
+            message: `Email ${email} has already registered for this event.`, // More specific message
+            email: email,
           });
-          return;
+          continue; // Skip to next registration
+        }
+
+        if (nationalId) {
+          const existingRegistrationByNationalId =
+            await FreeEventRegistrationRepository.getFreeRegistrationsByNationalIdAndEventId(
+              nationalId,
+              eventId
+            );
+          if (existingRegistrationByNationalId) {
+            results.push({
+              success: false,
+              message: `National ID ${nationalId} has already registered for this event.`, // More specific message
+              email: email, // Include email for context
+            });
+            continue; // Skip to next registration
+          }
+        }
+
+        // Generate a unique ID for this free registration
+        const freeRegistrationId = uuidv4();
+        const genericUserIdForFreeEvent = uuidv4(); // Unique for each registration
+
+        // 3. Generate unique codes using the correct service methods
+        try {
+          const qrCode = await QrCodeService.generateQrCode(
+            freeRegistrationId,
+            genericUserIdForFreeEvent,
+            eventId
+          );
+          const sevenDigitCode =
+            await SevenDigitCodeService.generateUniqueSevenDigitCode();
+          const barcode = await BarcodeService.generateBarcode(
+            sevenDigitCode,
+            freeRegistrationId
+          );
+
+          // 4. Save registration to database
+          const newFreeRegistration =
+            await FreeEventRegistrationRepository.createFreeEventRegistration({
+              freeRegistrationId,
+              eventId,
+              fullName,
+              email,
+              phoneNumber,
+              nationalId,
+              gender,
+              address,
+              qrCode,
+              barcode,
+              sevenDigitCode,
+            });
+
+          // 5. Send invitation email
+          const venueName = event.eventVenues[0]?.venue?.venueName || "N/A";
+          const venueGoogleMapsLink =
+            event.eventVenues[0]?.venue?.googleMapsLink || undefined;
+          const eventDate =
+            event.bookingDates && event.bookingDates.length > 0
+              ? new Date(event.bookingDates[0].date)
+              : new Date();
+
+          const emailSent = await EmailService.sendFreeEventInvitationEmail({
+            to: email,
+            subject: `Your Invitation to ${event.eventName}`,
+            eventName: event.eventName,
+            eventDate: eventDate,
+            venueName: venueName,
+            attendeeName: fullName,
+            qrCodeUrl: qrCode,
+            barcodeUrl: barcode,
+            sevenDigitCode: sevenDigitCode,
+            venueGoogleMapsLink: venueGoogleMapsLink,
+            startTime: event.startTime, // Pass start time
+            endTime: event.endTime, // Pass end time
+          });
+
+          if (!emailSent) {
+            console.warn(
+              `Failed to send invitation email to ${email} for event ${event.eventName}.`
+            );
+          }
+
+          results.push({
+            success: true,
+            message: `Successfully registered ${fullName}. An invitation email has been sent.`, // Specific message
+            data: newFreeRegistration,
+          });
+        } catch (codeGenError: any) {
+          console.error(
+            `Error generating codes or saving for ${email}:`,
+            codeGenError
+          );
+          results.push({
+            success: false,
+            message: `Failed to register ${fullName} due to internal error: ${codeGenError.message}`, // More detailed error
+            email: email,
+          });
         }
       }
 
-      // Generate a unique ID for this free registration
-      const freeRegistrationId = uuidv4();
-      // For free events, we don't have a specific user ID tied to the registration in the same way as paid tickets.
-      // We can use the eventId as a placeholder or generate a new UUID if strictly needed by the service,
-      // but for now, let's use a generic UUID or eventId to fulfill the parameter requirement.
-      const genericUserIdForFreeEvent = uuidv4();
+      const allSuccessful = results.every((r) => r.success);
+      const finalStatus = allSuccessful ? 201 : 207; // 207 Multi-Status if some failed
 
-      // 3. Generate unique codes using the correct service methods
-      const qrCode = await QrCodeService.generateQrCode(
-        freeRegistrationId,
-        genericUserIdForFreeEvent,
-        eventId
-      );
-      const sevenDigitCode =
-        await SevenDigitCodeService.generateUniqueSevenDigitCode();
-      const barcode = await BarcodeService.generateBarcode(
-        sevenDigitCode,
-        freeRegistrationId
-      );
-
-      // 4. Save registration to database
-      const newFreeRegistration =
-        await FreeEventRegistrationRepository.createFreeEventRegistration({
-          freeRegistrationId,
-          eventId,
-          fullName,
-          email,
-          phoneNumber,
-          nationalId,
-          gender,
-          address,
-          qrCode,
-          barcode,
-          sevenDigitCode,
-        });
-
-      // 5. Send invitation email
-      const venueName = event.eventVenues[0]?.venue?.venueName || "N/A";
-      const venueGoogleMapsLink =
-        event.eventVenues[0]?.venue?.googleMapsLink || undefined;
-      const eventDate =
-        event.bookingDates && event.bookingDates.length > 0
-          ? new Date(event.bookingDates[0].date)
-          : new Date();
-
-      const emailSent = await EmailService.sendFreeEventInvitationEmail({
-        to: email,
-        subject: `Your Invitation to ${event.eventName}`,
-        eventName: event.eventName,
-        eventDate: eventDate,
-        venueName: venueName,
-        attendeeName: fullName,
-        qrCodeUrl: qrCode,
-        barcodeUrl: barcode,
-        sevenDigitCode: sevenDigitCode,
-        venueGoogleMapsLink: venueGoogleMapsLink,
-        startTime: event.startTime, // Pass start time
-        endTime: event.endTime, // Pass end time
-      });
-
-      if (!emailSent) {
-        console.warn(
-          `Failed to send invitation email to ${email} for event ${event.eventName}.`
-        );
-        // Optionally, you might want to return a 200 OK anyway, as the registration itself was successful
-        // or retry sending the email.
-      }
-
-      res.status(201).json({
-        success: true,
-        message:
-          "Successfully registered for the free event. An invitation email has been sent.",
-        data: newFreeRegistration,
+      res.status(finalStatus).json({
+        success: allSuccessful,
+        message: allSuccessful
+          ? "All registrations processed successfully."
+          : "Some registrations failed or had issues.",
+        results: results,
       });
     } catch (error) {
       next(error);

@@ -57,9 +57,13 @@ export class VenueBookingPaymentService {
         slotType === SlotType.TRANSITION
           ? SlotStatus.TRANSITION
           : SlotStatus.BOOKED,
-      eventId: slotType === SlotType.EVENT ? eventId : null,
+      eventId: eventId, // Always set eventId for both EVENT and TRANSITION slots
       slotType,
       notes: description,
+      metadata:
+        slotType === SlotType.TRANSITION && eventId
+          ? { relatedEventId: eventId }
+          : undefined, // Add metadata for transition slots
     };
 
     const slot = queryRunner.manager.create(VenueAvailabilitySlot, slotData);

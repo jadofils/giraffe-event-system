@@ -6,6 +6,7 @@ import { isAdmin } from "../middlewares/IsAdmin";
 import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
 import { RegistrationController } from "../controller/RegistrationController";
 import { FreeEventRegistrationController } from "../controller/FreeEventRegistrationController";
+import { FreeEventAttendanceController } from "../controller/FreeEventAttendanceController";
 
 const router = Router();
 const upload = multer();
@@ -20,6 +21,8 @@ router.post(
   "/:eventId/register/free",
   FreeEventRegistrationController.registerForFreeEvent
 );
+
+
 
 router.use(authenticate);
 
@@ -117,6 +120,9 @@ router.get(
   authenticate,
   FreeEventRegistrationController.getFreeRegistrationsByEventId
 );
+
+// 📂 Free Event Attendance Check-in Route (Public, for staff/scanners)
+router.post("/free-check-in", FreeEventAttendanceController.checkInFreeEvent);
 
 // Mark ticket as attended Route (Admin/Staff only)
 // router.patch(

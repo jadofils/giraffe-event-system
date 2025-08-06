@@ -27,6 +27,7 @@ import {
   SlotType,
 } from "../models/Venue Tables/VenueAvailabilitySlot";
 import { Organization } from "../models/Organization";
+import { Raw, Or } from "typeorm";
 
 export class VenueBookingController {
   static async getAllBookings(req: Request, res: Response): Promise<void> {
@@ -1729,10 +1730,11 @@ export class VenueBookingController {
       }
       const bookingRepo = AppDataSource.getRepository(VenueBooking);
       const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+      const slotRepo = AppDataSource.getRepository(VenueAvailabilitySlot); // Add this line
       const bookings = await bookingRepo.find({
         where: { venueId },
         order: { createdAt: "DESC" },
-        relations: ["user"],
+        relations: ["user", "venue.bookingConditions"], // Add venue.bookingConditions
       });
       // Fetch venue summary
       const venueRepo = AppDataSource.getRepository(Venue);
@@ -1828,12 +1830,139 @@ export class VenueBookingController {
             );
             const remainingAmount =
               Number(booking.amountToBePaid || 0) - totalPaid;
-            return {
+
+            // Fetch main event slots (which might also contain hourly transition info in metadata)
+            const mainEventSlots = await slotRepo.find({
+              where: { venueId: booking.venueId, eventId: booking.eventId },
+              order: { Date: "ASC" },
+            });
+
+            // Fetch dedicated transition slots linked by metadata.relatedEventId
+            const dedicatedTransitionSlots = await slotRepo.find({
+              where: {
+                venueId: booking.venueId,
+                slotType: SlotType.TRANSITION,
+              },
+              order: { Date: "ASC" },
+            });
+
+            // Combine all relevant slots and remove duplicates
+            const combinedSlots = [
+              ...mainEventSlots,
+              ...dedicatedTransitionSlots,
+            ];
+            const uniqueSlots = Array.from(
+              new Map(combinedSlots.map((item) => [item["id"], item])).values()
+            );
+
+            const formattedTransitionDates: {
+              date: string;
+              hours?: number[];
+              notes?: string;
+            }[] = [];
+
+            const bookingDatesSet = new Set(
+              booking.bookingDates.map(
+                (bd) => new Date(bd.date).toISOString().split("T")[0]
+              )
+            );
+
+            for (const slot of uniqueSlots) {
+              if (slot.slotType === SlotType.TRANSITION) {
+                const slotDate = new Date(slot.Date);
+                let shouldAddTransition = false;
+
+                // Condition 1: Direct eventId link
+                if (slot.eventId === booking.eventId) {
+                  shouldAddTransition = true;
+                }
+                // Condition 2: Metadata relatedEventId link
+                if (
+                  !shouldAddTransition &&
+                  slot.metadata?.relatedEventId === booking.eventId
+                ) {
+                  shouldAddTransition = true;
+                }
+                // Condition 3: Notes contains eventId (fallback for old data)
+                if (
+                  !shouldAddTransition &&
+                  slot.notes &&
+                  booking.eventId &&
+                  slot.notes.includes(booking.eventId)
+                ) {
+                  shouldAddTransition = true;
+                }
+
+                // Condition 4: Chronological relationship (if not already linked by explicit ID)
+                if (!shouldAddTransition) {
+                  for (const bookingDateObj of booking.bookingDates) {
+                    const bookingDate = new Date(bookingDateObj.date);
+
+                    if (booking.venue.bookingType === "DAILY") {
+                      const dayBeforeBooking = new Date(bookingDate);
+                      dayBeforeBooking.setDate(dayBeforeBooking.getDate() - 1);
+                      if (
+                        slotDate.toISOString().split("T")[0] ===
+                        dayBeforeBooking.toISOString().split("T")[0]
+                      ) {
+                        shouldAddTransition = true;
+                        break;
+                      }
+                    } else if (booking.venue.bookingType === "HOURLY") {
+                      // Only proceed if bookingDateObj.hours exists and has elements
+                      if (
+                        slotDate.toISOString().split("T")[0] ===
+                          bookingDate.toISOString().split("T")[0] &&
+                        slot.bookedHours &&
+                        bookingDateObj.hours &&
+                        bookingDateObj.hours.length > 0
+                      ) {
+                        const minSlotHour = Math.min(...slot.bookedHours);
+                        const minBookingHour = Math.min(
+                          ...bookingDateObj.hours
+                        );
+                        if (minSlotHour < minBookingHour) {
+                          // Simplified check: transition hours must precede booking hours
+                          shouldAddTransition = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (shouldAddTransition) {
+                  formattedTransitionDates.push({
+                    date: new Date(slot.Date).toISOString().split("T")[0],
+                    hours: slot.bookedHours,
+                    notes: slot.notes,
+                  });
+                }
+              } else if (
+                slot.slotType === SlotType.EVENT &&
+                slot.metadata?.transitionHours &&
+                slot.metadata.transitionHours.length > 0
+              ) {
+                // This is an event slot for hourly bookings, containing embedded transition hours
+                formattedTransitionDates.push({
+                  date: new Date(slot.Date).toISOString().split("T")[0],
+                  hours: slot.metadata.transitionHours,
+                  notes: `Transition time for event ${booking.eventId}`,
+                });
+              }
+            }
+
+            // Remove the previous inference logic since we are now checking existing slots more comprehensively
+
+            const responseBooking: any = {
               ...booking,
               user: userInfo,
               totalPaid,
               remainingAmount,
+              transitionDates: formattedTransitionDates, // Always include formatted transition dates
             };
+
+            return responseBooking;
           })
         ),
       });

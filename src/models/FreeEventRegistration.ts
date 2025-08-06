@@ -56,6 +56,18 @@ export class FreeEventRegistration {
   @Column({ unique: true })
   sevenDigitCode!: string;
 
+  @Column({ default: false })
+  attended!: boolean;
+
+  @Column("int", { default: 0 })
+  attendedTimes!: number;
+
+  @Column({ type: "jsonb", nullable: true, default: [] })
+  checkInHistory?: { checkInDate: Date; checkInTime: string; method: string }[];
+
+  @Column({ default: false })
+  isUsed!: boolean;
+
   @CreateDateColumn({ type: "timestamp with time zone" })
   registrationDate!: Date;
 }
