@@ -165,7 +165,7 @@ export class EmailService {
               text-align: center;
               border-radius: 12px 12px 0 0;
             ">
-              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" 
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" 
               alt="Giraffe Space Logo" style="
                 display: block;
                 margin: 0 auto 20px;
@@ -304,7 +304,7 @@ export class EmailService {
               border-top: 1px solid #e9ecef;
             ">
               <div style="margin-bottom: 16px;">
-                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space" style="
+                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space" style="
                   width: 40px;
                   height: 40px;
                   opacity: 0.7;
@@ -341,7 +341,7 @@ export class EmailService {
         attachments: [
           {
             filename: "giraffe-logo.png",
-            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg", // Adjust path as needed
+            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg", // Adjust path as needed
             cid: "giraffe-logo",
           },
         ],
@@ -537,7 +537,7 @@ export class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space Logo" class="logo" />
+            <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space Logo" class="logo" />
             <h1> Welcome to Giraffe Space</h1>
             <p>Your account is ready to go!</p>
           </div>
@@ -568,7 +568,7 @@ export class EmailService {
             </div>
 
             <div style="text-align: center; margin: 32px 0; color: #ffffff;">
-              <a href="https://venue-and-event-management-front-si-tau.vercel.app/logindefaultpassword" class="login-button" style="color: #ffffff;">
+              <a href="https://giraffe-space-app.vercel.app/logindefaultpassword" class="login-button" style="color: #ffffff;">
                 Login to Your Account
               </a>
             </div>
@@ -586,7 +586,7 @@ export class EmailService {
           </div>
 
           <div class="footer">
-            <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space" class="footer-logo" />
+            <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space" class="footer-logo" />
             <p style="margin: 0 0 8px 0; font-weight: 600;">
               Thank you for choosing Giraffe Space! 🦒
             </p>
@@ -998,7 +998,7 @@ export class EmailService {
               text-align: center;
               border-radius: 12px 12px 0 0;
             ">
-              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" 
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" 
               alt="Giraffe Space Logo" style="
                 display: block;
                 margin: 0 auto 20px;
@@ -1180,7 +1180,7 @@ export class EmailService {
               border-top: 1px solid #e9ecef;
             ">
               <div style="margin-bottom: 16px;">
-                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg" alt="Giraffe Space" style="
+                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space" style="
                   width: 40px;
                   height: 40px;
                   opacity: 0.7;
@@ -1217,7 +1217,7 @@ export class EmailService {
         attachments: [
           {
             filename: "giraffe-logo.png",
-            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1753886582/unnamed_1_qmgpg1.jpg", // Adjust path as needed
+            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg", // Adjust path as needed
             cid: "giraffe-logo",
           },
         ],
@@ -1230,6 +1230,154 @@ export class EmailService {
       return true;
     } catch (error) {
       console.error("❌ Error sending free event invitation email:", error);
+      return false;
+    }
+  }
+
+  public static async sendPaymentReceiptEmail({
+    to,
+    payerName,
+    paymentDetails,
+    paidAmount,
+    totalAmount,
+    remainingAmount,
+    pdfUrl,
+    transactionId,
+    paymentDate,
+  }: {
+    to: string;
+    payerName: string;
+    paymentDetails: string;
+    paidAmount: number;
+    totalAmount: number;
+    remainingAmount: number;
+    pdfUrl: string;
+    transactionId: string;
+    paymentDate: Date;
+  }): Promise<boolean> {
+    try {
+      const transporter = this.getTransporter();
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Payment Receipt - Giraffe Space</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background-color: #f5f7fa; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+            .header { background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%); color: #FFFFFF; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+            .header h1 { font-size: 28px; margin: 0; font-weight: 700; }
+            .content { padding: 30px; color: #333; }
+            .card { background: #f8f9ff; border: 1px solid #e8f0fe; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+            .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+            .detail-row:last-child { border-bottom: none; }
+            .detail-label { font-weight: 600; color: #555; }
+            .detail-value { color: #1a73e8; font-weight: 600; }
+            .total-row { background: #e8f0fe; padding: 15px 20px; border-radius: 8px; margin-top: 20px; font-size: 18px; font-weight: 700; display: flex; justify-content: space-between; }
+            .button { display: inline-block; background: #1a73e8; color: #FFFFFF; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: 600; margin-top: 25px; box-shadow: 0 4px 10px rgba(26, 115, 232, 0.3); }
+            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; border-top: 1px solid #e9ecef; }
+            .logo { display: block; margin: 0 auto 15px; width: 60px; height: 60px; opacity: 0.8; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space Logo" class="logo" />
+              <h1>Payment Receipt</h1>
+              <p>Thank you for your payment!</p>
+            </div>
+            <div class="content">
+              <p style="font-size: 16px; margin-bottom: 25px;">Dear <strong>${payerName}</strong>,</p>
+              <p style="font-size: 16px; margin-bottom: 25px;">This is a receipt for your recent payment. Details are below:</p>
+              
+              <div class="card">
+                <div class="detail-row">
+                  <span class="detail-label">Transaction ID:</span>
+                  <span class="detail-value">${transactionId}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Payment Date:</span>
+                  <span class="detail-value">${new Date(
+                    paymentDate
+                  ).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Payment For:</span>
+                  <span class="detail-value">${paymentDetails}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Total Amount:</span>
+                  <span class="detail-value">$${totalAmount.toFixed(2)}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Amount Paid:</span>
+                  <span class="detail-value">$${paidAmount.toFixed(2)}</span>
+                </div>
+                ${
+                  remainingAmount > 0
+                    ? `
+                <div class="detail-row">
+                  <span class="detail-label">Remaining Amount:</span>
+                  <span class="detail-value">$${remainingAmount.toFixed(
+                    2
+                  )}</span>
+                </div>
+                `
+                    : ""
+                }
+              </div>
+              
+              <p style="text-align: center;">
+                <a href="${pdfUrl}" class="button" target="_blank">
+                  Download PDF Receipt
+                </a>
+              </p>
+
+              <div style="background: #f0f8ff; border-left: 4px solid #4285F4; padding: 15px; border-radius: 8px; margin-top: 30px; font-size: 14px; color: #555;">
+                If you have any questions regarding this payment, please contact our support team.
+              </div>
+            </div>
+            <div class="footer">
+              <p style="margin: 0;">&copy; ${new Date().getFullYear()} Giraffe Space. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const mailOptions = {
+        from: `"Giraffe Space Payments" <${process.env.EMAIL_USER}>`,
+        to,
+        subject: `Payment Receipt - Transaction ${transactionId}`,
+        html: htmlContent,
+        attachments: [
+          {
+            filename: "giraffe-logo.png",
+            path: "https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg",
+            cid: "giraffe-logo",
+          },
+        ],
+      };
+
+      await transporter.sendMail(mailOptions);
+      this.log(
+        "info",
+        `Payment receipt email sent to ${to} for transaction ${transactionId}.`
+      );
+      return true;
+    } catch (error) {
+      this.log(
+        "error",
+        `Failed to send payment receipt email to ${to} for transaction ${transactionId}:`,
+        error
+      );
       return false;
     }
   }

@@ -16,7 +16,7 @@ import { TicketCategory } from "../../interfaces/Enums/TicketEnums"; // Import T
 import { BarcodeService } from "../registrations/BarcodeService";
 import { SevenDigitCodeService } from "../registrations/SevenDigitCodeService";
 import { TicketPdfService } from "./TicketPdfService"; // NEW IMPORT
-import { CloudinaryUploadService } from "../CloudinaryUploadService"; // NEW IMPORT
+import { CloudinaryUploadService } from "../CloudinaryUploadService";
 
 interface PurchaseTicketResponse {
   success: boolean;

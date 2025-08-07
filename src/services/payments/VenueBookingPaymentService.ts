@@ -21,6 +21,8 @@ import {
   PaymentServiceError,
   BookingPaymentDetails,
 } from "../../interfaces/PaymentServiceInterface";
+import { EmailService } from "../emails/EmailService";
+import { PaymentPdfService } from "./PaymentPdfService";
 
 export class VenueBookingPaymentService {
   private static generateTransitionHours(
@@ -363,6 +365,78 @@ export class VenueBookingPaymentService {
       }
 
       await queryRunner.commitTransaction();
+
+      // Fetch payer details for email
+      let payerEmail: string | undefined;
+      let payerFullName: string | undefined;
+
+      if (booking.event) {
+        if (booking.event.eventOrganizerType === PayerType.USER) {
+          const userRepo = AppDataSource.getRepository(
+            require("../../models/User").User
+          );
+          const user = await userRepo.findOne({
+            where: { userId: booking.event.eventOrganizerId },
+          });
+          if (user) {
+            payerEmail = user.email;
+            payerFullName = `${user.firstName || ""} ${
+              user.lastName || ""
+            }`.trim();
+          }
+        } else if (
+          booking.event.eventOrganizerType === PayerType.ORGANIZATION
+        ) {
+          const orgRepo = AppDataSource.getRepository(
+            require("../../models/Organization").Organization
+          );
+          const organization = await orgRepo.findOne({
+            where: { organizationId: booking.event.eventOrganizerId },
+          });
+          if (organization) {
+            payerEmail = organization.contactEmail;
+            payerFullName = organization.organizationName;
+          }
+        }
+      }
+
+      // Send payment receipt email
+      if (payerEmail && payerFullName) {
+        try {
+          const paymentDetailsDescription = `Venue booking for ${
+            booking.event?.eventName || "an event"
+          } at ${booking.venue.venueName}`;
+          const pdfBuffer = await PaymentPdfService.generatePaymentReceiptPdf({
+            payerName: payerFullName,
+            paymentDetails: paymentDetailsDescription,
+            paidAmount: paymentData.amountPaid,
+            totalAmount: booking.amountToBePaid ?? 0,
+            remainingAmount: (booking.amountToBePaid ?? 0) - newTotalPaid,
+            transactionId: payment.paymentId,
+            paymentDate: payment.paymentDate,
+          });
+
+          const uploadResult = await PaymentPdfService.uploadPaymentReceiptPdf(
+            pdfBuffer,
+            payment.paymentId
+          );
+
+          await EmailService.sendPaymentReceiptEmail({
+            to: payerEmail,
+            payerName: payerFullName,
+            paymentDetails: paymentDetailsDescription,
+            paidAmount: paymentData.amountPaid,
+            totalAmount: booking.amountToBePaid ?? 0,
+            remainingAmount: (booking.amountToBePaid ?? 0) - newTotalPaid,
+            pdfUrl: uploadResult.url,
+            transactionId: payment.paymentId,
+            paymentDate: payment.paymentDate,
+          });
+        } catch (emailError) {
+          console.error("Failed to send payment receipt email:", emailError);
+          // Log the error but don't block the payment process
+        }
+      }
 
       // Create response with booking details
       const baseVenueAmountForDisplay =

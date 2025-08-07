@@ -506,6 +506,8 @@ export class VenueBookingController {
           paymentCompletionRequired: {
             daysBeforeEvent:
               bookingCondition?.paymentComplementTimeBeforeEvent || 0,
+            bookingTimeout:
+              bookingCondition?.bookingPaymentTimeoutMinutes || 120,
             deadline: paymentDeadline,
           },
         },
