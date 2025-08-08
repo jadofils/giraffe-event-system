@@ -230,6 +230,18 @@ export class VenueBookingPaymentService {
 
       await queryRunner.manager.save(payment);
 
+      // Generate a simple receipt number after payment has been saved and payment.paymentId is available
+      const receiptNumber = `REC-${new Date().getFullYear()}-${
+        new Date().getMonth() + 1
+      }${new Date().getDate()}-${payment.paymentId
+        .substring(0, 5)
+        .toUpperCase()}`;
+
+      // Assign the generated receipt number to the payment object
+      payment.receiptNumber = receiptNumber; // Assign receipt number here
+
+      await queryRunner.manager.save(payment); // Save again to persist receiptNumber
+
       // 5. Check if this is the first payment meeting deposit requirement
       const isFirstDepositPayment =
         totalPaidSoFar < depositRequired && newTotalPaid >= depositRequired;
@@ -366,6 +378,8 @@ export class VenueBookingPaymentService {
 
       await queryRunner.commitTransaction();
 
+      let uploadResult: { url: string; public_id: string } | undefined; // Declare uploadResult here
+
       // Fetch payer details for email
       let payerEmail: string | undefined;
       let payerFullName: string | undefined;
@@ -401,25 +415,58 @@ export class VenueBookingPaymentService {
       }
 
       // Send payment receipt email
-      if (payerEmail && payerFullName) {
+      if (payerEmail && payerFullName && booking.venue.organization) {
         try {
           const paymentDetailsDescription = `Venue booking for ${
             booking.event?.eventName || "an event"
           } at ${booking.venue.venueName}`;
+
+          // Generate a simple receipt number
+          const receiptNumber = `REC-${new Date().getFullYear()}-${
+            new Date().getMonth() + 1
+          }${new Date().getDate()}-${payment.paymentId
+            .substring(0, 5)
+            .toUpperCase()}`;
+
+          const dateBookedFor = booking.bookingDates
+            .map((b) =>
+              new Date(b.date).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })
+            )
+            .join(", ");
+
           const pdfBuffer = await PaymentPdfService.generatePaymentReceiptPdf({
             payerName: payerFullName,
+            payerEmail: payerEmail,
             paymentDetails: paymentDetailsDescription,
             paidAmount: paymentData.amountPaid,
             totalAmount: booking.amountToBePaid ?? 0,
             remainingAmount: (booking.amountToBePaid ?? 0) - newTotalPaid,
             transactionId: payment.paymentId,
             paymentDate: payment.paymentDate,
+            receiptNumber: receiptNumber,
+            venueName: booking.venue.venueName,
+            dateBookedFor: dateBookedFor,
+            organizationName: booking.venue.organization.organizationName || "",
+            organizationAddress: booking.venue.organization.address || "",
+            organizationEmail: booking.venue.organization.contactEmail || "",
+            organizationPhone: booking.venue.organization.contactPhone || "",
+            organizationLogoUrl: booking.venue.organization.logo || undefined,
+            paymentMethod: payment.paymentMethod, // Pass the actual payment method
           });
 
-          const uploadResult = await PaymentPdfService.uploadPaymentReceiptPdf(
+          uploadResult = await PaymentPdfService.uploadPaymentReceiptPdf(
             pdfBuffer,
+            payerFullName,
             payment.paymentId
           );
+
+          // Update the payment record with the receipt URL after successful upload
+          payment.receiptUrl = uploadResult.url;
+          await queryRunner.manager.save(payment); // Persist the receipt URL
 
           await EmailService.sendPaymentReceiptEmail({
             to: payerEmail,
@@ -433,7 +480,10 @@ export class VenueBookingPaymentService {
             paymentDate: payment.paymentDate,
           });
         } catch (emailError) {
-          console.error("Failed to send payment receipt email:", emailError);
+          console.error(
+            "Failed to send payment receipt email or upload PDF:",
+            emailError
+          );
           // Log the error but don't block the payment process
         }
       }

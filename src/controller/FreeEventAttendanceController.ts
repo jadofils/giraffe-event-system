@@ -6,6 +6,7 @@ import { QrCodeService } from "../services/registrations/QrCodeService";
 import { BarcodeService } from "../services/registrations/BarcodeService";
 import { SevenDigitCodeService } from "../services/registrations/SevenDigitCodeService";
 import { Event } from "../models/Event Tables/Event";
+import { CheckInStaffRepository } from "../repositories/CheckInStaffRepository";
 
 export class FreeEventAttendanceController {
   static async checkInFreeEvent(
@@ -14,13 +15,30 @@ export class FreeEventAttendanceController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { ticketCode, codeType } = req.body;
+      const { ticketCode, codeType, sixDigitCode } = req.body;
 
       if (!ticketCode || !codeType) {
         res.status(400).json({
           success: false,
           message: "Ticket code and code type are required.",
         });
+        return;
+      }
+
+      if (!sixDigitCode) {
+        res
+          .status(400)
+          .json({ success: false, message: "Six-digit code is required." });
+        return;
+      }
+
+      const staff = await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
+        sixDigitCode
+      );
+      if (!staff) {
+        res
+          .status(401)
+          .json({ success: false, message: "Invalid six-digit code." });
         return;
       }
 
@@ -86,32 +104,21 @@ export class FreeEventAttendanceController {
         return;
       }
 
-      // Ensure the event is loaded
-      if (!freeRegistration.event) {
-        res.status(500).json({
+      // Ensure staff belongs to the same event
+      if (staff.eventId !== freeRegistration.eventId) {
+        res.status(403).json({
           success: false,
-          message: "Associated event not found for this registration.",
+          message: "Staff code is not valid for this event.",
         });
         return;
       }
 
       const event = freeRegistration.event;
       const today = new Date();
-      // const todayDateString = today.toISOString().split("T")[0]; // YYYY-MM-DD
 
       const eventBookingDates = event.bookingDates.map(
         (bd) => bd.date.split("T")[0]
       );
-      // const isMultiDayEvent = eventBookingDates.length > 1;
-
-      // Check if today is a valid event date
-      // if (!eventBookingDates.includes(todayDateString)) {
-      //   res.status(400).json({
-      //     success: false,
-      //     message: `Check-in is only allowed on event dates. Today is ${todayDateString}, but the event is on ${eventBookingDates.join(", ")}.`,
-      //   });
-      //   return;
-      // }
 
       // Determine if it's a multi-day event
       const isMultiDayEvent = event.bookingDates.length > 1;
@@ -131,6 +138,7 @@ export class FreeEventAttendanceController {
             success: false,
             message: "This code has already been used for check-in today.",
           });
+          return;
         }
 
         freeRegistration.attendedTimes =
@@ -140,6 +148,7 @@ export class FreeEventAttendanceController {
           checkInDate: today,
           checkInTime: today.toTimeString().slice(0, 5),
           method: `Scanned by ${codeType}`,
+          checkedInByStaffId: staff.staffId,
         });
 
         // If all days are attended, mark as fully used
@@ -153,6 +162,7 @@ export class FreeEventAttendanceController {
             success: false,
             message: "This code has already been used for this event.",
           });
+          return;
         }
         freeRegistration.attended = true;
         freeRegistration.isUsed = true;
@@ -162,8 +172,12 @@ export class FreeEventAttendanceController {
           checkInDate: today,
           checkInTime: today.toTimeString().slice(0, 5),
           method: `Scanned by ${codeType}`,
+          checkedInByStaffId: staff.staffId,
         });
       }
+
+      // Track last staff who checked in on the registration record
+      freeRegistration.checkInStaffId = staff.staffId;
 
       await freeRegistrationRepo.save(freeRegistration);
 
@@ -187,6 +201,170 @@ export class FreeEventAttendanceController {
           totalCheckIns: freeRegistration.checkInHistory
             ? freeRegistration.checkInHistory.length
             : 0,
+          checkedInByStaffId: staff.staffId,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async viewFreeEventCheckInDetails(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { ticketCode, codeType, sixDigitCode } = req.body;
+
+      if (!sixDigitCode) {
+        res
+          .status(400)
+          .json({ success: false, message: "Six-digit code is required." });
+        return;
+      }
+      const staff = await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
+        sixDigitCode
+      );
+      if (!staff) {
+        res
+          .status(401)
+          .json({ success: false, message: "Invalid six-digit code." });
+        return;
+      }
+
+      if (!ticketCode || !codeType) {
+        res.status(400).json({
+          success: false,
+          message: "Ticket code and code type are required.",
+        });
+        return;
+      }
+
+      const freeRegistrationRepo = AppDataSource.getRepository(
+        FreeEventRegistration
+      );
+      let freeRegistration: FreeEventRegistration | null = null;
+
+      switch (codeType) {
+        case "QR_CODE": {
+          const qrPayloadString = Buffer.from(ticketCode, "base64").toString(
+            "utf8"
+          );
+          const qrPayload = JSON.parse(qrPayloadString);
+          freeRegistration = await freeRegistrationRepo.findOne({
+            where: { freeRegistrationId: qrPayload.freeRegistrationId },
+            relations: [
+              "event",
+              "event.eventVenues",
+              "event.eventVenues.venue",
+              "registeredBy",
+            ],
+          });
+          break;
+        }
+        case "BARCODE": {
+          freeRegistration = await freeRegistrationRepo.findOne({
+            where: { barcode: ticketCode },
+            relations: [
+              "event",
+              "event.eventVenues",
+              "event.eventVenues.venue",
+              "registeredBy",
+            ],
+          });
+          break;
+        }
+        case "SEVEN_DIGIT_CODE": {
+          freeRegistration = await freeRegistrationRepo.findOne({
+            where: { sevenDigitCode: ticketCode },
+            relations: [
+              "event",
+              "event.eventVenues",
+              "event.eventVenues.venue",
+              "registeredBy",
+            ],
+          });
+          break;
+        }
+        case "REGISTRATION_ID": {
+          freeRegistration = await freeRegistrationRepo.findOne({
+            where: { freeRegistrationId: ticketCode },
+            relations: [
+              "event",
+              "event.eventVenues",
+              "event.eventVenues.venue",
+              "registeredBy",
+            ],
+          });
+          break;
+        }
+        default:
+          res.status(400).json({
+            success: false,
+            message:
+              "Invalid code type provided. Must be QR_CODE, BARCODE, SEVEN_DIGIT_CODE, or REGISTRATION_ID.",
+          });
+          return;
+      }
+
+      if (!freeRegistration) {
+        res
+          .status(404)
+          .json({ success: false, message: "Free registration not found." });
+        return;
+      }
+
+      // Optional: ensure staff belongs to the same event
+      if (staff.eventId !== freeRegistration.eventId) {
+        res.status(403).json({
+          success: false,
+          message: "Staff code is not valid for this event.",
+        });
+        return;
+      }
+
+      const event = freeRegistration.event;
+      const maxPossibleCheckIns =
+        Array.isArray(event.bookingDates) && event.bookingDates.length > 0
+          ? event.bookingDates.length
+          : 1;
+
+      res.status(200).json({
+        success: true,
+        message: "Check-in details fetched successfully.",
+        data: {
+          freeRegistrationId: freeRegistration.freeRegistrationId,
+          fullName: freeRegistration.fullName,
+          email: freeRegistration.email,
+          phoneNumber: freeRegistration.phoneNumber,
+          nationalId: freeRegistration.nationalId,
+          gender: freeRegistration.gender,
+          address: freeRegistration.address,
+          attended: freeRegistration.attended,
+          attendedTimes: freeRegistration.attendedTimes,
+          isUsed: freeRegistration.isUsed,
+          checkInHistory: freeRegistration.checkInHistory || [],
+          attendanceRatio: `${freeRegistration.attendedTimes}/${maxPossibleCheckIns}`,
+          event: {
+            eventId: event.eventId,
+            eventName: event.eventName,
+            bookingDates: event.bookingDates,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            venue: event.eventVenues?.[0]?.venue?.venueName,
+            venueGoogleMapsLink: event.eventVenues?.[0]?.venue?.googleMapsLink,
+          },
+          registeredByDetails: freeRegistration.registeredBy
+            ? {
+                userId: freeRegistration.registeredBy.userId,
+                username: freeRegistration.registeredBy.username,
+                email: freeRegistration.registeredBy.email,
+                firstName: freeRegistration.registeredBy.firstName,
+                lastName: freeRegistration.registeredBy.lastName,
+                phoneNumber: freeRegistration.registeredBy.phoneNumber,
+              }
+            : null,
         },
       });
     } catch (error) {

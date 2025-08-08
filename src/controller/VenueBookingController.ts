@@ -1730,6 +1730,89 @@ export class VenueBookingController {
     }
   }
 
+  static async getPaymentByReceiptNumber(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const { receiptNumber } = req.params;
+      const paymentRepo = AppDataSource.getRepository(VenueBookingPayment);
+
+      const payment = await paymentRepo.findOne({
+        where: { receiptNumber },
+        relations: [
+          "booking",
+          "booking.venue",
+          "booking.event",
+          "booking.user",
+          "booking.venue.organization",
+        ], // Include necessary relations
+      });
+
+      if (!payment) {
+        res.status(404).json({
+          success: false,
+          message: "Payment not found for this receipt number.",
+        });
+        return;
+      }
+
+      // Optionally, enrich payer details if needed (similar to getBookingById)
+      let payerDetails = null;
+      if (payment.payerType === PayerType.USER) {
+        const userRepo = AppDataSource.getRepository(User);
+        const user = await userRepo.findOne({
+          where: { userId: payment.payerId },
+        });
+        if (user) {
+          payerDetails = {
+            payerId: user.userId,
+            payerType: PayerType.USER,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+          };
+        }
+      } else if (payment.payerType === PayerType.ORGANIZATION) {
+        const orgRepo = AppDataSource.getRepository(Organization);
+        const organization = await orgRepo.findOne({
+          where: { organizationId: payment.payerId },
+        });
+        if (organization) {
+          payerDetails = {
+            payerId: organization.organizationId,
+            payerType: PayerType.ORGANIZATION,
+            organizationName: organization.organizationName,
+            contactEmail: organization.contactEmail,
+            contactPhone: organization.contactPhone,
+            address: organization.address,
+          };
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          payment: {
+            ...payment,
+            payer: payerDetails,
+          },
+        },
+        message: "Payment details fetched successfully by receipt number.",
+      });
+    } catch (error) {
+      console.error("Error fetching payment by receipt number:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch payment details.",
+      });
+    }
+  }
+
   static async getBookingsByVenueId(
     req: Request,
     res: Response

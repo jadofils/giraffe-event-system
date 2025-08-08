@@ -58,4 +58,9 @@ router.get(
   asyncHandler(VenueBookingController.getBookingsByVenueId)
 );
 
+router.get(
+  "/payments/receipt/:receiptNumber",
+  asyncHandler(VenueBookingController.getPaymentByReceiptNumber)
+);
+
 export default router;

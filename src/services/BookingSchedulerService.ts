@@ -52,17 +52,16 @@ export class BookingSchedulerService {
               "Booking timed out: payment not received within the allowed period.";
             await queryRunner.manager.save(booking);
 
-            // Delete associated HOLDING availability slots (event and transition)
+            // Delete all associated availability slots (event and transition) for this booking's venue/event immediately
             if (booking.eventId) {
               const slots = await vaSlotRepo.find({
                 where: {
                   venueId: booking.venueId,
                   eventId: booking.eventId,
-                  status: SlotStatus.HOLDING, // Only delete slots that are currently holding
                 },
               });
               for (const slot of slots) {
-                await queryRunner.manager.remove(slot); // Delete the slot
+                await queryRunner.manager.remove(slot); // Delete the slot regardless of status/slotType
               }
 
               // Optional: Mark event as CANCELLED if it's a single-booking event or all its bookings failed

@@ -1,15 +1,25 @@
 import PDFDocument from "pdfkit";
 import { CloudinaryUploadService } from "../CloudinaryUploadService";
-import axios from "axios"; // Import axios
+import axios from "axios";
 
 interface PaymentReceiptDetails {
   payerName: string;
+  payerEmail?: string;
   paymentDetails: string;
   paidAmount: number;
   totalAmount: number;
   remainingAmount: number;
   transactionId: string;
   paymentDate: Date;
+  receiptNumber: string;
+  venueName: string;
+  dateBookedFor: string;
+  organizationName: string;
+  organizationAddress: string;
+  organizationEmail: string;
+  organizationPhone: string;
+  organizationLogoUrl?: string;
+  paymentMethod: string;
 }
 
 export class PaymentPdfService {
@@ -20,136 +30,195 @@ export class PaymentPdfService {
       const doc = new PDFDocument({
         size: "A4",
         margin: 50,
+        info: {
+          Title: `Payment Receipt - ${details.payerName}`,
+          Author: details.organizationName,
+          Subject: "Payment Receipt",
+        },
       });
-      const buffers: Buffer[] = [];
 
+      const buffers: Buffer[] = [];
       doc.on("data", buffers.push.bind(buffers));
-      doc.on("end", () => {
-        resolve(Buffer.concat(buffers));
-      });
+      doc.on("end", () => resolve(Buffer.concat(buffers)));
       doc.on("error", reject);
 
-      // Fetch the image as a buffer
-      const imageUrl =
-        "https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg";
-      let imageBuffer: Buffer | undefined;
-      try {
-        const response = await axios.get(imageUrl, {
-          responseType: "arraybuffer",
-        });
-        imageBuffer = Buffer.from(response.data);
-      } catch (error) {
-        console.error("Failed to fetch image for PDF:", error);
-        // Fallback or reject if image is critical
-        // For now, we'll continue without the image if it fails to load
+      let orgLogoBuffer: Buffer | undefined;
+      if (details.organizationLogoUrl) {
+        try {
+          const response = await axios.get(details.organizationLogoUrl, {
+            responseType: "arraybuffer",
+          });
+          orgLogoBuffer = Buffer.from(response.data);
+        } catch (error) {
+          console.error("Failed to fetch organization logo:", error);
+        }
       }
 
-      // Header
-      if (imageBuffer) {
-        doc.image(imageBuffer, 50, 50, { width: 60 });
-      } else {
-        // Fallback text if image cannot be loaded
-        doc.fontSize(16).fillColor("#4285F4").text("Giraffe Space", 50, 70);
-      }
-      doc.fontSize(24).fillColor("#4285F4").text("Payment Receipt", 120, 70);
-      doc
-        .fontSize(12)
-        .fillColor("#666666")
-        .text(`Transaction ID: ${details.transactionId}`, 120, 95);
-      doc.moveDown();
+      const startY = 50;
 
-      // Separator Line
+      // Header & Title
+      if (orgLogoBuffer) {
+        doc.image(orgLogoBuffer, 50, startY, { width: 60 });
+      }
+
       doc
-        .strokeColor("#e0e0e0")
+        .fontSize(15)
+        .fillColor("#1a73e8")
+        .font("Helvetica-Bold")
+        .text("Payment Receipt", 300, startY, { align: "right" });
+
+      doc
+        .fontSize(11)
+        .fillColor("#333")
+        .font("Helvetica-Bold")
+        .text(details.organizationName, 50, orgLogoBuffer ? 120 : 80);
+
+      doc
+        .fontSize(9)
+        .fillColor("#555")
+        .font("Helvetica-Bold")
+        .text(`Address: `, 50, doc.y, { continued: true })
+        .font("Helvetica")
+        .text(details.organizationAddress);
+
+      doc
+        .font("Helvetica-Bold")
+        .text(`Email: `, 50, doc.y, { continued: true })
+        .font("Helvetica")
+        .text(details.organizationEmail);
+
+      doc
+        .font("Helvetica-Bold")
+        .text(`Phone: `, 50, doc.y, { continued: true })
+        .font("Helvetica")
+        .text(details.organizationPhone);
+
+      doc
+        .moveDown(0.5)
+        .strokeColor("#ccc")
         .lineWidth(1)
-        .moveTo(50, 120)
-        .lineTo(550, 120)
+        .moveTo(50, doc.y)
+        .lineTo(550, doc.y)
         .stroke();
-      doc.moveDown();
 
-      // Payer and Payment Details
-      doc.fontSize(14).fillColor("#333333").text("Payer: ", 50, doc.y);
-      doc
-        .fontSize(16)
-        .fillColor("#1a73e8")
-        .text(details.payerName, 100, doc.y - 2);
       doc.moveDown(0.5);
 
-      doc.fontSize(14).fillColor("#333333").text("Payment For: ", 50, doc.y);
+      // Receipt Number
       doc
-        .fontSize(16)
-        .fillColor("#1a73e8")
-        .text(details.paymentDetails, 150, doc.y - 2);
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .fillColor("#333")
+        .text(`Receipt No: `, { continued: true });
+      doc.font("Helvetica").text(details.receiptNumber);
+
+      // Payer Information
       doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").text("Payer Information");
+      doc.moveDown(0.3);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .text("Full Name: ", { continued: true });
+      doc.font("Helvetica").text(details.payerName);
+      if (details.payerEmail) {
+        doc.font("Helvetica-Bold").text("Email: ", { continued: true });
+        doc.font("Helvetica").text(details.payerEmail);
+      }
 
-      doc.fontSize(14).fillColor("#333333").text("Payment Date: ", 50, doc.y);
-      doc
-        .fontSize(16)
-        .fillColor("#1a73e8")
-        .text(
-          details.paymentDate.toLocaleDateString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }),
-          160,
-          doc.y - 2
-        );
-      doc.moveDown(2);
-
-      // Amounts Section
-      const yStartAmounts = doc.y;
-      doc
-        .fontSize(14)
-        .fillColor("#555555")
-        .text("Total Amount Due:", 50, yStartAmounts);
-      doc
-        .fontSize(14)
-        .fillColor("#555555")
-        .text(`$${details.totalAmount.toFixed(2)}`, 450, yStartAmounts, {
-          align: "right",
-        });
+      // Paid To
       doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").fontSize(10).text("Paid To:");
+      doc.font("Helvetica").text(details.organizationName);
 
-      doc.fontSize(14).fillColor("#555555").text("Amount Paid:", 50, doc.y);
-      doc
-        .fontSize(14)
-        .fillColor("#555555")
-        .text(`$${details.paidAmount.toFixed(2)}`, 450, doc.y, {
-          align: "right",
-        });
+      // Booking Details
       doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").fontSize(10).text("Booking Information");
+      doc.moveDown(0.3);
+      doc.font("Helvetica-Bold").text("Venue Name: ", { continued: true });
+      doc.font("Helvetica").text(details.venueName);
+      doc.font("Helvetica-Bold").text("Date Booked For: ", { continued: true });
+      doc.font("Helvetica").text(details.dateBookedFor);
+
+      // Payment Summary
+      doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").fontSize(10).text("Payment Summary");
+      doc.moveDown(0.3);
+
+      doc.font("Helvetica-Bold").text("Payment For: ", { continued: true });
+      doc.font("Helvetica").text(details.paymentDetails);
+
+      doc.font("Helvetica-Bold").text("Payment Date: ", { continued: true });
+      doc.font("Helvetica").text(
+        details.paymentDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      );
+
+      doc.font("Helvetica-Bold").text("Payment Method: ", { continued: true });
+      doc.font("Helvetica").text(details.paymentMethod);
+
+      doc.moveDown(0.3);
+      doc
+        .font("Helvetica-Bold")
+        .fillColor("#000")
+        .text("Total Amount: ", { continued: true });
+      doc.font("Helvetica").text(
+        `RWF ${details.totalAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+        })}`
+      );
+
+      doc.font("Helvetica-Bold").text("Amount Paid: ", { continued: true });
+      doc.font("Helvetica").text(
+        `RWF ${details.paidAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+        })}`
+      );
 
       doc
-        .fontSize(14)
-        .fillColor("#555555")
-        .text("Remaining Amount:", 50, doc.y);
-      doc
-        .fontSize(14)
-        .fillColor("#555555")
-        .text(`$${details.remainingAmount.toFixed(2)}`, 450, doc.y, {
-          align: "right",
-        });
-      doc.moveDown(2);
+        .font("Helvetica-Bold")
+        .text("Remaining Balance: ", { continued: true });
+      doc.font("Helvetica").text(
+        `RWF ${details.remainingAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+        })}`
+      );
 
       // Footer
+      doc.moveDown(1);
       doc
-        .fontSize(10)
-        .fillColor("#999999")
-        .text("Thank you for your business!", 50, doc.page.height - 50, {
-          align: "center",
-        });
+        .fontSize(9)
+        .fillColor("#777")
+        .text(
+          `Thank you for choosing ${details.organizationName} Venue. We look forward to hosting your event!`,
+          50,
+          doc.y,
+          { align: "center" }
+        );
+
+      doc
+        .text(`Address: ${details.organizationAddress}`, { align: "center" })
+        .text(`Email: ${details.organizationEmail}`, { align: "center" })
+        .text(`Phone: ${details.organizationPhone}`, { align: "center" });
+
+      doc.moveDown(0.5);
+      // Optional Signature Line
+      // doc.text("_________________________", { align: "center" });
+      // doc.text("Digital / Handwritten Signature", { align: "center" });
+
       doc.end();
     });
   }
 
   static async uploadPaymentReceiptPdf(
     pdfBuffer: Buffer,
+    payerName: string,
     transactionId: string
   ): Promise<{ url: string; public_id: string }> {
     const folder = "payment_receipts";
-    const filename = `receipt-${transactionId}.pdf`;
+    const filename = `Payment_Receipt_${payerName.replace(/ /g, "_")}.pdf`;
     return CloudinaryUploadService.uploadBuffer(
       pdfBuffer,
       folder,

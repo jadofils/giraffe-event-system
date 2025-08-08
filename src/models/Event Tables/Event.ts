@@ -35,6 +35,7 @@ import { EventTicketType } from "./EventTicketType";
 import { EventVenue } from "./EventVenue";
 import { EventGuest } from "./EventGuest";
 import { FreeEventRegistration } from "../FreeEventRegistration";
+import { CheckInStaff } from "../CheckInStaff";
 
 @Entity("events")
 export class Event {
@@ -200,6 +201,11 @@ export class Event {
     { cascade: true }
   )
   freeRegistrations!: FreeEventRegistration[];
+
+  @OneToMany(() => CheckInStaff, (checkInStaff) => checkInStaff.event, {
+    cascade: true,
+  })
+  checkInStaff!: CheckInStaff[];
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

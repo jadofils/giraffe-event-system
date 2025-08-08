@@ -25,6 +25,7 @@ import {
   SlotStatus,
 } from "../models/Venue Tables/VenueAvailabilitySlot";
 import { VenueBookingRepository } from "../repositories/VenueBookingRepository";
+import { BookingStatus } from "../models/VenueBooking";
 
 export class VenueController {
   // Create a single venue or multiple venues
@@ -1329,6 +1330,7 @@ export class VenueController {
         relations: [
           "organization",
           "availabilitySlots",
+          "bookings",
           "venueVariables",
           "venueVariables.manager",
           "bookingConditions",
@@ -1368,6 +1370,37 @@ export class VenueController {
             profilePictureURL: manager.profilePictureURL,
           }
         : null;
+
+      // Build a map of date (ISO yyyy-mm-dd) -> { holdingExpiresAt, holdingCreatedAt } from HOLDING bookings
+      const holdingInfoByDate: Record<
+        string,
+        { holdingExpiresAt: Date; holdingCreatedAt: Date }
+      > = {};
+      if (Array.isArray(venue.bookings) && venue.bookings.length > 0) {
+        for (const booking of venue.bookings) {
+          if (
+            booking.bookingStatus === BookingStatus.HOLDING &&
+            booking.bookingDates
+          ) {
+            for (const bd of booking.bookingDates) {
+              if (bd?.date && booking.holdingExpiresAt) {
+                // Normalize to yyyy-mm-dd to match availability slot Date field
+                const key = new Date(bd.date).toISOString().slice(0, 10);
+                // If multiple bookings for same date, keep the latest expiry and corresponding createdAt
+                const existing =
+                  holdingInfoByDate[key]?.holdingExpiresAt?.getTime?.();
+                const current = booking.holdingExpiresAt.getTime();
+                if (!existing || current > existing) {
+                  holdingInfoByDate[key] = {
+                    holdingExpiresAt: booking.holdingExpiresAt,
+                    holdingCreatedAt: booking.createdAt,
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
 
       // Structure the response
       const venueDetails = {
@@ -1415,12 +1448,25 @@ export class VenueController {
 
         manager: managerDetails,
 
-        availabilitySlots: venue.availabilitySlots?.map((slot) => ({
-          id: slot.id,
-          date: slot.Date,
-          bookedHours: slot.bookedHours,
-          isAvailable: slot.status === SlotStatus.AVAILABLE,
-        })),
+        availabilitySlots: venue.availabilitySlots?.map((slot) => {
+          const key = new Date(slot.Date as any).toISOString().slice(0, 10);
+          const holdingInfo = holdingInfoByDate[key];
+          return {
+            id: slot.id,
+            date: slot.Date,
+            bookedHours: slot.bookedHours,
+            status: slot.status,
+            isAvailable: slot.status === SlotStatus.AVAILABLE,
+            holdingExpiresAt:
+              slot.status === SlotStatus.HOLDING
+                ? holdingInfo?.holdingExpiresAt
+                : undefined,
+            holdingCreatedAt:
+              slot.status === SlotStatus.HOLDING
+                ? holdingInfo?.holdingCreatedAt
+                : undefined,
+          };
+        }),
 
         bookingConditions: venue.bookingConditions?.map((condition) => ({
           id: condition.id,

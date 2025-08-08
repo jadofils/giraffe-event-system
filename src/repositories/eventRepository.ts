@@ -79,9 +79,7 @@ export class EventRepository {
         const bookingPaymentTimeoutMinutes =
           bookingCondition?.bookingPaymentTimeoutMinutes || 15;
 
-        const holdingExpiresAt = new Date(
-          Date.now() + bookingPaymentTimeoutMinutes * 60 * 1000
-        );
+        // holdingExpiresAt will be computed precisely from the persisted createdAt after initial save
 
         // Create booking
         // createdBy should be the authenticated user making the request
@@ -93,7 +91,7 @@ export class EventRepository {
           throw new Error("Authenticated user not found for booking.");
         }
 
-        const venueBooking = queryRunner.manager.create(VenueBooking, {
+        let venueBooking = queryRunner.manager.create(VenueBooking, {
           eventId: event.eventId,
           venueId: venue.venueId,
           venue: venue,
@@ -105,9 +103,17 @@ export class EventRepository {
           createdBy: currentUserId, // Use the authenticated user's ID for booking creation
           user: userEntityForBooking, // Link to User entity
           amountToBePaid: totalAmount,
-          holdingExpiresAt, // Set the expiration time
+          // holdingExpiresAt set after initial save to align exactly with createdAt
         });
-        await queryRunner.manager.save(venueBooking);
+        venueBooking = await queryRunner.manager.save(venueBooking);
+        // Compute holdingExpiresAt based on persisted createdAt to ensure exact timeout window
+        if (venueBooking.createdAt) {
+          venueBooking.holdingExpiresAt = new Date(
+            venueBooking.createdAt.getTime() +
+              bookingPaymentTimeoutMinutes * 60 * 1000
+          );
+          await queryRunner.manager.save(venueBooking);
+        }
         createdBookings.push(venueBooking);
 
         // Create or update VenueAvailabilitySlots

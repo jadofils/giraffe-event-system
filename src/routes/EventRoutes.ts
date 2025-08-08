@@ -7,32 +7,54 @@ import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
 import { RegistrationController } from "../controller/RegistrationController";
 import { FreeEventRegistrationController } from "../controller/FreeEventRegistrationController";
 import { FreeEventAttendanceController } from "../controller/FreeEventAttendanceController";
+import { CheckInStaffController } from "../controller/CheckInStaffController";
 
 const router = Router();
 const upload = multer();
 
 // 📂 Public Event Routes
 router.get("/all", EventController.getAllApprovedEvents);
+//for free event check in details
+router.post(
+  "/free-check-in/details",
+  FreeEventAttendanceController.viewFreeEventCheckInDetails
+);
+router.post("/free-check-in", FreeEventAttendanceController.checkInFreeEvent);
 router.get("/public/:id", EventController.getEventById);
 router.post("/tickets/check-in", RegistrationController.checkInTicket);
+router.post(
+  "/check-in-staff/validate-code",
+  CheckInStaffController.validateSixDigitCode
+);
+router.patch(
+  "/registrations/free/:freeRegistrationId",
+  FreeEventRegistrationController.updateFreeEventRegistration
+);
 
 // 📂 Free Event Registration Route
-router.post(
-  "/:eventId/register/free",
-  FreeEventRegistrationController.registerForFreeEvent
-);
+// router.post(
+//   "/:eventId/register/free",
+//   FreeEventRegistrationController.registerForFreeEvent
+// );
 
 // 📂 Free Event Attendance Route (Public, for staff/scanners)
-router.get(
-  "/:eventId/attendance/free",
-  authenticate, // Assuming attendance info should be protected
-  FreeEventRegistrationController.getFreeEventAttendance
-);
 
 router.use(authenticate);
 
 router.get("/", EventController.getAllEvents);
 router.get("/:id", EventController.getEventById);
+router.get(
+  "/:eventId/registrations",
+  authenticate,
+  EventController.getRegistrationsByEvent
+);
+
+// 📂 Free Event Registration Route (now authenticated)
+router.post(
+  "/:eventId/register/free",
+  FreeEventRegistrationController.registerForFreeEvent
+);
+
 router.post(
   "/",
   upload.fields([
@@ -127,7 +149,31 @@ router.get(
 );
 
 // 📂 Free Event Attendance Check-in Route (Public, for staff/scanners)
-router.post("/free-check-in", FreeEventAttendanceController.checkInFreeEvent);
+router.get(
+  "/:eventId/attendance/free",
+  authenticate, // Assuming attendance info should be protected
+  FreeEventRegistrationController.getFreeEventAttendance
+);
+router.post(
+  "/:eventId/check-in-staff",
+  authenticate,
+  CheckInStaffController.createCheckInStaff
+);
+router.get(
+  "/:eventId/check-in-staff",
+  authenticate,
+  CheckInStaffController.listCheckInStaffByEvent
+);
+router.patch(
+  "/check-in-staff/:staffId",
+  authenticate,
+  CheckInStaffController.updateCheckInStaff
+);
+router.delete(
+  "/check-in-staff/:staffId",
+  authenticate,
+  CheckInStaffController.deleteCheckInStaff
+);
 
 // Mark ticket as attended Route (Admin/Staff only)
 // router.patch(

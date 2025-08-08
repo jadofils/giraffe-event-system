@@ -19,6 +19,8 @@ import { BookingCondition } from "../models/Venue Tables/BookingCondition";
 import { Event } from "../models/Event Tables/Event";
 import { CloudinaryUploadService } from "../services/CloudinaryUploadService";
 import { TicketPurchaseService } from "../services/tickets/TicketPurchaseService"; // Import the updated service
+import { FreeEventRegistrationRepository } from "../repositories/FreeEventRegistrationRepository";
+import { RegistrationRepository } from "../repositories/RegistrationRepository";
 
 export class EventController {
   private static eventRepository = new EventRepository();
@@ -1210,6 +1212,127 @@ export class EventController {
             ),
             paymentMethods: ["CARD", "BANK_TRANSFER", "MOBILE_MONEY", "PayPal"],
           },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getRegistrationsByEvent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { eventId } = req.params as { eventId: string };
+
+      if (!eventId) {
+        res
+          .status(400)
+          .json({ success: false, message: "Event ID is required." });
+        return;
+      }
+
+      const eventRepo = AppDataSource.getRepository(Event);
+      const event = await eventRepo.findOne({ where: { eventId } });
+
+      if (!event) {
+        res.status(404).json({ success: false, message: "Event not found." });
+        return;
+      }
+
+      const isPaidEvent = !!event.isEntryPaid;
+
+      if (!isPaidEvent) {
+        // Free event → return free event registrations
+        const freeRegs =
+          await FreeEventRegistrationRepository.getFreeRegistrationsByEventId(
+            eventId
+          );
+
+        const mapped = freeRegs.map((r) => ({
+          type: "FREE",
+          freeRegistrationId: r.freeRegistrationId,
+          eventId: r.eventId,
+          fullName: r.fullName,
+          email: r.email,
+          phoneNumber: r.phoneNumber,
+          nationalId: r.nationalId,
+          gender: r.gender,
+          address: r.address,
+          qrCode: r.qrCode,
+          barcode: r.barcode,
+          sevenDigitCode: r.sevenDigitCode,
+          pdfUrl: r.pdfUrl,
+          attended: r.attended,
+          attendedTimes: r.attendedTimes,
+          checkInHistory: r.checkInHistory,
+          isUsed: r.isUsed,
+          registrationDate: r.registrationDate,
+          registeredByDetails: r.registeredBy
+            ? {
+                userId: r.registeredBy.userId,
+                username: r.registeredBy.username,
+                email: r.registeredBy.email,
+                firstName: r.registeredBy.firstName,
+                lastName: r.registeredBy.lastName,
+                phoneNumber: r.registeredBy.phoneNumber,
+              }
+            : null,
+          checkedInByStaff: r.checkedInBy
+            ? {
+                staffId: r.checkedInBy.staffId,
+                fullName: r.checkedInBy.fullName,
+                phoneNumber: r.checkedInBy.phoneNumber,
+                nationalId: r.checkedInBy.nationalId,
+              }
+            : null,
+        }));
+
+        res.status(200).json({
+          success: true,
+          data: {
+            eventId,
+            entryType: "FREE",
+            registrations: mapped,
+          },
+        });
+        return;
+      }
+
+      // Paid event → return paid registrations
+      const paidRegs = await RegistrationRepository.findByEventId(eventId);
+      const mapped = paidRegs.map((r) => ({
+        type: "PAID",
+        registrationId: r.registrationId,
+        eventId: r.eventId,
+        userId: r.userId,
+        buyerId: r.buyerId,
+        attendeeName: r.attendeeName,
+        ticketTypeId: r.ticketTypeId,
+        ticketTypeName: r.ticketType?.name,
+        venueId: r.venueId,
+        venueName: r.venue?.venueName,
+        noOfTickets: r.noOfTickets,
+        totalCost: r.totalCost,
+        registrationDate: r.registrationDate,
+        attendedDate: r.attendedDate,
+        paymentStatus: r.paymentStatus,
+        qrCode: r.qrCode,
+        barcode: r.barcode,
+        sevenDigitCode: r.sevenDigitCode,
+        attended: r.attended,
+        isUsed: r.isUsed,
+        pdfUrl: r.pdfUrl,
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          eventId,
+          entryType: "PAID",
+          registrations: mapped,
         },
       });
     } catch (error) {

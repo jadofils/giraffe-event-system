@@ -34,6 +34,7 @@ import { Event } from "./Event Tables/Event";
 import { Venue } from "./Venue Tables/Venue";
 import { Invoice } from "./Invoice";
 import { VenueReview } from "./Venue Tables/VenueReview";
+import { FreeEventRegistration } from "./FreeEventRegistration"; // Import FreeEventRegistration
 
 @Entity("users")
 export class User {
@@ -237,4 +238,10 @@ export class User {
 
   @OneToMany(() => VenueBooking, (booking) => booking.user)
   bookings!: VenueBooking[];
+
+  @OneToMany(
+    () => FreeEventRegistration,
+    (freeRegistration) => freeRegistration.registeredBy
+  )
+  freeRegistrationsCreated!: FreeEventRegistration[];
 }

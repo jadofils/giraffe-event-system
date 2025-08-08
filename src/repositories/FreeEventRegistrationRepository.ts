@@ -1,6 +1,6 @@
 import { AppDataSource } from "../config/Database";
 import { FreeEventRegistration } from "../models/FreeEventRegistration";
-import { Repository } from "typeorm";
+import { Repository, UpdateResult } from "typeorm";
 
 export class FreeEventRegistrationRepository {
   private static repository: Repository<FreeEventRegistration> =
@@ -25,7 +25,10 @@ export class FreeEventRegistrationRepository {
   static async getFreeRegistrationsByEventId(
     eventId: string
   ): Promise<FreeEventRegistration[]> {
-    return await this.repository.find({ where: { eventId } });
+    return await this.repository.find({
+      where: { eventId },
+      relations: ["registeredBy", "checkedInBy"],
+    });
   }
 
   static async getFreeRegistrationsByEmailAndEventId(
@@ -40,5 +43,17 @@ export class FreeEventRegistrationRepository {
     eventId: string
   ): Promise<FreeEventRegistration | null> {
     return await this.repository.findOne({ where: { nationalId, eventId } });
+  }
+
+  static async updateFreeEventRegistration(
+    freeRegistrationId: string,
+    updateData: Partial<FreeEventRegistration>
+  ): Promise<FreeEventRegistration | null> {
+    const result: UpdateResult = await this.repository.update(
+      freeRegistrationId,
+      updateData
+    );
+    if (!result.affected) return null;
+    return await this.getFreeRegistrationById(freeRegistrationId);
   }
 }

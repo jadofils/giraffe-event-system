@@ -96,9 +96,19 @@ export class VenueBookingPayment {
   @IsString()
   notes?: string;
 
+  @Column({ type: "text", nullable: true })
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string; // New field for PDF receipt URL
+
+  @Column({ type: "varchar", length: 50, nullable: true, unique: true })
+  @IsOptional()
+  @IsString()
+  receiptNumber?: string; // New field for unique receipt number
+
   @CreateDateColumn()
   paymentDate!: Date;
 
   @UpdateDateColumn()
-  updatedAt!: Date;
+  updatedDate!: Date;
 }
