@@ -481,7 +481,11 @@ export class EventController {
       const userRepo = AppDataSource.getRepository(User);
       const orgRepo = AppDataSource.getRepository(Organization);
       const events = await eventRepo.find({
-        where: { eventStatus: EventStatus.APPROVED },
+        where: {
+          eventStatus: EventStatus.APPROVED,
+          visibilityScope: "PUBLIC",
+          enableStatus: "ENABLE",
+        },
         relations: ["eventVenues", "eventVenues.venue", "eventGuests"],
         order: { createdAt: "DESC" },
       });

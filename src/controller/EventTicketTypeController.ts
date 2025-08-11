@@ -295,11 +295,13 @@ export class EventTicketTypeController {
       }
 
       const ticketTypes =
-        await EventTicketTypeRepository.getEventTicketTypesByEventId(eventId);
+        await EventTicketTypeRepository.getAvailableEventTicketTypesByEventId(
+          eventId
+        );
       if (!ticketTypes || ticketTypes.length === 0) {
         res.status(404).json({
           success: false,
-          message: "No ticket types found for this event.",
+          message: "No available ticket types found for this event.",
         });
         return;
       }
@@ -330,13 +332,13 @@ export class EventTicketTypeController {
       }
 
       const ticketTypes =
-        await EventTicketTypeRepository.getNonInactiveTicketTypesByEventId(
+        await EventTicketTypeRepository.getAvailableEventTicketTypesByEventId(
           eventId
         );
       if (!ticketTypes || ticketTypes.length === 0) {
         res.status(404).json({
           success: false,
-          message: "No active ticket types found for this event.",
+          message: "No available ticket types found for this event.",
         });
         return;
       }

@@ -1,6 +1,13 @@
 import { AppDataSource } from "../config/Database";
 import { EventTicketType } from "../models/Event Tables/EventTicketType";
-import { FindManyOptions, Repository, Not, DeleteResult } from "typeorm";
+import {
+  FindManyOptions,
+  Repository,
+  Not,
+  DeleteResult,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+} from "typeorm";
 import { TicketStatus } from "../interfaces/Enums/TicketEnums";
 
 export class EventTicketTypeRepository {
@@ -51,6 +58,41 @@ export class EventTicketTypeRepository {
   ): Promise<EventTicketType[]> {
     return await this.repository.find({
       where: { eventId, status: Not(TicketStatus.INACTIVE) },
+    });
+  }
+
+  // New method to get available ticket types based on sale dates and status
+  static async getAvailableEventTicketTypesByEventId(
+    eventId: string
+  ): Promise<EventTicketType[]> {
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+    const todayEnd = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+    return await this.repository.find({
+      where: {
+        eventId,
+        isActive: true,
+        status: TicketStatus.ACTIVE,
+        saleStartsAt: LessThanOrEqual(todayEnd),
+        saleEndsAt: MoreThanOrEqual(todayStart),
+      },
     });
   }
 
