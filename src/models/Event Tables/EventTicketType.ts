@@ -63,19 +63,27 @@ export class EventTicketType {
   })
   updatedAt!: Date;
 
-  @Column({ type: "boolean", default: true })
-  isPubliclyAvailable!: boolean;
-
   @Column("int", { default: 1 })
   maxPerPerson!: number;
 
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
-  // New column to store category-specific discounts
+  @Column({ type: "varchar", length: 50, nullable: true })
+  startTime?: string;
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  endTime?: string;
+
+  @Column({ type: "jsonb", nullable: true, default: [] })
+  customerBenefits?: { title: string; description: string }[];
+
   @Column({ type: "jsonb", nullable: true })
-  categoryDiscounts?: {
-    [key in TicketCategory]?: { percent: number; description?: string };
+  discount?: {
+    discountName: string;
+    percentage: number;
+    startDate: Date;
+    endDate: Date;
   };
 
   @Column({ type: "boolean", default: false })

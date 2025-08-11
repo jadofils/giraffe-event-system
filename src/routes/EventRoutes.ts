@@ -3,7 +3,6 @@ import { EventController } from "../controller/eventController";
 import { authenticate } from "../middlewares/AuthMiddleware";
 import multer from "multer";
 import { isAdmin } from "../middlewares/IsAdmin";
-import EventTicketTypeRoutes from "./EventTicketTypeRoutes";
 import { RegistrationController } from "../controller/RegistrationController";
 import { FreeEventRegistrationController } from "../controller/FreeEventRegistrationController";
 import { FreeEventAttendanceController } from "../controller/FreeEventAttendanceController";
@@ -12,42 +11,39 @@ import { CheckInStaffController } from "../controller/CheckInStaffController";
 const router = Router();
 const upload = multer();
 
-// 📂 Public Event Routes
+// Public Event Routes
 router.get("/all", EventController.getAllApprovedEvents);
-//for free event check in details
+router.get("/public/:id", EventController.getEventById);
+
+// Public: Free event check-in flows
 router.post(
   "/free-check-in/details",
   FreeEventAttendanceController.viewFreeEventCheckInDetails
 );
 router.post("/free-check-in", FreeEventAttendanceController.checkInFreeEvent);
-router.get("/public/:id", EventController.getEventById);
+
+// Public: ticket check-in endpoint
 router.post("/tickets/check-in", RegistrationController.checkInTicket);
+
+// Public: validate code for check-in staff
 router.post(
   "/check-in-staff/validate-code",
   CheckInStaffController.validateSixDigitCode
 );
+
+// Public: update free registration (kept public per current behavior)
 router.patch(
   "/registrations/free/:freeRegistrationId",
   FreeEventRegistrationController.updateFreeEventRegistration
 );
 
-// 📂 Free Event Registration Route
-// router.post(
-//   "/:eventId/register/free",
-//   FreeEventRegistrationController.registerForFreeEvent
-// );
-
-// 📂 Free Event Attendance Route (Public, for staff/scanners)
-
+// Authenticated routes below
 router.use(authenticate);
 
+// Events
 router.get("/", EventController.getAllEvents);
 router.get("/:id", EventController.getEventById);
-router.get(
-  "/:eventId/registrations",
-  authenticate,
-  EventController.getRegistrationsByEvent
-);
+router.get("/:eventId/registrations", EventController.getRegistrationsByEvent);
 
 // 📂 Free Event Registration Route (now authenticated)
 router.post(
@@ -122,73 +118,48 @@ router.patch("/:eventId/disable", EventController.disableEvent);
 // Add manager endpoint for creating event for external user
 router.post(
   "/manager/create-event-for-user",
-  authenticate,
   EventController.createEventForExternalUser
 );
 
 // Ticket purchase route
-router.post("/tickets/purchase", authenticate, EventController.purchaseTicket);
+router.post("/tickets/purchase", EventController.purchaseTicket);
 
 // QR Code Validation Route
 router.post(
   "/tickets/validate-qr",
-  authenticate,
   RegistrationController.validateTicketQrCode
 );
 
 // Get tickets by User ID Route
-router.get(
-  "/tickets/user/:userId",
-  authenticate,
-  RegistrationController.getTicketsByUserId
-);
+router.get("/tickets/user/:userId", RegistrationController.getTicketsByUserId);
 router.get(
   "/:eventId/registrations/free",
-  authenticate,
   FreeEventRegistrationController.getFreeRegistrationsByEventId
 );
 
-// 📂 Free Event Attendance Check-in Route (Public, for staff/scanners)
+// Free Event Attendance (authenticated)
 router.get(
   "/:eventId/attendance/free",
-  authenticate, // Assuming attendance info should be protected
   FreeEventRegistrationController.getFreeEventAttendance
 );
 router.post(
   "/:eventId/check-in-staff",
-  authenticate,
   CheckInStaffController.createCheckInStaff
 );
 router.get(
   "/:eventId/check-in-staff",
-  authenticate,
   CheckInStaffController.listCheckInStaffByEvent
 );
 router.patch(
   "/check-in-staff/:staffId",
-  authenticate,
   CheckInStaffController.updateCheckInStaff
 );
 router.delete(
   "/check-in-staff/:staffId",
-  authenticate,
   CheckInStaffController.deleteCheckInStaff
 );
 
-// Mark ticket as attended Route (Admin/Staff only)
-// router.patch(
-//   "/tickets/:registrationId/mark-attended",
-//   authenticate,
-//   isAdmin,
-//   RegistrationController.markTicketAttended
-// );
-
-// Unified Ticket Check-in Endpoint (Admin/Staff only)
-// router.post(
-//   "/tickets/check-in",
-//   authenticate,
-//   isAdmin,
-//   RegistrationController.checkInTicket
-// );
+// Admin/Staff only (example)
+// router.patch("/tickets/:registrationId/mark-attended", isAdmin, RegistrationController.markTicketAttended);
 
 export default router;

@@ -159,25 +159,31 @@ export class TicketPurchaseService {
         let discountAppliedAmountInCents = 0;
         let appliedDiscountDescription: string | undefined;
 
-        // Check for category-specific discount
-        if (
-          ticketType.categoryDiscounts &&
-          ticketType.categoryDiscounts[purchaseCategory as TicketCategory]
-        ) {
-          const discount =
-            ticketType.categoryDiscounts[purchaseCategory as TicketCategory];
-          if (discount?.percent !== undefined && discount.percent > 0) {
-            discountAppliedAmountInCents = Math.round(
-              (ticketPriceInCents * discount.percent) / 100
-            );
-            actualPriceInCents =
-              ticketPriceInCents - discountAppliedAmountInCents;
-            appliedDiscountDescription = discount.description;
+        // Apply general discount if applicable
+        if (ticketType.discount) {
+          const now = new Date();
+          const discountStartDate = ticketType.discount.startDate;
+          const discountEndDate = ticketType.discount.endDate;
+
+          if (
+            discountStartDate &&
+            discountEndDate &&
+            now >= new Date(discountStartDate) &&
+            now <= new Date(discountEndDate)
+          ) {
+            if (
+              ticketType.discount.percentage !== undefined &&
+              ticketType.discount.percentage > 0
+            ) {
+              discountAppliedAmountInCents = Math.round(
+                (ticketPriceInCents * ticketType.discount.percentage) / 100
+              );
+              actualPriceInCents =
+                ticketPriceInCents - discountAppliedAmountInCents;
+              appliedDiscountDescription =
+                ticketType.discount.discountName || "General Discount";
+            }
           }
-        } else if (purchaseCategory !== TicketCategory.GENERAL) {
-          console.warn(
-            `No specific discount found for category '${purchaseCategory}' on ticket type '${ticketType.name}'. Using base price.`
-          );
         }
 
         console.log(

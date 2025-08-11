@@ -62,10 +62,8 @@ export class EventTicketTypeController {
           description,
           saleStartsAt,
           saleEndsAt,
-          isPubliclyAvailable,
           maxPerPerson,
           isActive,
-          categoryDiscounts,
           isRefundable,
           refundPolicy,
           transferable,
@@ -73,6 +71,10 @@ export class EventTicketTypeController {
           specialInstructions,
           status,
           validForDate,
+          startTime,
+          endTime,
+          customerBenefits,
+          discount,
         } = ticketTypeData;
 
         // Basic validation for individual ticket type
@@ -97,6 +99,82 @@ export class EventTicketTypeController {
             name: name,
           });
           continue; // Skip to next ticket type
+        }
+
+        // Validate validForDate against event bookingDates
+        if (validForDate) {
+          const eventBookingDates = event.bookingDates.map((d) => d.date);
+          if (!eventBookingDates.includes(validForDate)) {
+            results.push({
+              success: false,
+              message: `Ticket type '${name}': validForDate '${validForDate}' must be one of the event's booking dates.`,
+              name: name,
+            });
+            continue; // Skip to next ticket type
+          }
+        }
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        // Validate discount dates
+        if (discount) {
+          const discountStartDate = discount.startDate
+            ? new Date(discount.startDate)
+            : undefined;
+          const discountEndDate = discount.endDate
+            ? new Date(discount.endDate)
+            : undefined;
+
+          if (discountStartDate && discountStartDate < startOfToday) {
+            results.push({
+              success: false,
+              message: `Ticket type '${name}': Discount start date cannot be a past date.`,
+              name: name,
+            });
+            continue;
+          }
+
+          if (
+            validForDate &&
+            discountEndDate &&
+            discountEndDate > new Date(validForDate)
+          ) {
+            results.push({
+              success: false,
+              message: `Ticket type '${name}': Discount end date cannot exceed validForDate.`,
+              name: name,
+            });
+            continue;
+          }
+        }
+
+        // Validate sale dates
+        const saleStartsAtDate = saleStartsAt
+          ? new Date(saleStartsAt)
+          : undefined;
+        const saleEndsAtDate = saleEndsAt ? new Date(saleEndsAt) : undefined;
+
+        if (saleStartsAtDate && saleStartsAtDate < startOfToday) {
+          results.push({
+            success: false,
+            message: `Ticket type '${name}': Sale start date cannot be a past date.`,
+            name: name,
+          });
+          continue;
+        }
+
+        if (
+          validForDate &&
+          saleEndsAtDate &&
+          saleEndsAtDate > new Date(validForDate)
+        ) {
+          results.push({
+            success: false,
+            message: `Ticket type '${name}': Sale end date cannot exceed validForDate.`,
+            name: name,
+          });
+          continue;
         }
 
         // Validate total quantity available against event max attendees if it's a public event
@@ -134,16 +212,28 @@ export class EventTicketTypeController {
           saleStartsAt: saleStartsAt ? new Date(saleStartsAt) : undefined,
           saleEndsAt: saleEndsAt ? new Date(saleEndsAt) : undefined,
           validForDate: validForDate, // Pass as string (YYYY-MM-DD) or undefined/null
-          isPubliclyAvailable,
           maxPerPerson,
           isActive,
-          categoryDiscounts,
           isRefundable,
           refundPolicy,
           transferable,
           ageRestriction,
           specialInstructions,
           status,
+          startTime: ticketTypeData.startTime,
+          endTime: ticketTypeData.endTime,
+          customerBenefits: ticketTypeData.customerBenefits,
+          discount: ticketTypeData.discount
+            ? {
+                ...ticketTypeData.discount,
+                startDate: ticketTypeData.discount.startDate
+                  ? new Date(ticketTypeData.discount.startDate)
+                  : undefined,
+                endDate: ticketTypeData.discount.endDate
+                  ? new Date(ticketTypeData.discount.endDate)
+                  : undefined,
+              }
+            : undefined,
         });
       }
 
@@ -363,20 +453,139 @@ export class EventTicketTypeController {
         // validForDate is a 'date' column in DB, so pass as string directly
         updates.validForDate = updates.validForDate;
       }
-      // Handle categoryDiscounts which might be sent as a string (if from form-data)
-      if (typeof updates.categoryDiscounts === "string") {
-        try {
-          updates.categoryDiscounts = JSON.parse(updates.categoryDiscounts);
-        } catch (e) {
-          // Log error or handle invalid JSON gracefully
-          console.error("Failed to parse categoryDiscounts JSON string:", e);
+
+      // Validate validForDate against event bookingDates if it's being updated
+      if (updates.validForDate && existingTicketType.eventId) {
+        const eventRepo = AppDataSource.getRepository(Event);
+        const event = await eventRepo.findOne({
+          where: { eventId: existingTicketType.eventId },
+        });
+        if (event) {
+          const eventBookingDates = event.bookingDates.map((d) => d.date);
+          if (!eventBookingDates.includes(updates.validForDate)) {
+            res.status(400).json({
+              success: false,
+              message: `validForDate '${updates.validForDate}' must be one of the event's booking dates.`,
+            });
+            return;
+          }
+        }
+      }
+
+      const now = new Date();
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      // Validate discount dates
+      if (updates.discount) {
+        const discountStartDate = updates.discount.startDate
+          ? new Date(updates.discount.startDate)
+          : undefined;
+        const discountEndDate = updates.discount.endDate
+          ? new Date(updates.discount.endDate)
+          : undefined;
+
+        if (discountStartDate && discountStartDate < startOfToday) {
           res.status(400).json({
             success: false,
-            message: "Invalid format for categoryDiscounts.",
+            message: `Discount start date cannot be a past date.`,
+          });
+          return;
+        }
+
+        if (
+          updates.validForDate &&
+          discountEndDate &&
+          discountEndDate > new Date(updates.validForDate)
+        ) {
+          res.status(400).json({
+            success: false,
+            message: `Discount end date cannot exceed validForDate.`,
           });
           return;
         }
       }
+
+      // Validate sale dates
+      const saleStartsAtDate = updates.saleStartsAt
+        ? new Date(updates.saleStartsAt)
+        : undefined;
+      const saleEndsAtDate = updates.saleEndsAt
+        ? new Date(updates.saleEndsAt)
+        : undefined;
+
+      if (saleStartsAtDate && saleStartsAtDate < startOfToday) {
+        res.status(400).json({
+          success: false,
+          message: `Sale start date cannot be a past date.`,
+        });
+        return;
+      }
+
+      if (
+        updates.validForDate &&
+        saleEndsAtDate &&
+        saleEndsAtDate > new Date(updates.validForDate)
+      ) {
+        res.status(400).json({
+          success: false,
+          message: `Sale end date cannot exceed validForDate.`,
+        });
+        return;
+      }
+
+      // Handle new fields: startTime, endTime, customerBenefits, discount
+      if (updates.startTime) {
+        updates.startTime = updates.startTime;
+      }
+      if (updates.endTime) {
+        updates.endTime = updates.endTime;
+      }
+      if (
+        updates.customerBenefits &&
+        typeof updates.customerBenefits === "string"
+      ) {
+        try {
+          updates.customerBenefits = JSON.parse(updates.customerBenefits);
+        } catch (e) {
+          console.error("Failed to parse customerBenefits JSON string:", e);
+          res.status(400).json({
+            success: false,
+            message: "Invalid format for customerBenefits.",
+          });
+          return;
+        }
+      }
+      if (updates.discount && typeof updates.discount === "string") {
+        try {
+          const parsedDiscount = JSON.parse(updates.discount);
+          if (parsedDiscount.startDate) {
+            parsedDiscount.startDate = new Date(parsedDiscount.startDate);
+          }
+          if (parsedDiscount.endDate) {
+            parsedDiscount.endDate = new Date(parsedDiscount.endDate);
+          }
+          updates.discount = parsedDiscount;
+        } catch (e) {
+          console.error("Failed to parse discount JSON string:", e);
+          res.status(400).json({
+            success: false,
+            message: "Invalid format for discount.",
+          });
+          return;
+        }
+      } else if (updates.discount) {
+        // If discount is already an object
+        if (updates.discount.startDate) {
+          updates.discount.startDate = new Date(updates.discount.startDate);
+        }
+        if (updates.discount.endDate) {
+          updates.discount.endDate = new Date(updates.discount.endDate);
+        }
+      }
+
+      // Ensure isPubliclyAvailable is not updated if it's sent in the request
+      delete updates.isPubliclyAvailable;
 
       const updatedTicketType =
         await EventTicketTypeRepository.updateEventTicketType(
@@ -453,9 +662,8 @@ export class EventTicketTypeController {
         // For now, simply allow if admin.
       }
 
-      const deleteResult = await EventTicketTypeRepository.deleteEventTicketType(
-        ticketTypeId
-      );
+      const deleteResult =
+        await EventTicketTypeRepository.deleteEventTicketType(ticketTypeId);
 
       if (deleteResult.affected === 0) {
         res.status(404).json({
