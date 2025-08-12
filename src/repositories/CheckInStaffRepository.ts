@@ -25,6 +25,13 @@ export class CheckInStaffRepository {
     return await this.repository.findOne({ where: { sixDigitCode } });
   }
 
+  static async getCheckInStaffBySixDigitCodeAndEventId(
+    sixDigitCode: string,
+    eventId: string
+  ): Promise<CheckInStaff | null> {
+    return await this.repository.findOne({ where: { sixDigitCode, eventId } });
+  }
+
   static async getCheckInStaffByEventId(
     eventId: string
   ): Promise<CheckInStaff[]> {

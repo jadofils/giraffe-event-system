@@ -18,7 +18,13 @@ export class FreeEventRegistrationRepository {
   ): Promise<FreeEventRegistration | null> {
     return await this.repository.findOne({
       where: { freeRegistrationId },
-      relations: ["event", "event.eventVenues", "event.eventVenues.venue"], // Load event and venue details
+      relations: [
+        "event",
+        "event.eventVenues",
+        "event.eventVenues.venue",
+        "registeredBy",
+        "checkedInBy",
+      ], // Load event and venue details
     });
   }
 

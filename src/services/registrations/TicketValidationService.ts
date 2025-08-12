@@ -9,8 +9,16 @@ export class TicketValidationService {
     qrCodeData: string
   ): Promise<{ success: boolean; message: string; data?: any }> {
     try {
+      // Normalize potential whitespace and URL-safe base64 variants
+      const sanitized = (qrCodeData || "")
+        .toString()
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+
       // QR code data is Base64 encoded JSON payload
-      const decodedString = Buffer.from(qrCodeData, "base64").toString("utf8");
+      const decodedString = Buffer.from(sanitized, "base64").toString("utf8");
       const qrPayload = JSON.parse(decodedString);
 
       // Basic validation of payload structure

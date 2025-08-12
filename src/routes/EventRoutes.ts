@@ -25,6 +25,9 @@ router.post("/free-check-in", FreeEventAttendanceController.checkInFreeEvent);
 // Public: ticket check-in endpoint
 router.post("/tickets/check-in", RegistrationController.checkInTicket);
 
+// Public: View paid ticket details before check-in
+router.post("/tickets/details", RegistrationController.viewTicketDetails);
+
 // Public: validate code for check-in staff
 router.post(
   "/check-in-staff/validate-code",
@@ -124,17 +127,24 @@ router.post(
 // Ticket purchase route
 router.post("/tickets/purchase", EventController.purchaseTicket);
 
-// QR Code Validation Route
-router.post(
-  "/tickets/validate-qr",
-  RegistrationController.validateTicketQrCode
-);
-
 // Get tickets by User ID Route
 router.get("/tickets/user/:userId", RegistrationController.getTicketsByUserId);
+
+// Get single ticket registration by ID (authenticated)
+router.get(
+  "/registration/:registrationId",
+  RegistrationController.getRegistrationById
+);
+
 router.get(
   "/:eventId/registrations/free",
   FreeEventRegistrationController.getFreeRegistrationsByEventId
+);
+
+// Get single free registration by ID (authenticated)
+router.get(
+  "/free-registration/:registrationId",
+  FreeEventRegistrationController.getOneFreeRegistrationById
 );
 
 // Free Event Attendance (authenticated)
@@ -162,4 +172,4 @@ router.delete(
 // Admin/Staff only (example)
 // router.patch("/tickets/:registrationId/mark-attended", isAdmin, RegistrationController.markTicketAttended);
 
-export default router;
+export const eventRouter = router;

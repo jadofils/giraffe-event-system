@@ -14,7 +14,7 @@ import resourceRoutes from "./ResourceRoutes"; // Ensure resourceRoutes is expor
 // import VenueBookingRoutes from "./VenueBookingRoutes";
 import InvoiceRoutes from "./InvoiceRoutes";
 
-import EventRoute from "./EventRoutes";
+import { eventRouter } from "./EventRoutes";
 import PermissionRoutes from "./PermissionRoutes";
 import { venueRoute } from "./VenueRoutes";
 import VenueBookingRoutes from "./VenueBookingRoutes";
@@ -40,7 +40,7 @@ router.use("/organizations", organizationRoutes); // This makes `/api/v1/organiz
 //resources
 router.use("/resources", resourceRoutes);
 router.use("/venue", venueRoute); // This makes `/api/v1/venue/*` available
-router.use("/event", EventRoute);
+router.use("/event", eventRouter);
 router.use("/venue-bookings", VenueBookingRoutes);
 // Event Booking routes
 // router.use("/venue-bookings", VenueBookingRoutes); // This makes `/api/v1/event-bookings/*` available

@@ -29,6 +29,7 @@ import { Venue } from "./Venue Tables/Venue";
 import { Payment } from "./Payment"; // Keep this import for now if it's used elsewhere, but we'll remove the OneToOne to it
 import { Invoice } from "./Invoice";
 import { TicketPayment } from "./TicketPayment"; // NEW IMPORT
+import { CheckInStaff } from "./CheckInStaff"; // NEW IMPORT
 
 @Entity("registrations")
 export class Registration {
@@ -201,6 +202,31 @@ export class Registration {
 
   @Column({ type: "uuid", nullable: true }) // Explicit foreign key column
   invoiceId?: string; // Correctly place invoiceId here
+
+  @Column({ nullable: true })
+  nationalId?: string;
+
+  @Column({ nullable: true })
+  phoneNumber?: string;
+
+  @Column({ nullable: true })
+  gender?: string;
+
+  @Column({ type: "jsonb", nullable: true })
+  address?: {
+    province?: string;
+    district?: string;
+    sector?: string;
+    country?: string;
+  };
+
+  @Column({ type: "uuid", nullable: true }) // New field for check-in staff
+  @IsUUID("4", { message: "checkedInByStaffId must be a valid UUID" })
+  checkedInByStaffId?: string;
+
+  @ManyToOne(() => CheckInStaff, (staff) => staff.paidRegistrations)
+  @JoinColumn({ name: "checkedInByStaffId" })
+  checkedInByStaff?: CheckInStaff;
 
   @CreateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
   createdAt!: Date;

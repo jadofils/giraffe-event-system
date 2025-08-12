@@ -33,6 +33,8 @@ export class EmailService {
     venueName,
     tickets,
     venueGoogleMapsLink,
+    startTime, // Add startTime parameter
+    endTime, // Add endTime parameter
   }: {
     to: string;
     subject: string;
@@ -47,9 +49,12 @@ export class EmailService {
       barcodeUrl: string; // Add barcode URL
       sevenDigitCode: string; // Add 7-digit code
       pdfUrl?: string; // Add pdfUrl to individual ticket object
+      startTime?: string; // Add startTime to individual ticket object
+      endTime?: string; // Add endTime to individual ticket object
     }>;
     venueGoogleMapsLink?: string;
-    // pdfUrl?: string; // This is no longer needed, individual PDFs are on each ticket
+    startTime?: string; // Add startTime to the main interface as well for consistency
+    endTime?: string; // Add endTime to the main interface as well for consistency
   }): Promise<boolean> {
     try {
       const transporter = EmailService.getTransporter();
@@ -85,7 +90,7 @@ export class EmailService {
                   ticket.attendeeName
                 }
               </p>
-              <p style="margin: 0; color: #666; font-size: 14px;">
+              <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">
                 <strong style="color: #4285F4;"> Valid Date:</strong> ${new Date(
                   ticket.attendedDate
                 ).toLocaleDateString("en-US", {
@@ -95,6 +100,14 @@ export class EmailService {
                   day: "numeric",
                 })}
               </p>
+              ${
+                ticket.startTime && ticket.endTime
+                  ? `<p style="margin: 0 0 6px 0; color: #333; font-size: 14px;">
+                      <strong style="color: #4285F4;">Time:</strong>
+                      <span style="font-size: 14px; font-weight: 600;">${ticket.startTime} - ${ticket.endTime}</span>
+                    </p>`
+                  : ""
+              }
             </div>
             
             <div style="
@@ -181,6 +194,8 @@ export class EmailService {
               padding: 40px 30px;
               text-align: center;
               border-radius: 12px 12px 0 0;
+              width: 100%; /* Set width to 100% */
+              box-sizing: border-box; /* Include padding in the width */
             ">
               <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" 
               alt="Giraffe Space Logo" style="
@@ -243,6 +258,14 @@ export class EmailService {
         })}
       </span>
     </p>
+    ${
+      startTime && endTime
+        ? `<p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
+            <strong style="color: #4285F4;">Time:</strong>
+            <span style="font-size: 16px; font-weight: 600;">${startTime} - ${endTime}</span>
+          </p>`
+        : ""
+    }
   </div>
 
   <div style="min-width: 180px;">
@@ -1561,6 +1584,8 @@ export class EmailService {
             padding: 40px 30px;
             text-align: center;
             border-radius: 12px 12px 0 0;
+            width: 100%; /* Set width to 100% */
+            box-sizing: border-box; /* Include padding in the width */
           ">
             <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" 
             alt="Giraffe Space Logo" style="
@@ -1684,7 +1709,7 @@ export class EmailService {
     `;
   }
 
-  static async sendCheckInStaffInvitationEmail({
+  public static async sendCheckInStaffInvitationEmail({
     to,
     fullName,
     sixDigitCode,
@@ -1695,44 +1720,51 @@ export class EmailService {
   }): Promise<boolean> {
     try {
       const transporter = this.getTransporter();
-      const html = `
+
+      const htmlContent = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Check-in Staff Code - Giraffe Space</title>
+          <title>Your Check-in Staff Code - Giraffe Space</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background-color: #f5f7fa; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+            .header { background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%); color: #FFFFFF; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+            .header h1 { font-size: 28px; margin: 0; font-weight: 700; }
+            .content { padding: 30px; color: #333; }
+            .card { background: #f8f9ff; border: 1px solid #e8f0fe; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center; }
+            .code-display { font-size: 36px; font-weight: 700; color: #1a73e8; letter-spacing: 4px; background: #e8f0fe; padding: 15px 25px; border-radius: 8px; display: inline-block; margin: 20px 0; }
+            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; border-top: 1px solid #e9ecef; }
+            .logo { display: block; margin: 0 auto 15px; width: 60px; height: 60px; opacity: 0.8; }
+          </style>
         </head>
-        <body style="margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;">
-          <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
-            <div style="background: linear-gradient(135deg, #347ff8ff 0%, #2a7eedff 100%); color: #FFFFFF; padding: 40px 30px; text-align: center; border-radius: 12px 12px 0 0;">
-              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space Logo" style="display: block; margin: 0 auto 20px; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.1); padding: 12px;" />
-              <h1 style="font-size: 28px; margin: 0; font-weight: 700; letter-spacing: -0.5px;">Check-in Staff Access</h1>
-              <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 16px;">Your six-digit staff code is below</p>
+        <body>
+          <div class="container">
+            <div class="header">
+              <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space Logo" class="logo" />
+              <h1>Your Check-in Staff Code</h1>
+              <p>Important information for your event duties.</p>
             </div>
-            <div style="padding: 32px 24px;">
-              <p style="font-size: 16px; color: #333;">Hello <strong>${fullName}</strong>,</p>
-              <p style="font-size: 16px; color: #333;">You have been registered as a check-in staff member. Use the following six-digit code to validate yourself when performing attendee check-ins:</p>
-              <div style="background: #f8f9ff; border: 2px dashed #4285F4; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0;">
-                <div style="color: #1a73e8; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Your Staff Code</div>
-                <div style="font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #1a73e8;">${sixDigitCode}</div>
+            <div class="content">
+              <p style="font-size: 16px; margin-bottom: 25px;">Dear <strong>${fullName}</strong>,</p>
+              <p style="font-size: 16px; margin-bottom: 25px;">You have been designated as a check-in staff member for an upcoming event on Giraffe Space. Below is your unique six-digit code required for checking in attendees.</p>
+              
+              <div class="card">
+                <p style="font-size: 18px; font-weight: 600; color: #4285F4; margin-bottom: 10px;">Your Six-Digit Check-in Code:</p>
+                <span class="code-display">${sixDigitCode}</span>
+                <p style="font-size: 14px; color: #777; margin-top: 10px;">Please keep this code secure. You will need it to log in to the check-in system.</p>
               </div>
-              <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 16px;">
-                <p style="margin: 0; color: #856404; font-size: 14px;">
-                  Keep this code secure. You will be asked to provide it when checking in attendees via QR, barcode or 7-digit code.
-                </p>
-              </div>
-              <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-top: 24px; text-align: center; border: 1px solid #e9ecef;">
-                <h4 style="color: #4285F4; margin: 0 0 12px 0; font-size: 16px;">Need Help?</h4>
-                <p style="margin: 0; color: #666; font-size: 14px;">If you have issues during check-in, contact the event organizer or support.</p>
+              
+              <p style="font-size: 16px; margin-top: 25px;">Thank you for your cooperation!</p>
+
+              <div style="background: #f0f8ff; border-left: 4px solid #4285F4; padding: 15px; border-radius: 8px; margin-top: 30px; font-size: 14px; color: #555;">
+                If you have any questions, please contact the event organizer or our support team.
               </div>
             </div>
-            <div style="background: #f8f9fa; padding: 24px; text-align: center; border-top: 1px solid #e9ecef;">
-              <div style="margin-bottom: 16px;">
-                <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" alt="Giraffe Space" style="width: 40px; height: 40px; opacity: 0.7;"/>
-              </div>
-              <p style="margin: 0 0 8px 0; color: #666; font-size: 14px; font-weight: 600;">Thank you for supporting our events! 🦒</p>
-              <p style="margin: 0; color: #999; font-size: 12px; line-height: 1.4;">This email was sent by Giraffe Space Event Management System.</p>
+            <div class="footer">
+              <p style="margin: 0;">&copy; ${new Date().getFullYear()} Giraffe Space. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -1742,8 +1774,8 @@ export class EmailService {
       const mailOptions = {
         from: `"Giraffe Space Events" <${process.env.EMAIL_USER}>`,
         to,
-        subject: "Your Check-in Staff Code - Giraffe Space",
-        html: html,
+        subject: `Your Check-in Staff Code for Giraffe Space`,
+        html: htmlContent,
         attachments: [
           {
             filename: "giraffe-logo.png",
@@ -1753,15 +1785,15 @@ export class EmailService {
         ],
       };
 
-      const info = await transporter.sendMail(mailOptions);
-      this.log("info", `Staff code email sent to ${to}`, {
-        messageId: info?.messageId,
-        accepted: info?.accepted,
-        rejected: info?.rejected,
-      });
-      return Array.isArray(info?.rejected) ? info.rejected.length === 0 : true;
+      await transporter.sendMail(mailOptions);
+      this.log("info", `Check-in staff invitation email sent to ${to}.`);
+      return true;
     } catch (error) {
-      this.log("error", "Failed to send staff code email:", error);
+      this.log(
+        "error",
+        `Failed to send check-in staff invitation email to ${to}:`,
+        error
+      );
       return false;
     }
   }

@@ -470,6 +470,92 @@ export class FreeEventRegistrationController {
     }
   }
 
+  static async getOneFreeRegistrationById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { registrationId } = req.params;
+
+      if (!registrationId) {
+        res
+          .status(400)
+          .json({ success: false, message: "Registration ID is required." });
+        return;
+      }
+
+      const registration =
+        await FreeEventRegistrationRepository.getFreeRegistrationById(
+          registrationId
+        );
+
+      if (!registration) {
+        res.status(404).json({
+          success: false,
+          message: "Free registration not found.",
+        });
+        return;
+      }
+
+      // Calculate attended ratio
+      const event = registration.event;
+      let maxPossibleCheckIns = 1; // Default to 1 if no booking dates
+      if (event && event.bookingDates && event.bookingDates.length > 0) {
+        maxPossibleCheckIns = event.bookingDates.length;
+      }
+
+      const attendedTimes = registration.attendedTimes || 0;
+      const attendanceRatio = `${attendedTimes}/${maxPossibleCheckIns}`;
+      const isFullyAttended = attendedTimes >= maxPossibleCheckIns;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          freeRegistrationId: registration.freeRegistrationId,
+          eventId: registration.eventId,
+          fullName: registration.fullName,
+          email: registration.email,
+          phoneNumber: registration.phoneNumber,
+          nationalId: registration.nationalId,
+          gender: registration.gender,
+          address: registration.address,
+          qrCode: registration.qrCode,
+          barcode: registration.barcode,
+          sevenDigitCode: registration.sevenDigitCode,
+          pdfUrl: registration.pdfUrl,
+          attended: registration.attended,
+          attendedTimes: registration.attendedTimes,
+          checkInHistory: registration.checkInHistory,
+          isUsed: registration.isUsed,
+          registrationDate: registration.registrationDate,
+          attendanceRatio: attendanceRatio,
+          isFullyAttended: isFullyAttended,
+          registeredByDetails: registration.registeredBy
+            ? {
+                userId: registration.registeredBy.userId,
+                username: registration.registeredBy.username,
+                email: registration.registeredBy.email,
+                firstName: registration.registeredBy.firstName,
+                lastName: registration.registeredBy.lastName,
+                phoneNumber: registration.registeredBy.phoneNumber,
+              }
+            : null,
+          checkedInByStaff: registration.checkedInBy
+            ? {
+                staffId: registration.checkedInBy.staffId,
+                fullName: registration.checkedInBy.fullName,
+                phoneNumber: registration.checkedInBy.phoneNumber,
+                nationalId: registration.checkedInBy.nationalId,
+              }
+            : null,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async updateFreeEventRegistration(
     req: Request,
     res: Response,

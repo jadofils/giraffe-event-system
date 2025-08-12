@@ -15,6 +15,8 @@ interface TicketPdfDetails {
   barcodeUrl: string;
   sevenDigitCode: string;
   venueGoogleMapsLink?: string;
+  startTime?: string; // Add startTime
+  endTime?: string; // Add endTime
 }
 
 export class TicketPdfService {
@@ -54,6 +56,9 @@ export class TicketPdfService {
           day: "numeric",
         })}`
       );
+      if (details.startTime && details.endTime) {
+        doc.text(`Time: ${details.startTime} - ${details.endTime}`);
+      }
       doc.text(`Venue: ${details.venueName}`);
       if (details.venueGoogleMapsLink) {
         doc

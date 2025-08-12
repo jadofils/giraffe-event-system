@@ -15,7 +15,8 @@ export class FreeEventAttendanceController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { ticketCode, codeType, sixDigitCode } = req.body;
+      const { ticketCode, codeType } = req.body;
+      const sixDigitCode: string = String(req.body?.sixDigitCode || "").trim();
 
       if (!ticketCode || !codeType) {
         res.status(400).json({
@@ -32,16 +33,6 @@ export class FreeEventAttendanceController {
         return;
       }
 
-      const staff = await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
-        sixDigitCode
-      );
-      if (!staff) {
-        res
-          .status(401)
-          .json({ success: false, message: "Invalid six-digit code." });
-        return;
-      }
-
       let freeRegistration: FreeEventRegistration | null = null;
       const freeRegistrationRepo = AppDataSource.getRepository(
         FreeEventRegistration
@@ -50,13 +41,21 @@ export class FreeEventAttendanceController {
       // 1. Validate the code and retrieve registration
       switch (codeType) {
         case "QR_CODE":
-          // For QR codes, the payload contains freeRegistrationId, genericUserIdForFreeEvent, eventId
-          const qrPayloadString = Buffer.from(ticketCode, "base64").toString(
+          // For QR codes, the payload is Base64(JSON). Support both keys: freeRegistrationId or registrationId
+          const sanitizedQr = (ticketCode || "")
+            .toString()
+            .trim()
+            .replace(/\s+/g, "")
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+          const qrPayloadString = Buffer.from(sanitizedQr, "base64").toString(
             "utf8"
           );
           const qrPayload = JSON.parse(qrPayloadString);
+          const freeRegId =
+            qrPayload.freeRegistrationId || qrPayload.registrationId;
           freeRegistration = await freeRegistrationRepo.findOne({
-            where: { freeRegistrationId: qrPayload.freeRegistrationId },
+            where: { freeRegistrationId: freeRegId },
             relations: [
               "event",
               "event.eventVenues",
@@ -104,8 +103,13 @@ export class FreeEventAttendanceController {
         return;
       }
 
-      // Ensure staff belongs to the same event
-      if (staff.eventId !== freeRegistration.eventId) {
+      // Ensure staff belongs to the same event (lookup by code + event)
+      const staff =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCodeAndEventId(
+          sixDigitCode,
+          String(freeRegistration.eventId).trim()
+        );
+      if (!staff) {
         res.status(403).json({
           success: false,
           message: "Staff code is not valid for this event.",
@@ -215,7 +219,8 @@ export class FreeEventAttendanceController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { ticketCode, codeType, sixDigitCode } = req.body;
+      const { ticketCode, codeType } = req.body;
+      const sixDigitCode: string = String(req.body?.sixDigitCode || "").trim();
 
       if (!sixDigitCode) {
         res
@@ -223,16 +228,6 @@ export class FreeEventAttendanceController {
           .json({ success: false, message: "Six-digit code is required." });
         return;
       }
-      const staff = await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
-        sixDigitCode
-      );
-      if (!staff) {
-        res
-          .status(401)
-          .json({ success: false, message: "Invalid six-digit code." });
-        return;
-      }
-
       if (!ticketCode || !codeType) {
         res.status(400).json({
           success: false,
@@ -248,12 +243,20 @@ export class FreeEventAttendanceController {
 
       switch (codeType) {
         case "QR_CODE": {
-          const qrPayloadString = Buffer.from(ticketCode, "base64").toString(
+          const sanitizedQr = (ticketCode || "")
+            .toString()
+            .trim()
+            .replace(/\s+/g, "")
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+          const qrPayloadString = Buffer.from(sanitizedQr, "base64").toString(
             "utf8"
           );
           const qrPayload = JSON.parse(qrPayloadString);
+          const freeRegId =
+            qrPayload.freeRegistrationId || qrPayload.registrationId;
           freeRegistration = await freeRegistrationRepo.findOne({
-            where: { freeRegistrationId: qrPayload.freeRegistrationId },
+            where: { freeRegistrationId: freeRegId },
             relations: [
               "event",
               "event.eventVenues",
@@ -315,8 +318,13 @@ export class FreeEventAttendanceController {
         return;
       }
 
-      // Optional: ensure staff belongs to the same event
-      if (staff.eventId !== freeRegistration.eventId) {
+      // Ensure staff belongs to the same event (strict)
+      const staff =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCodeAndEventId(
+          sixDigitCode,
+          String(freeRegistration.eventId).trim()
+        );
+      if (!staff) {
         res.status(403).json({
           success: false,
           message: "Staff code is not valid for this event.",

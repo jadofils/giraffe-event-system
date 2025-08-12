@@ -1306,29 +1306,24 @@ export class EventController {
       }
 
       // Paid event → return paid registrations
-      const paidRegs = await RegistrationRepository.findByEventId(eventId);
+      const paidRegs = await RegistrationRepository.findByEventId(eventId, [
+        "event",
+        "ticketType",
+        // Removed "user", "buyer", "venue", "checkedInByStaff" for performance
+      ]);
       const mapped = paidRegs.map((r) => ({
         type: "PAID",
         registrationId: r.registrationId,
         eventId: r.eventId,
-        userId: r.userId,
-        buyerId: r.buyerId,
         attendeeName: r.attendeeName,
         ticketTypeId: r.ticketTypeId,
-        ticketTypeName: r.ticketType?.name,
-        venueId: r.venueId,
-        venueName: r.venue?.venueName,
-        noOfTickets: r.noOfTickets,
-        totalCost: r.totalCost,
-        registrationDate: r.registrationDate,
-        attendedDate: r.attendedDate,
+        ticketTypeName: r.ticketType?.name || "N/A",
         paymentStatus: r.paymentStatus,
-        qrCode: r.qrCode,
-        barcode: r.barcode,
-        sevenDigitCode: r.sevenDigitCode,
         attended: r.attended,
         isUsed: r.isUsed,
-        pdfUrl: r.pdfUrl,
+        sevenDigitCode: r.sevenDigitCode,
+        // Removed detailed buyer, staff, address, phone, gender, and full ticketType details
+        // These are available in the /tickets/:registrationId endpoint
       }));
 
       res.status(200).json({
@@ -1952,7 +1947,7 @@ export class EventController {
         return;
       }
 
-      // Basic validation for each ticket in the array
+      // Basic validation for each ticket in the array, now including new optional fields
       for (const ticket of ticketsToPurchase) {
         if (!ticket.ticketTypeId || !ticket.attendeeName) {
           res.status(400).json({
@@ -1962,6 +1957,8 @@ export class EventController {
           });
           return;
         }
+        // Optional: Add more specific validation for nationalId, phoneNumber, gender, address if they become required
+        // For now, they are passed as-is if provided.
       }
 
       const result = await TicketPurchaseService.purchaseTicket(

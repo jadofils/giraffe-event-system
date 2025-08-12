@@ -201,12 +201,21 @@ export class RegistrationRepository {
   }
 
   // Find registrations by event ID
-  static async findByEventId(eventId: string): Promise<Registration[]> {
+  static async findByEventId(
+    eventId: string,
+    relations?: string[]
+  ): Promise<Registration[]> {
     try {
       const repository = this.getRepository();
       return await repository.find({
         where: { event: { eventId } },
-        relations: ["event", "user", "buyer", "ticketType", "venue"],
+        relations: relations || [
+          "event",
+          "user",
+          "buyer",
+          "ticketType",
+          "venue",
+        ], // Use provided relations or default
       });
     } catch (error) {
       console.error(`Error finding registrations for event ${eventId}:`, error);

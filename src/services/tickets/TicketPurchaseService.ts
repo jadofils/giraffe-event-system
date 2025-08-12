@@ -33,6 +33,15 @@ interface PurchaseTicketResponse {
     sevenDigitCode: string; // Ensure this is always a string
     attendedDate: string;
     pdfUrl?: string;
+    nationalId?: string;
+    phoneNumber?: string;
+    gender?: string;
+    address?: {
+      province?: string;
+      district?: string;
+      sector?: string;
+      country?: string;
+    };
   }[];
   qrCodeUrls?: string[];
   barcodeUrls?: string[];
@@ -50,6 +59,15 @@ export class TicketPurchaseService {
       attendeeName: string;
       selectedDate: string;
       category?: string;
+      nationalId?: string;
+      phoneNumber?: string;
+      gender?: string;
+      address?: {
+        province?: string;
+        district?: string;
+        sector?: string;
+        country?: string;
+      };
     }>,
     paymentDetails: {
       amountPaid: number;
@@ -60,6 +78,11 @@ export class TicketPurchaseService {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    const qrCodeUrls: string[] = []; // Declared here for wider scope
+    const barcodeUrls: string[] = []; // Declared here for wider scope
+    const sevenDigitCodes: string[] = []; // Declared here for wider scope
+    const pdfUrls: string[] = []; // Declared here for wider scope
 
     try {
       const ticketTypeRepo = queryRunner.manager.getRepository(EventTicketType);
@@ -74,20 +97,23 @@ export class TicketPurchaseService {
         where: { userId: buyerUserId },
       });
       if (!buyerUser) {
-        await queryRunner.rollbackTransaction();
-        return { success: false, message: "Buyer user not found." };
+        throw new Error("Buyer user not found.");
       }
 
       const purchasedRegistrations: Registration[] = [];
       let totalTicketsCost = 0;
-      const qrCodeUrls: string[] = [];
-      const barcodeUrls: string[] = [];
-      const sevenDigitCodes: string[] = [];
-      const pdfUrls: string[] = [];
 
       // Process each ticket individually
       for (const ticketPurchase of ticketsToPurchase) {
-        const { ticketTypeId, attendeeName, selectedDate } = ticketPurchase;
+        const {
+          ticketTypeId,
+          attendeeName,
+          selectedDate,
+          nationalId,
+          phoneNumber,
+          gender,
+          address,
+        } = ticketPurchase;
 
         // New: Use provided category for discount, or default to general if not provided
         const purchaseCategory =
@@ -98,11 +124,7 @@ export class TicketPurchaseService {
           // No need to load event for validForDate as it's removed from ticketType
         });
         if (!ticketType) {
-          await queryRunner.rollbackTransaction();
-          return {
-            success: false,
-            message: `Ticket type with ID ${ticketTypeId} not found.`,
-          };
+          throw new Error(`Ticket type with ID ${ticketTypeId} not found.`);
         }
 
         // Convert ticket price to cents to avoid floating-point issues from the start
@@ -114,32 +136,24 @@ export class TicketPurchaseService {
           relations: ["eventVenues", "eventVenues.venue"], // Include venue details for email
         });
         if (!event) {
-          await queryRunner.rollbackTransaction();
-          return {
-            success: false,
-            message: `Associated event for ticket type ${ticketTypeId} not found.`,
-          };
+          throw new Error(
+            `Associated event for ticket type ${ticketTypeId} not found.`
+          );
         }
 
         // Validate ticket availability for this individual ticket
         if (ticketType.quantityAvailable < 1) {
-          await queryRunner.rollbackTransaction();
-          return {
-            success: false,
-            message: `Ticket type '${ticketType.name}' is sold out.`,
-          };
+          throw new Error(`Ticket type '${ticketType.name}' is sold out.`);
         }
 
         // Validate selectedDate against event bookingDates (selectedDate is now mandatory)
         const eventBookingDateStrings = event.bookingDates.map((bd) => bd.date);
         if (!selectedDate || !eventBookingDateStrings.includes(selectedDate)) {
-          await queryRunner.rollbackTransaction();
-          return {
-            success: false,
-            message: `Selected date '${selectedDate}' is not a valid booking date for this event. Available dates: ${eventBookingDateStrings.join(
+          throw new Error(
+            `Selected date '${selectedDate}' is not a valid booking date for this event. Available dates: ${eventBookingDateStrings.join(
               ", "
-            )}.`,
-          };
+            )}.`
+          );
         }
 
         // New: Validate selectedDate against ticketType.validForDate if specified
@@ -147,11 +161,9 @@ export class TicketPurchaseService {
           ticketType.validForDate &&
           ticketType.validForDate !== selectedDate
         ) {
-          await queryRunner.rollbackTransaction();
-          return {
-            success: false,
-            message: `Selected date '${selectedDate}' does not match the required date for this ticket type: ${ticketType.validForDate}.`,
-          };
+          throw new Error(
+            `Selected date '${selectedDate}' does not match the required date for this ticket type: ${ticketType.validForDate}.`
+          );
         }
 
         // Calculate actual price after discount (if any), keeping everything in cents
@@ -220,19 +232,77 @@ export class TicketPurchaseService {
           ticketType,
           attendedDate: selectedDate,
           isUsed: false,
+          nationalId: nationalId,
+          phoneNumber: phoneNumber,
+          gender: gender,
+          address: address,
         });
         await registrationRepo.save(registration);
         purchasedRegistrations.push(registration);
+
+        // Generate QR, Barcode, SevenDigitCode, and upload PDF for EACH registration
+        const qrCodeUrl = await QrCodeService.generateQrCode(
+          registration.registrationId,
+          registration.userId,
+          registration.eventId
+        );
+        registration.qrCode = qrCodeUrl;
+        qrCodeUrls.push(qrCodeUrl); // Collect for potential cleanup
+
+        const sevenDigitCode =
+          await SevenDigitCodeService.generateUniqueSevenDigitCode();
+        registration.sevenDigitCode = sevenDigitCode;
+        sevenDigitCodes.push(sevenDigitCode); // Collect for potential cleanup
+
+        const barcodeUrl = await BarcodeService.generateBarcode(
+          registration.sevenDigitCode!,
+          registration.registrationId
+        );
+        registration.barcode = barcodeUrl;
+        barcodeUrls.push(barcodeUrl); // Collect for potential cleanup
+
+        const eventForPdf = registration.event;
+        const venueForPdf = eventForPdf?.eventVenues?.[0]?.venue;
+
+        const pdfBuffer = await TicketPdfService.generateTicketPdf({
+          registrationId: registration.registrationId,
+          attendeeName: registration.attendeeName || "",
+          ticketTypeName: registration.ticketType.name,
+          eventName: eventForPdf?.eventName || "",
+          eventDate: eventForPdf?.bookingDates?.[0]?.date || "",
+          venueName: venueForPdf?.venueName || "",
+          qrCodeUrl: registration.qrCode || "",
+          barcodeUrl: registration.barcode || "",
+          sevenDigitCode: registration.sevenDigitCode || "",
+          venueGoogleMapsLink: venueForPdf?.googleMapsLink,
+          startTime: eventForPdf?.startTime, // Pass startTime to PDF
+          endTime: eventForPdf?.endTime, // Pass endTime to PDF
+        });
+
+        const uploadResult = await CloudinaryUploadService.uploadBuffer(
+          pdfBuffer,
+          "tickets/pdfs",
+          `ticket-${registration.registrationId}.pdf`,
+          "raw"
+        );
+        registration.pdfUrl = uploadResult.url;
+        pdfUrls.push(uploadResult.url); // Collect for potential cleanup
+        await registrationRepo.save(registration);
       }
 
-      // 3. Validate total cost against amount paid (after processing all tickets)
       const amountPaidInCents = Math.round(paymentDetails.amountPaid * 100);
-      if (amountPaidInCents < totalTicketsCost) {
-        await queryRunner.rollbackTransaction();
-        return {
-          success: false,
-          message: "Amount paid is less than the total cost of all tickets.",
-        };
+
+      // Strict payment validation: amount paid must exactly match total tickets cost
+      if (amountPaidInCents !== totalTicketsCost) {
+        let message = "Invalid payment amount.";
+        if (amountPaidInCents < totalTicketsCost) {
+          message =
+            "Amount paid is less than the total cost of all tickets. Please pay the exact amount.";
+        } else if (amountPaidInCents > totalTicketsCost) {
+          message =
+            "Amount paid is more than the total cost of all tickets. Please pay the exact amount.";
+        }
+        throw new Error(message); // Throw error to trigger rollback and cleanup
       }
 
       // Check for overpayment (optional, but good practice)
@@ -244,7 +314,7 @@ export class TicketPurchaseService {
         );
       }
 
-      // 4. Process Payment (once for the total amount)
+      // Process Payment (once for the total amount)
       const firstRegistration = purchasedRegistrations[0];
       const ticketPayment = ticketPaymentRepo.create({
         amountPaid: paymentDetails.amountPaid,
@@ -262,54 +332,6 @@ export class TicketPurchaseService {
         reg.paymentId = ticketPayment.paymentId;
         reg.paymentStatus = VenueBookingPaymentStatus.COMPLETED;
         await registrationRepo.save(reg);
-
-        // Generate QR, Barcode, SevenDigitCode, and upload PDF for EACH registration
-        const qrCodeUrl = await QrCodeService.generateQrCode(
-          reg.registrationId,
-          reg.userId,
-          reg.eventId
-        );
-        reg.qrCode = qrCodeUrl;
-
-        const sevenDigitCode =
-          await SevenDigitCodeService.generateUniqueSevenDigitCode();
-        reg.sevenDigitCode = sevenDigitCode;
-
-        const barcodeUrl = await BarcodeService.generateBarcode(
-          reg.sevenDigitCode!,
-          reg.registrationId
-        );
-        reg.barcode = barcodeUrl;
-
-        // The following lines are moved from inside the loop to ensure they are available for PDF generation
-        const eventForPdf = reg.event;
-        const venueForPdf = eventForPdf?.eventVenues?.[0]?.venue;
-
-        const pdfBuffer = await TicketPdfService.generateTicketPdf({
-          registrationId: reg.registrationId,
-          attendeeName: reg.attendeeName || "",
-          ticketTypeName: reg.ticketType.name,
-          eventName: eventForPdf?.eventName || "",
-          eventDate: eventForPdf?.bookingDates?.[0]?.date || "",
-          venueName: venueForPdf?.venueName || "",
-          qrCodeUrl: reg.qrCode || "",
-          barcodeUrl: reg.barcode || "",
-          sevenDigitCode: reg.sevenDigitCode || "",
-          venueGoogleMapsLink: venueForPdf?.googleMapsLink,
-        });
-
-        const uploadResult = await CloudinaryUploadService.uploadBuffer(
-          pdfBuffer,
-          "tickets/pdfs",
-          `ticket-${reg.registrationId}.pdf`,
-          "raw"
-        );
-        reg.pdfUrl = uploadResult.url;
-        await registrationRepo.save(reg);
-        pdfUrls.push(uploadResult.url);
-        qrCodeUrls.push(qrCodeUrl);
-        barcodeUrls.push(barcodeUrl);
-        sevenDigitCodes.push(sevenDigitCode);
       }
 
       // Send Ticket Email (consolidated)
@@ -327,6 +349,8 @@ export class TicketPurchaseService {
             : new Date(),
           venueName: venueForEmail?.venueName || "N/A",
           venueGoogleMapsLink: venueForEmail?.googleMapsLink || undefined,
+          startTime: eventForEmail?.startTime, // Pass startTime to email
+          endTime: eventForEmail?.endTime, // Pass endTime to email
           tickets: purchasedRegistrations.map((reg) => ({
             qrCodeUrl: reg.qrCode || "",
             barcodeUrl: reg.barcode || "",
@@ -335,10 +359,14 @@ export class TicketPurchaseService {
             ticketName: reg.ticketType.name,
             attendedDate: reg.attendedDate || "",
             pdfUrl: reg.pdfUrl,
+            startTime: reg.event?.startTime, // Ensure individual ticket in email has start/end times
+            endTime: reg.event?.endTime,
           })),
         });
       } catch (emailError) {
         console.error("Failed to send ticket email:", emailError);
+        // Do not rethrow here, as the transaction is otherwise successful.
+        // Email sending failures should not roll back a successful purchase.
       }
 
       await queryRunner.commitTransaction();
@@ -358,6 +386,10 @@ export class TicketPurchaseService {
           sevenDigitCode: reg.sevenDigitCode || "",
           attendedDate: reg.attendedDate || "",
           pdfUrl: reg.pdfUrl,
+          nationalId: reg.nationalId,
+          phoneNumber: reg.phoneNumber,
+          gender: reg.gender,
+          address: reg.address,
         })),
         qrCodeUrls: qrCodeUrls,
         barcodeUrls: barcodeUrls,
@@ -367,6 +399,30 @@ export class TicketPurchaseService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+
+      // Clean up uploaded files from Cloudinary if an error occurred
+      for (const url of qrCodeUrls) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(url, "image");
+        } catch (e) {
+          console.error("Failed to delete QR code from Cloudinary:", url, e);
+        }
+      }
+      for (const url of barcodeUrls) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(url, "image");
+        } catch (e) {
+          console.error("Failed to delete barcode from Cloudinary:", url, e);
+        }
+      }
+      for (const url of pdfUrls) {
+        try {
+          await CloudinaryUploadService.deleteFromCloudinary(url, "raw");
+        } catch (e) {
+          console.error("Failed to delete PDF from Cloudinary:", url, e);
+        }
+      }
+
       return {
         success: false,
         message:

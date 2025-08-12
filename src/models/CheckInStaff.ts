@@ -12,6 +12,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { IsUUID, IsNotEmpty, IsPhoneNumber, IsEmail } from "class-validator";
+import { Registration } from "./Registration";
 
 @Entity("check_in_staff")
 export class CheckInStaff {
@@ -31,6 +32,12 @@ export class CheckInStaff {
     (freeRegistration: FreeEventRegistration) => freeRegistration.checkedInBy
   )
   freeRegistrations!: FreeEventRegistration[];
+
+  @OneToMany(
+    () => Registration,
+    (registration: Registration) => registration.checkedInByStaff
+  )
+  paidRegistrations!: Registration[];
 
   @Column()
   @IsNotEmpty()

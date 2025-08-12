@@ -5,96 +5,10 @@ import { EventVenue } from "../models/Event Tables/EventVenue";
 import { TicketValidationService } from "../services/registrations/TicketValidationService"; // NEW IMPORT
 import { BarcodeService } from "../services/registrations/BarcodeService"; // Import BarcodeService
 import { SevenDigitCodeService } from "../services/registrations/SevenDigitCodeService"; // Import SevenDigitCodeService
+import { CheckInStaffRepository } from "../repositories/CheckInStaffRepository"; // Import CheckInStaffRepository
 
 export class RegistrationController {
-  static async validateTicketQrCode(
-    req: Request,
-    res: Response
-  ): Promise<void> {
-    try {
-      const { qrCodeData } = req.body; // Expecting the raw Base64 string from the QR code
 
-      if (!qrCodeData) {
-        res
-          .status(400)
-          .json({ success: false, message: "QR code data is required." });
-        return;
-      }
-
-      // The qrCodeData from the scanned QR code is the Base64 encoded payload
-      const validationResult = await TicketValidationService.validateQrCode(
-        qrCodeData
-      );
-
-      if (!validationResult.success || !validationResult.data) {
-        res
-          .status(400)
-          .json({ success: false, message: validationResult.message });
-        return;
-      }
-
-      // Fetch more details about the registration for the response
-      const registrationRepo = AppDataSource.getRepository(Registration);
-      const registration = await registrationRepo.findOne({
-        where: { registrationId: validationResult.data.registrationId },
-        relations: ["event", "ticketType", "user"], // Load necessary relations
-      });
-
-      if (!registration) {
-        res.status(404).json({
-          success: false,
-          message: "Registration not found after QR validation.",
-        });
-        return;
-      }
-
-      // Explicitly fetch EventVenues for the event to ensure venue details are loaded
-      const eventVenueRepo = AppDataSource.getRepository(EventVenue);
-      const eventVenues = await eventVenueRepo.find({
-        where: { eventId: registration.eventId },
-        relations: ["venue"], // Load the venue for each EventVenue
-      });
-
-      // Check if eventDate is an array and access the first element, or provide a fallback
-      const eventDate =
-        registration.event.bookingDates &&
-        registration.event.bookingDates.length > 0
-          ? registration.event.bookingDates[0].date
-          : null;
-
-      res.status(200).json({
-        success: true,
-        message: "QR Code validated successfully!",
-        data: {
-          qrPayload: validationResult.data, // The decoded QR payload
-          registration: {
-            registrationId: registration.registrationId,
-            attendeeName: registration.attendeeName,
-            ticketTypeName: registration.ticketType.name,
-            eventName: registration.event.eventName,
-            eventDate: registration.attendedDate || null, // Specific date for THIS ticket
-            allEventBookingDates: registration.event?.bookingDates || [], // All dates for the event
-            venueName: eventVenues[0]?.venue?.venueName || "N/A", // Use explicitly fetched venue name
-            paymentStatus: registration.paymentStatus,
-            registrationStatus: registration.registrationStatus,
-            qrCode: registration.qrCode,
-            buyerId: registration.buyerId,
-            attendedDate: registration.attendedDate || null, // Include the attended date
-            attended: registration.attended, // Include the attended status
-          },
-        },
-      });
-    } catch (error) {
-      console.error("Error validating QR code:", error);
-      res.status(500).json({
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred during QR code validation.",
-      });
-    }
-  }
 
   static async getTicketsByUserId(req: Request, res: Response): Promise<void> {
     try {
@@ -252,7 +166,32 @@ export class RegistrationController {
 
   static async checkInTicket(req: Request, res: Response): Promise<void> {
     try {
-      const { ticketCode, codeType, eventId: requestedEventId } = req.body; // New: ticketCode and codeType
+      const {
+        ticketCode,
+        codeType,
+        eventId: requestedEventId,
+        sixDigitCode,
+      } = req.body; // Add sixDigitCode
+
+      if (!sixDigitCode) {
+        res.status(400).json({
+          success: false,
+          message: "Six-digit staff code is required.",
+        });
+        return;
+      }
+
+      // staff will be revalidated against the ticket's event later to avoid cross-event collisions
+      const staffByCode =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
+          String(sixDigitCode)
+        );
+      if (!staffByCode) {
+        res
+          .status(401)
+          .json({ success: false, message: "Invalid six-digit staff code." });
+        return;
+      }
 
       if (!ticketCode || !codeType) {
         res.status(400).json({
@@ -280,7 +219,14 @@ export class RegistrationController {
           }
           registration = await registrationRepo.findOne({
             where: { registrationId: qrValidationResult.data.registrationId },
-            relations: ["event", "ticketType", "venue", "payment"],
+            relations: [
+              "event",
+              "ticketType",
+              "venue",
+              "payment",
+              "buyer",
+              "user",
+            ],
           });
           break;
 
@@ -302,7 +248,14 @@ export class RegistrationController {
             where: {
               registrationId: barcodeValidationResult.data.registrationId,
             },
-            relations: ["event", "ticketType", "venue", "payment"],
+            relations: [
+              "event",
+              "ticketType",
+              "venue",
+              "payment",
+              "buyer",
+              "user",
+            ],
           });
           break;
 
@@ -325,7 +278,14 @@ export class RegistrationController {
               registrationId:
                 sevenDigitCodeValidationResult.data.registrationId,
             },
-            relations: ["event", "ticketType", "venue", "payment"],
+            relations: [
+              "event",
+              "ticketType",
+              "venue",
+              "payment",
+              "buyer",
+              "user",
+            ],
           });
           break;
 
@@ -343,6 +303,21 @@ export class RegistrationController {
         res.status(404).json({
           success: false,
           message: "Ticket not found in system with the provided code.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      // Ensure staff belongs to the same event as the ticket using a strict lookup by code+event
+      const staff =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCodeAndEventId(
+          String(sixDigitCode),
+          String(registration.eventId)
+        );
+      if (!staff) {
+        res.status(403).json({
+          success: false,
+          message: "Staff code is not valid for this event's tickets.",
           alertType: "error",
         });
         return;
@@ -368,7 +343,10 @@ export class RegistrationController {
       }
 
       // Check payment status
-      if (registration.paymentStatus !== "PAID") {
+      if (
+        registration.paymentStatus === "PENDING" ||
+        registration.paymentStatus === "FAILED"
+      ) {
         res.status(400).json({
           success: false,
           message: `Ticket payment status is '${registration.paymentStatus}'. Payment required.`, // Customize message
@@ -412,6 +390,7 @@ export class RegistrationController {
       registration.attended = true;
       registration.isUsed = true; // Mark as used
       registration.checkDate = new Date();
+      registration.checkedInByStaffId = staff.staffId; // Set the staff ID
       await registrationRepo.save(registration);
 
       // 7. Comprehensive Success Response
@@ -421,20 +400,66 @@ export class RegistrationController {
         alertType: "success",
         data: {
           registrationId: registration.registrationId,
-          attendeeName: registration.attendeeName,
           ticketTypeName: registration.ticketType?.name || "N/A",
           eventName: registration.event?.eventName || "N/A",
-          ticketAttendedDate: registration.attendedDate, // The specific date this ticket is valid for
+          eventPhoto: registration.event?.eventPhoto || undefined,
+          eventDate: registration.attendedDate, // The specific date this ticket is valid for
           allEventBookingDates: registration.event?.bookingDates || [], // All event dates
           venueName: eventVenues[0]?.venue?.venueName || "N/A",
           venueGoogleMapsLink:
             eventVenues[0]?.venue?.googleMapsLink || undefined,
+          qrCode: registration.qrCode,
+          barcode: registration.barcode,
+          sevenDigitCode: registration.sevenDigitCode,
+          pdfUrl: registration.pdfUrl,
           paymentStatus: registration.paymentStatus,
-          currentAttendanceStatus: registration.attended, // Should be true
+          attended: registration.attended,
+          isUsed: registration.isUsed,
           checkInTimestamp: registration.checkDate?.toISOString(),
-          qrCode: registration.qrCode, // Include QR code in response
-          barcode: registration.barcode, // Include barcode in response
-          sevenDigitCode: registration.sevenDigitCode, // Include 7-digit code in response
+          // Attendee Details (from Registration model directly or associated User if applicable)
+          attendeeDetails: {
+            attendeeName: registration.attendeeName,
+            nationalId: registration.nationalId,
+            phoneNumber: registration.phoneNumber,
+            gender: registration.gender,
+            address: registration.address,
+            email: registration.user?.email || null, // If attendee is a registered user
+          },
+          // Buyer Details
+          buyerDetails: registration.buyer
+            ? {
+                buyerId: registration.buyer.userId,
+                username: registration.buyer.username,
+                email: registration.buyer.email,
+                firstName: registration.buyer.firstName,
+                lastName: registration.buyer.lastName,
+                phoneNumber: registration.buyer.phoneNumber,
+              }
+            : null,
+          checkedInByStaffId: staff.staffId, // Include the staff ID who checked in
+          ticketTypeDetails: {
+            ticketTypeId: registration.ticketType?.ticketTypeId,
+            name: registration.ticketType?.name,
+            price: registration.ticketType?.price,
+            quantityAvailable: registration.ticketType?.quantityAvailable,
+            quantitySold: registration.ticketType?.quantitySold,
+            currency: registration.ticketType?.currency,
+            description: registration.ticketType?.description,
+            saleStartsAt: registration.ticketType?.saleStartsAt,
+            saleEndsAt: registration.ticketType?.saleEndsAt,
+            maxPerPerson: registration.ticketType?.maxPerPerson,
+            isActive: registration.ticketType?.isActive,
+            isRefundable: registration.ticketType?.isRefundable,
+            refundPolicy: registration.ticketType?.refundPolicy,
+            transferable: registration.ticketType?.transferable,
+            ageRestriction: registration.ticketType?.ageRestriction,
+            specialInstructions: registration.ticketType?.specialInstructions,
+            status: registration.ticketType?.status,
+            startTime: registration.ticketType?.startTime,
+            endTime: registration.ticketType?.endTime,
+            customerBenefits: registration.ticketType?.customerBenefits,
+            discount: registration.ticketType?.discount,
+          },
         },
       });
     } catch (error) {
@@ -445,6 +470,366 @@ export class RegistrationController {
           error instanceof Error
             ? error.message
             : "An unexpected error occurred during check-in.",
+        alertType: "error",
+      });
+    }
+  }
+
+  static async viewTicketDetails(req: Request, res: Response): Promise<void> {
+    try {
+      const { ticketCode, codeType, sixDigitCode } = req.body;
+
+      if (!sixDigitCode) {
+        res.status(400).json({
+          success: false,
+          message: "Six-digit staff code is required.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      // Validate staff code first
+      const staffByCode =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCode(
+          String(sixDigitCode)
+        );
+      if (!staffByCode) {
+        res.status(401).json({
+          success: false,
+          message: "Invalid six-digit staff code.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      if (!ticketCode || !codeType) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Ticket code and code type (QR_CODE, BARCODE, or SEVEN_DIGIT_CODE) are required.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      let registration: Registration | null = null;
+      const registrationRepo = AppDataSource.getRepository(Registration);
+
+      switch (codeType) {
+        case "QR_CODE":
+          const qrValidationResult =
+            await TicketValidationService.validateQrCode(ticketCode);
+          if (!qrValidationResult.success || !qrValidationResult.data) {
+            res.status(400).json({
+              success: false,
+              message: qrValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: { registrationId: qrValidationResult.data.registrationId },
+            relations: ["event", "ticketType", "venue", "buyer", "user"], // Load buyer and user (attendee)
+          });
+          break;
+
+        case "BARCODE":
+          const barcodeValidationResult =
+            await TicketValidationService.validateBarcode(ticketCode);
+          if (
+            !barcodeValidationResult.success ||
+            !barcodeValidationResult.data
+          ) {
+            res.status(400).json({
+              success: false,
+              message: barcodeValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: {
+              registrationId: barcodeValidationResult.data.registrationId,
+            },
+            relations: ["event", "ticketType", "venue", "buyer", "user"], // Load buyer and user (attendee)
+          });
+          break;
+
+        case "SEVEN_DIGIT_CODE":
+          const sevenDigitCodeValidationResult =
+            await TicketValidationService.validateSevenDigitCode(ticketCode);
+          if (
+            !sevenDigitCodeValidationResult.success ||
+            !sevenDigitCodeValidationResult.data
+          ) {
+            res.status(400).json({
+              success: false,
+              message: sevenDigitCodeValidationResult.message,
+              alertType: "error",
+            });
+            return;
+          }
+          registration = await registrationRepo.findOne({
+            where: {
+              registrationId:
+                sevenDigitCodeValidationResult.data.registrationId,
+            },
+            relations: ["event", "ticketType", "venue", "buyer", "user"], // Load buyer and user (attendee)
+          });
+          break;
+
+        default:
+          res.status(400).json({
+            success: false,
+            message:
+              "Invalid code type provided. Must be QR_CODE, BARCODE, or SEVEN_DIGIT_CODE.",
+            alertType: "error",
+          });
+          return;
+      }
+
+      if (!registration) {
+        res.status(404).json({
+          success: false,
+          message: "Ticket not found in system with the provided code.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      // Ensure staff belongs to the same event as the ticket
+      const staff =
+        await CheckInStaffRepository.getCheckInStaffBySixDigitCodeAndEventId(
+          String(sixDigitCode),
+          String(registration.eventId)
+        );
+      if (!staff) {
+        res.status(403).json({
+          success: false,
+          message: "Staff code is not valid for this event's tickets.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      // Explicitly fetch EventVenues for the event to ensure venue details are loaded
+      const eventVenueRepo = AppDataSource.getRepository(EventVenue);
+      const eventVenues = await eventVenueRepo.find({
+        where: { eventId: registration.eventId },
+        relations: ["venue"], // Load the venue for each EventVenue
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Ticket details fetched successfully!",
+        data: {
+          registrationId: registration.registrationId,
+          ticketTypeName: registration.ticketType?.name || "N/A",
+          eventName: registration.event?.eventName || "N/A",
+          eventPhoto: registration.event?.eventPhoto || undefined,
+          eventDate: registration.attendedDate, // The specific date this ticket is valid for
+          allEventBookingDates: registration.event?.bookingDates || [], // All event dates
+          venueName: eventVenues[0]?.venue?.venueName || "N/A",
+          venueGoogleMapsLink:
+            eventVenues[0]?.venue?.googleMapsLink || undefined,
+          qrCode: registration.qrCode,
+          barcode: registration.barcode,
+          sevenDigitCode: registration.sevenDigitCode,
+          pdfUrl: registration.pdfUrl,
+          paymentStatus: registration.paymentStatus,
+          attended: registration.attended,
+          isUsed: registration.isUsed,
+          checkInTimestamp: registration.checkDate?.toISOString(),
+          // Attendee Details (from Registration model directly or associated User if applicable)
+          attendeeDetails: {
+            attendeeName: registration.attendeeName,
+            nationalId: registration.nationalId,
+            phoneNumber: registration.phoneNumber,
+            gender: registration.gender,
+            address: registration.address,
+            email: registration.user?.email || null, // If attendee is a registered user
+          },
+          // Buyer Details
+          buyerDetails: registration.buyer
+            ? {
+                buyerId: registration.buyer.userId,
+                username: registration.buyer.username,
+                email: registration.buyer.email,
+                firstName: registration.buyer.firstName,
+                lastName: registration.buyer.lastName,
+                phoneNumber: registration.buyer.phoneNumber,
+              }
+            : null,
+          checkedInByStaffId: staff.staffId, // Include the staff ID who is viewing details
+          ticketTypeDetails: {
+            ticketTypeId: registration.ticketType?.ticketTypeId,
+            name: registration.ticketType?.name,
+            price: registration.ticketType?.price,
+            quantityAvailable: registration.ticketType?.quantityAvailable,
+            quantitySold: registration.ticketType?.quantitySold,
+            currency: registration.ticketType?.currency,
+            description: registration.ticketType?.description,
+            saleStartsAt: registration.ticketType?.saleStartsAt,
+            saleEndsAt: registration.ticketType?.saleEndsAt,
+            maxPerPerson: registration.ticketType?.maxPerPerson,
+            isActive: registration.ticketType?.isActive,
+            isRefundable: registration.ticketType?.isRefundable,
+            refundPolicy: registration.ticketType?.refundPolicy,
+            transferable: registration.ticketType?.transferable,
+            ageRestriction: registration.ticketType?.ageRestriction,
+            specialInstructions: registration.ticketType?.specialInstructions,
+            status: registration.ticketType?.status,
+            startTime: registration.ticketType?.startTime,
+            endTime: registration.ticketType?.endTime,
+            customerBenefits: registration.ticketType?.customerBenefits,
+            discount: registration.ticketType?.discount,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error viewing ticket details:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred while fetching ticket details.",
+        alertType: "error",
+      });
+    }
+  }
+
+  static async getRegistrationById(req: Request, res: Response): Promise<void> {
+    try {
+      const { registrationId } = req.params;
+
+      if (!registrationId) {
+        res.status(400).json({
+          success: false,
+          message: "Registration ID is required.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      const registrationRepo = AppDataSource.getRepository(Registration);
+      const registration = await registrationRepo.findOne({
+        where: { registrationId },
+        relations: [
+          "event",
+          "user", // Attendee details (if registered user)
+          "buyer", // Buyer details (if different from attendee)
+          "ticketType",
+          "venue",
+          "checkedInByStaff",
+        ],
+      });
+
+      if (!registration) {
+        res.status(404).json({
+          success: false,
+          message: "Registration not found.",
+          alertType: "error",
+        });
+        return;
+      }
+
+      // Map the registration to the desired comprehensive response format
+      const mappedRegistration = {
+        registrationId: registration.registrationId,
+        eventId: registration.eventId,
+        userId: registration.userId,
+        buyerId: registration.buyerId,
+        attendeeName: registration.attendeeName,
+        nationalId: registration.nationalId,
+        phoneNumber: registration.phoneNumber,
+        gender: registration.gender,
+        address: registration.address,
+        ticketTypeId: registration.ticketTypeId,
+        ticketTypeName: registration.ticketType?.name || "N/A",
+        venueId: registration.venueId,
+        venueName: registration.venue?.venueName || "N/A",
+        noOfTickets: registration.noOfTickets,
+        totalCost: registration.totalCost,
+        registrationDate: registration.registrationDate,
+        attendedDate: registration.attendedDate,
+        paymentStatus: registration.paymentStatus,
+        qrCode: registration.qrCode,
+        barcode: registration.barcode,
+        sevenDigitCode: registration.sevenDigitCode,
+        attended: registration.attended,
+        isUsed: registration.isUsed,
+        pdfUrl: registration.pdfUrl,
+        checkDate: registration.checkDate || "N/A",
+        // Buyer Details
+        buyerDetails: registration.buyer
+          ? {
+              buyerId: registration.buyer.userId,
+              username: registration.buyer.username,
+              email: registration.buyer.email,
+              firstName: registration.buyer.firstName,
+              lastName: registration.buyer.lastName,
+              phoneNumber: registration.buyer.phoneNumber,
+            }
+          : null,
+        // Checked-in By Staff Details
+        checkedInByStaff: registration.checkedInByStaff
+          ? {
+              staffId: registration.checkedInByStaff.staffId,
+              fullName: registration.checkedInByStaff.fullName,
+              email: registration.checkedInByStaff.email,
+              phoneNumber: registration.checkedInByStaff.phoneNumber,
+              nationalId: registration.checkedInByStaff.nationalId,
+            }
+          : null,
+        // Ticket Type Details
+        ticketTypeDetails: {
+          ticketTypeId: registration.ticketType?.ticketTypeId,
+          name: registration.ticketType?.name,
+          price: registration.ticketType?.price,
+          quantityAvailable: registration.ticketType?.quantityAvailable,
+          quantitySold: registration.ticketType?.quantitySold,
+          currency: registration.ticketType?.currency,
+          description: registration.ticketType?.description,
+          saleStartsAt: registration.ticketType?.saleStartsAt,
+          saleEndsAt: registration.ticketType?.saleEndsAt,
+          maxPerPerson: registration.ticketType?.maxPerPerson,
+          isActive: registration.ticketType?.isActive,
+          isRefundable: registration.ticketType?.isRefundable,
+          refundPolicy: registration.ticketType?.refundPolicy,
+          transferable: registration.ticketType?.transferable,
+          ageRestriction: registration.ticketType?.ageRestriction,
+          specialInstructions: registration.ticketType?.specialInstructions,
+          status: registration.ticketType?.status,
+          startTime: registration.ticketType?.startTime,
+          endTime: registration.ticketType?.endTime,
+          customerBenefits: registration.ticketType?.customerBenefits,
+          discount: registration.ticketType?.discount,
+        },
+        // Event Details (from event relation)
+        eventDetails: {
+          eventId: registration.event?.eventId,
+          eventName: registration.event?.eventName,
+          eventPhoto: registration.event?.eventPhoto,
+          bookingDates: registration.event?.bookingDates,
+          isEntryPaid: registration.event?.isEntryPaid,
+          // Add other event details as needed
+        },
+      };
+
+      res.status(200).json({
+        success: true,
+        message: "Registration details fetched successfully!",
+        data: mappedRegistration,
+      });
+    } catch (error) {
+      console.error("Error fetching registration by ID:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred while fetching registration details.",
         alertType: "error",
       });
     }
