@@ -194,7 +194,6 @@ export class EmailService {
               padding: 40px 30px;
               text-align: center;
               border-radius: 12px 12px 0 0;
-              width: 100%; /* Set width to 100% */
               box-sizing: border-box; /* Include padding in the width */
             ">
               <img src="https://res.cloudinary.com/di5ntdtyl/image/upload/v1754567261/giraffe-logo_t9pqsp.jpg" 
@@ -1052,7 +1051,7 @@ export class EmailService {
             </div>
 
             <!-- Main Content -->
-            <div style="padding: 32px 24px;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 32px 24px;">
               
               <!-- Event Info Card -->
               <div style="
@@ -1076,7 +1075,7 @@ export class EmailService {
                     <p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
                       <strong style="color: #4285F4;">👤 Attendee:</strong> ${
                         details.attendeeName
-                      }
+                      } 
                     </p>
                     <p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
                       <strong style="color: #4285F4;">Event Date:</strong>
@@ -1190,21 +1189,7 @@ export class EmailService {
                 </p>
                 ${
                   details.pdfUrl
-                    ? `<div style="margin-top: 20px; ">
-                        <a href="${details.pdfUrl}" style="
-                          background: #1a73e8;
-                          color: white;
-                          padding: 8px 16px;
-                          border-radius: 6px;
-                          text-decoration: none;
-                          font-weight: 600;
-                          display: inline-block;
-                          font-size: 12px;
-                          box-shadow: 0 2px 8px rgba(26, 115, 232, 0.2);
-                        ">
-                          Download PDF Ticket
-                        </a>
-                      </div>`
+                    ? `<p style="margin-top: 15px;"><a href="${details.pdfUrl}" style="background: #1a73e8; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none;">Download Ticket PDF</a></p>`
                     : ""
                 }
               </div>
@@ -1468,7 +1453,7 @@ export class EmailService {
             <p style="margin: 0 0 8px 0; color: #333; font-size: 16px;">
               <strong style="color: #4285F4;">👤 Attendee:</strong> ${
                 invitation.attendeeName
-              } (${invitation.email})
+              } 
             </p>
             <p style="margin: 0 0 6px 0; color: #333; font-size: 15px;">
               <strong style="color: #4285F4;">Event:</strong> ${
